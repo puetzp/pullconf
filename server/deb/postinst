@@ -1,0 +1,35 @@
+#!/bin/sh
+
+set -e
+
+if [ "$1" = "configure" ]; then
+    adduser --system --group --home /var/lib/pullconfd pullconf
+
+    mkdir -p /etc/pullconfd
+    chmod 755 /etc/pullconfd
+
+    touch /etc/pullconfd/environment
+    chmod 600 /etc/pullconfd/environment
+
+    mkdir -p /etc/pullconfd/tls
+    chown pullconf.pullconf /etc/pullconfd/tls
+    chmod 700 /etc/pullconfd/tls
+
+    mkdir -p /etc/pullconfd/assets
+    chown pullconf.pullconf /etc/pullconfd/assets
+    chmod 750 /etc/pullconfd/assets
+
+    mkdir -p /etc/pullconfd/resources/clients
+    chmod 750 /etc/pullconfd/resources/clients
+
+    mkdir -p /etc/pullconfd/resources/groups
+    chmod 750 /etc/pullconfd/resources/groups
+
+    chown -R pullconf.pullconf /etc/pullconfd/resources
+
+    mkdir -p /var/log/pullconfd
+
+    setcap CAP_NET_BIND_SERVICE=+eip /usr/bin/pullconfd
+fi
+
+#DEBHELPER#

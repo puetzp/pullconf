@@ -1,0 +1,51 @@
+:root {
+    --pico-font-size: 100%;
+}
+
+body > main {
+    display: grid;
+    grid-template-rows: auto;
+    grid-template-columns: 1fr 5fr;
+    grid-template-areas:
+	"header header"
+	"table-of-contents content";
+    column-gap: 5rem;
+}
+
+summary {
+    font-weight: bold;
+}
+
+details {
+    margin-bottom: 2rem;
+}
+
+details ul > li {
+    padding-left: 1rem;
+    padding-bottom: 0.125rem;;
+}
+
+details li ul > li {
+    padding-left: 2rem;
+}
+
+details ul li > summary {
+    font-weight: unset;
+}
+
+aside > nav {
+    position: sticky;
+    top: calc(var(--pico-spacing) * 2);
+}
+
+header {
+    grid-area: header;
+}
+
+aside#table-of-contents {
+    grid-area: table-of-contents;
+}
+
+div#content {
+    grid-area: content;
+}

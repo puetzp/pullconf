@@ -1,0 +1,8 @@
+/var/log/pullconfd/pullconfd.log {
+  rotate 4
+  weekly
+  compress
+  delaycompress
+  missingok
+  notifempty
+}

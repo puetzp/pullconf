@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"></meta>
+    <meta name="viewport" content="width=device-width, initial-scale=1"></meta>
+    <link rel="stylesheet" href="/css/pico.min.css">
+    <link rel="stylesheet" href="/css/custom.css">
+    <script src="/js/htmx.min.js"></script>
+    <title>Pullconf - Documentation</title>
+  </head>
+  <body>
+    <div hx-get="/header.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+    <main class="container">
+      <div hx-get="/v0.1.x/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+      <div id="content">
+	<hgroup>
+	  <p>Configuration</p>
+	  <h2>Client</h2>
+	  <hr>
+	</hgroup>
+	<p>
+	  Once <em>pullconf</em> is installed on the client system a client configuration file must be created on the server. This makes the client known to the server and <em>pullconf</em> can successfully connect to <em>pullconfd</em>.
+	</p>
+	<p>
+	  First create a file <code>$PULLCONF_RESOURCE_DIR/clients/$hostname.toml</code> on the server. Here <code>$hostname</code> matches the output from running <kbd>$ hostname --fqdn</kbd> on the client.
+	</p>
+	<p>
+	  For instance if
+	  <ul>
+	    <li>the fully-qualified domain name of the client is <code>my.example.com</code> and</li>
+	    <li><code>$PULLCONF_RESOURCE_DIR</code> uses the default value of <code>/etc/pullconfd/resources</code> (see <a href="/v0.1.x/installation/server.html#environment-variables">table</a>)</li>
+	  </ul>
+	 then the corresponding client configuration file must be created at <code>/etc/pullconfd/resources/clients/my.example.com.toml</code>.
+	</p>
+	<p>
+	  Also note that a valid hostname:
+	  <ul>
+	    <li>cannot be an empty string</li>
+	    <li>cannot be more than 253 characters long</li>
+	    <li>cannot start with a hyphen <code>-</code></li>
+	    <li>cannot contain characters other than <code>[\-a-zA-Z0-9\.]</code></li>
+	    <li>cannot have segments that exceed 63 characters: a hostname <code>my.example.com</code> has three distinct segments, <code>my</code>, <code>example</code> and <code>com</code></li>
+	  </ul>
+	</p>
+	<p>
+	  Each client configuration file in <code>$PULLCONF_RESOURCE_DIR/clients</code> must adhere to this format in TOML:
+	</p>
+	<p>
+	  <pre>
+	    <code style="padding-top: 0; padding-bottom: 0;">
+api-key = "&lt;string&gt;"
+groups = [ "&lt;group&gt;", "&lt;group&gt;" ... ]
+
+[variables]
+...
+
+[[resources]]
+...
+
+[[resources]]
+...
+	    </code>
+	  </pre>
+	</p>
+	<p>
+	  <ul>
+	    <li>
+	      <p>
+		the <code>api-key</code> <a href="https://toml.io/en/v1.0.0#string" target="_blank">string</a> corresponds to the SHA256 hash of the environment variable <code>$PULLCONF_API_KEY</code> on the client. It can be computed like this: <kbd>$ echo -n "$PULLCONF_API_KEY" | sha256sum</kbd>
+	      </p>
+	      <p>
+		For example the SHA256 hash of the string <code>example</code> is <code>50d858e0985ecc7f60418aaf0cc5ab587f42c2570a884095a9e8ccacd0f6545c</code>.
+	      </p>
+	    </li>
+	    <li>[Optional]: <code>groups</code> is an <a href="https://toml.io/en/v1.0.0#array" target="_blank">array</a> of the names of <a href="/v0.1.x/configuration/group.html">groups</a> that the client should be a member of and whose resources the client should inherit.</li>
+	    <li>[Optional]: <code>[variables]</code> is a <a href="https://toml.io/en/v1.0.0#table" target="_blank">table</a> containing variables that can be used inside parameters of resources. See the section on <a href="/v0.1.x/configuration/variables.html">variables</a> for a thorough explanation.
+	    <li>[Optional]: <code>[[resources]]</code> is a <a href="https://toml.io/en/v1.0.0#array-of-tables" target="_blank">array-of-tables</a> that defines various resources.</li>
+	  </ul>
+	</p>
+	<p>
+	  After defining at least <code>api-key</code>, save the file and reload the server:
+	</p>
+	<p>
+	  <kbd>$ sudo systemctl reload pullconfd.service</kbd>
+	</p>
+	<p>
+	  The next time the <em>pullconf.timer</em> on the client executes <em>pullconf.service</em>, it will successfully connect to <em>pullconfd</em>, because the server is now able to identify the client by means of its API key and hostname.
+	</p>
+	<p>
+	  To get a better sense of the structure of a common client configuration file, refer to the example below.
+	</p>
+	<h5>Example of a configuration file</h5>
+	<p>
+	  <pre>
+	    <code style="padding-top: 0; padding-bottom: 0;">
+# general settings
+api-key = "50d858e0985ecc7f60418aaf0cc5ab587f42c2570a884095a9e8ccacd0f6545c"
+groups = [ "linux", "debian", "nginx", "ssh" ]
+
+[variables]
+my-ip-address = "192.168.1.55"
+
+# some `host` resource
+[[resources]]
+type = "host"
+ensure = "present"
+ip-address = "$pullconf::my-ip-address"
+hostname = "$pullconf::hostname"
+aliases = [ "webserver.local" ]
+
+# some `file` resource
+[[resources]]
+type = "file"
+ensure = "present"
+path = "/etc/logrotate.d/apt"
+content = """
+/var/log/apt/term.log {
+  rotate 12
+  monthly
+  compress
+  missingok
+  notifempty
+}
+
+/var/log/apt/history.log {
+  rotate 12
+  monthly
+  compress
+  missingok
+  notifempty
+}
+"""
+	    </code>
+	  </pre>
+	</p>
+      </div>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"></meta>
+    <meta name="viewport" content="width=device-width, initial-scale=1"></meta>
+    <link rel="stylesheet" href="/css/pico.min.css">
+    <link rel="stylesheet" href="/css/custom.css">
+    <script src="/js/htmx.min.js"></script>
+    <title>Pullconf - Documentation</title>
+  </head>
+  <body>
+    <div hx-get="/header.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+    <main class="container">
+      <div hx-get="/v0.1.x/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+      <div id="content">
+	<hgroup>
+	  <p>Installation</p>
+	  <h2>Server</h2>
+	  <hr>
+	</hgroup>
+	<p>
+	  The following steps guide you on how to install and configure the Pullconf server component <em>pullconfd</em>.
+	</p>
+	<p>
+	  Download and install the .deb package from GitHub:
+	</p>
+	<p>
+	  <kbd>$ wget https://github.com/puetzp/pullconf/releases/download/v0.1.0/pullconfd_0.1.0_amd64.deb</kbd>
+	</p>
+	<p>
+	  <kbd>$ sudo dpkg -i pullconfd_0.1.0_amd64.deb</kbd>
+	</p>
+	<p>
+	  The installation script sets up a systemd service unit and a configuration and data directory. Check the unit's status:
+	</p>
+	<p>
+	  <kbd>$ sudo systemctl status pullconfd.service</kbd>
+	</p>
+	<p>
+	  If this is your first installation the unit will likely be in the "failed" state, because some mandatory configuration parameters may need to be set up.
+	</p>
+	<p><em>pullconfd</em> is configured via environment variables. As you can see in the systemd unit file the unit reads environment variables from <code>/etc/pullconfd/environment</code> (the required format is documented <a href="https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html#EnvironmentFile=" target="_blank">here</a>). Refer to the following table for all available parameters.
+	</p>
+	<table id="environment-variables">
+	  <thead>
+	    <tr>
+	      <th scope="col">Name</th>
+	      <th scope="col">Description</th>
+	      <th scope="col">Mandatory</th>
+	      <th scope="col">Default</th>
+	    </tr>
+	  </thead>
+	  <tbody>
+	    <tr>
+	      <td>PULLCONF_LISTEN_ON</td>
+	      <td>The socket address which the server should bind to.</td>
+	      <td>yes</td>
+	      <td><code>127.0.0.1:443</code></td>
+	    </tr>
+	    <tr>
+	      <td>PULLCONF_TLS_CERTIFICATE</td>
+	      <td>
+		<p>Path to a TLS certificate file that <em>pullconfd</em> uses to enable encryption.</p>
+		<p>The file must be readable by the <code>pullconf</code> user.</p>
+	      </td>
+	      <td>yes</td>
+	      <td><code>/etc/pullconfd/tls/server.crt</code></td>
+	    </tr>
+	    <tr>
+	      <td>PULLCONF_TLS_PRIVATE_KEY</td>
+	      <td>
+		<p>Path to a TLS private key file that <em>pullconfd</em> uses to enable encryption.</p>
+		<p>The file must be readable by the <code>pullconf</code> user.</p>
+	      </td>
+	      <td>yes</td>
+	      <td><code>/etc/pullconfd/tls/server.key</code></td>
+	    </tr>
+	    <tr>
+	      <td>PULLCONF_RESOURCE_DIR</td>
+	      <td>
+		<p>Directory where the resource configuration are located. This directory must have two sub directories <code>$PULLCONF_RESOURCE_DIR/clients</code> and <code>$PULLCONF_RESOURCE_DIR/groups</code>.
+		</p>
+		<p>
+		  Since only files with a .toml extension are parsed by the Pullconf server and everything else is ignored, these configuration directories can also be managed via <code>git</code> or other version control software.
+		</p>
+	      </td>
+	      <td>yes</td>
+	      <td><code>/etc/pullconfd/resources</code></td>
+	    </tr>
+	    <tr>
+	      <td>PULLCONF_ASSET_DIR</td>
+	      <td>
+		<p>Directory where static file assets are stored and downloaded from clients, e.g. when they are part of a <a href="/v0.1.x/configuration/resources/file.html">file</a> resource. The contents of this directory are exposed by <em>pullconfd</em> under the <code>/assets</code> endpoint. Clients are only authorized to download files that are referenced in their configuration.</p>
+		<p>
+		  The content of this directory can also be arbitrarily nested according to your needs.
+		</p>
+	      </td>
+	      <td>yes</td>
+	      <td><code>/etc/pullconfd/assets</code></td>
+	    </tr>
+	    <tr>
+	      <td>PULLCONF_LOG_FORMAT</td>
+	      <td>
+		<p><em>pullconfd</em> uses structured logging. This variable determines the output format of the logs.</p>
+		<p>
+		  Valid values are:
+		  <ul>
+		    <li><code>logfmt</code></li>
+		    <li><code>json</code></li>
+		  </ul>
+		</p>
+	      </td>
+	      <td>no</td>
+	      <td><code>logfmt</code></td>
+	    </tr>
+	    <tr>
+	      <td>LOG_LEVEL</td>
+	      <td>
+		<p>
+		  This variable is read by the underlying logging library. Check their <a href="https://docs.rs/std-logger/latest/std_logger/index.html#setting-severity" target="_blank">documentation</a> for a complete overview of valid values.
+		</p>
+		<p>
+		  Usually one of these will do:
+		  <ul>
+		    <li><code>error</code></li>
+		    <li><code>warn</code></li>
+		    <li><code>info</code></li>
+		    <li><code>debug</code></li>
+		    <li><code>trace</code></li>
+		  </ul>
+		</p>
+	      </td>
+	      <td>no</td>
+	      <td><code>info</code></td>
+	    </tr>
+	  </tbody>
+	</table>
+	<p>
+	  If the unit was in a "failed" state and you needed to change some configuration parameters, the unit must be restarted:
+	</p>
+	<p>
+	  <kbd>$ sudo systemctl restart pullconfd.service</kbd>
+	</p>
+	<p>
+	  systemd will then re-apply the settings from the environment file. Whenever environment variables are changed the unit must be restarted. However when files in <code>$PULLCONF_RESOURCE_DIR</code> change a reload will suffice to re-read files from this directory:
+	</p>
+	<p>
+	  <kbd>$ sudo systemctl reload pullconfd.service</kbd>
+	</p>
+	<p>
+	  Note that if the changed configuration cannot be successfully validated, the server will continue to operate with the old configuration.
+	</p>
+
+      </div>
+    </main>
+  </body>
+</html>

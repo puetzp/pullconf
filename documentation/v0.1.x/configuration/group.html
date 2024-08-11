@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"></meta>
+    <meta name="viewport" content="width=device-width, initial-scale=1"></meta>
+    <link rel="stylesheet" href="/css/pico.min.css">
+    <link rel="stylesheet" href="/css/custom.css">
+    <script src="/js/htmx.min.js"></script>
+    <title>Pullconf - Documentation</title>
+  </head>
+  <body>
+    <div hx-get="/header.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+    <main class="container">
+      <div hx-get="/v0.1.x/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+      <div id="content">
+	<hgroup>
+	  <p>Configuration</p>
+	  <h2>Group</h2>
+	  <hr>
+	</hgroup>
+	<p>
+	  As mentioned in the section dealing with <a href="/v0.1.x/configuration/client.html">client configuration files</a>, a client can be a member of multiple groups. The client inherits the collection of resources defined in group (in addition to those defined in its own configuration file). Some more detail on the relationships between clients and groups can be found in the <a href="/v0.1.x/concepts.html">concepts</a> section.
+	</p>
+	<p>
+	  In general resources that apply to multiple clients are suitable to be consolidated in a group. For instance when clients share the same set of entries in the <code>/etc/hosts</code> file via the <a href="/v0.1.x/configuration/resources/host.html">host</a> resource. Groups are thus the preferred way of de-duplicating resources in Pullconf.
+	</p>
+	<p>
+	  Similar to the client configuration a group is just a file. The name of the file determines the group name.
+	</p>
+	<p>
+	  To create a group add a file <code>$PULLCONF_RESOURCE_DIR/groups/$group_name.toml</code> on the server, replacing <code>$group_name</code> with the desired name.
+	</p>
+	<p>
+	  For instance if
+	  <ul>
+	    <li>a group is called <code>ssh</code> and</li>
+	    <li><code>$PULLCONF_RESOURCE_DIR</code> uses the default value of <code>/etc/pullconfd/resources</code> (see <a href="/v0.1.x/installation/server.html#environment-variables">table</a>)</li>
+	  </ul>
+	  then the corresponding group configuration file must be created at <code>/etc/pullconfd/resources/groups/ssh.toml</code>.
+	</p>
+	<p>
+	  Refer to the <a href="/v0.1.x/configuration/client.html">client configuration section</a> for valid group names. Group names must follow the same rules as hostnames/client names.
+	</p>
+	<p>
+	  The TOML files in <code>$PULLCONF_RESOURCE_DIR/groups</code> must adhere to this format:
+	</p>
+	<p>
+	  <pre>
+	    <code style="padding-top: 0; padding-bottom: 0;">
+[[resources]]
+...
+
+[[resources]]
+...
+	    </code>
+	  </pre>
+	</p>
+	<p>
+	  As you can see it is almost identical to a client configuration file. While clients require some top-level keys (e.g. <code>api-key</code>), groups are in fact just collections of resources.
+	</p>
+	<p>
+	  The <code>[[resources]]</code> key is a TOML <a href="https://toml.io/en/v1.0.0#array-of-tables" target="_blank">array-of-tables</a> that defines various resources.
+	</p>
+	<p>
+	  After the group file is created and every time it is modified a reload of <em>pullconfd</em> is required to re-read the configuration files.
+	</p>
+	<p>
+	  <kbd>$ sudo systemctl reload pullconfd.service</kbd>
+	</p>
+	<p>
+	  To get a better sense of the structure of a common group configuration file, refer to the following example:
+	</p>
+	<h5>Example of a configuration file</h5>
+	<p>
+	  <pre>
+	    <code style="padding-top: 0; padding-bottom: 0;">
+# some `host` resource
+[[resources]]
+type = "host"
+ensure = "present"
+ip-address = "192.168.1.55"
+hostname = "webserver"
+aliases = [ "webserver.local" ]
+
+# some `file` resource
+[[resources]]
+type = "file"
+ensure = "present"
+path = "/etc/logrotate.d/apt"
+# download from `pullconfd`
+source = "/common/logrotate.d/apt"
+	      </code>
+	    </pre>
+	  </p>
+      </div>
+    </main>
+  </body>
+</html>

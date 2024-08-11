@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"></meta>
+    <meta name="viewport" content="width=device-width, initial-scale=1"></meta>
+    <link rel="stylesheet" href="/css/pico.min.css">
+    <link rel="stylesheet" href="/css/custom.css">
+    <script src="/js/htmx.min.js"></script>
+    <title>Pullconf - Documentation</title>
+  </head>
+  <body>
+    <div hx-get="/header.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+    <main class="container">
+      <div hx-get="/v0.1.x/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+      <div id="content">
+	<hgroup>
+	  <p>Configuration > Resources</p>
+	  <h2>file</h2>
+	  <hr>
+	</hgroup>
+	<h4>Description</h4>
+	<p>
+	  This resource manages a file within the fileystem hierarchy of the client. Its main parameter is <code>path</code>.
+	</p>
+	<h4>Relationship to other resources</h4>
+	<p>
+	  The value of the <code>path</code> parameter must be unique among all file, <a href="/v0.1.x/configuration/resources/directory.html">directory</a> and <a href="/v0.1.x/configuration/resources/symlink.html">symlink</a> resources.
+	</p>
+	<p>
+	  A file implicitly depends on <a href="/v0.1.x/configuration/resources/directory.html">directory</a> or <a href="/v0.1.x/configuration/resources/symlink.html">symlink </a> resources whose <code>path</code> parameters are ancestors to the file <code>path</code>. For example when the <code>path</code> parameter of this file is set to <code>/my/elaborate/file/path</code> and there is a directory resource whose <code>path</code> is <code>/my/elaborate</code>, then the former implicitly depends on the latter.
+	</p>
+	<h4>Parameters</h4>
+	<p>
+	  To declare a resource within the <code>[[resources]]</code> array as a file, set the <code>type</code> parameter to <code>file</code>.
+	</p>
+	<p>
+	  In addition to the meta-parameters listed in <a href="/v0.1.x/configuration/resources.html">Resources</a>, this table lists all resource-specific parameters:
+	</p>
+	<table>
+	  <thead>
+	    <tr>
+	      <th scope="col">Name</th>
+	      <th scope="col" data-tooltip="The type that the value is declared as in the configuration file">TOML type</th>
+	      <th scope="col">Description</th>
+	      <th scope="col">Mandatory</th>
+	      <th scope="col" data-tooltip="The default value applies when a parameter is omitted">Default</th>
+	    </tr>
+	  </thead>
+	  <tbody>
+	    <tr>
+	      <td><code>path</code></td>
+	      <td>string</td>
+	      <td><u>Primary parameter</u>. An absolute filesystem path.</td>
+	      <td>yes</td>
+	      <td></td>
+	    </tr>
+	    <tr>
+	      <td><code>mode</code></td>
+	      <td>string</td>
+	      <td>The file permission mode in octal notation.</td>
+	      <td>yes</td>
+	      <td><code>644</code></td>
+	    </tr>
+	    <tr>
+	      <td><code>owner</code></td>
+	      <td>string</td>
+	      <td>The name of the user who owns this file.</td>
+	      <td>yes</td>
+	      <td><code>root</code></td>
+	    </tr>
+	    <tr>
+	      <td><code>group</code></td>
+	      <td>string</td>
+	      <td>The name of the group who owns this file.</td>
+	      <td>no</td>
+	      <td></td>
+	    </tr>
+	    <tr>
+	      <td colspan="5" style="text-align: center;">
+		<em>Only one of the following two parameters can be present at a time.</em>
+	      </td>
+	    </tr>
+	    <tr>
+	      <td><code>content</code></td>
+	      <td>string</td>
+	      <td>A string to be written as-is to the file.</td>
+	      <td>no</td>
+	      <td></td>
+	    </tr>
+	    <tr>
+	      <td><code>source</code></td>
+	      <td>string</td>
+	      <td>
+		<p>
+		  An absolute path to a file asset stored on the server. The remote file content will be downloaded from <em>pullconfd</em> and copied to the file at <code>path</code>.
+		</p>
+		<p>
+		  If this parameter contains the path <code>/my/example</code> <em>pullconfd</em> looks for the file at <code>$PULLCONF_ASSET_DIR/my/example</code> and serves it to <em>pullconf</em>.
+		</p>
+		</td>
+	      <td>no</td>
+	      <td></td>
+	    </tr>
+	  </tbody>
+	</table>
+	<h4>Examples</h4>
+	<h6>Empty file</h6>
+	<p>
+	  <pre>
+	    <code style="padding-top: 0; padding-bottom: 0;">
+[[resources]]
+type = "file"
+path = "/my/elaborate/file/path"
+	    </code>
+	  </pre>
+	</p>
+	<h6>Download from <em>pullconfd</em></h6>
+	<p>
+	  <pre>
+	    <code style="padding-top: 0; padding-bottom: 0;">
+[[resources]]
+type = "file"
+ensure = "present"
+path = "/my/elaborate/file/path"
+owner = "myuser"
+group = "mygroup"
+# Downloads the file from https://&ltpullconfd&gt/assets/file/path/on/the/server, i.e. $PULLCONF_ASSET_DIR/file/path/on/the/server
+content = "/file/path/on/the/server"
+	    </code>
+	  </pre>
+	</p>
+	<h6>Declare file contents statically</h6>
+	<p>
+	  <pre>
+	    <code style="padding-top: 0; padding-bottom: 0;">
+[[resources]]
+type = "file"
+ensure = "present"
+path = "/my/elaborate/file/path"
+owner = "myuser"
+group = "mygroup"
+content = """
+my
+multiline
+example file content
+"""
+	    </code>
+	  </pre>
+	</p>
+      </div>
+    </main>
+  </body>
+</html>

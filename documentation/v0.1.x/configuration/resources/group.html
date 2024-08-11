@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"></meta>
+    <meta name="viewport" content="width=device-width, initial-scale=1"></meta>
+    <link rel="stylesheet" href="/css/pico.min.css">
+    <link rel="stylesheet" href="/css/custom.css">
+    <script src="/js/htmx.min.js"></script>
+    <title>Pullconf - Documentation</title>
+  </head>
+  <body>
+    <div hx-get="/header.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+    <main class="container">
+      <div hx-get="/v0.1.x/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+      <div id="content">
+	<hgroup>
+	  <p>Configuration > Resources</p>
+	  <h2>group</h2>
+	  <hr>
+	</hgroup>
+	<h4>Description</h4>
+	<p>
+	  This resource manages a group on the client. Its main parameter is <code>name</code>.
+	</p>
+	<h4>Relationship to other resources</h4>
+	<p>
+	  Groups, as identified by the value of the <code>name</code> parameter, must be unique.
+	</p>
+	<p>
+	  A groups implicitly depends on <a href="/v0.1.x/configuration/resources/user.html">user</a> resources whose <code>group</code> parameter matches the <code>name</code> of this group, thereby making this group their primary group. This means that primary groups may be processed after user resources, because in this case the lifecycle of the group is left to the system: A typical Debian installation will create the primary group of a user automatically upon user creation and delete it when the user is deleted.
+	</p>
+	<p>
+	  <blockquote><em>It is recommended not to manage the primary groups of <a href="/v0.1.x/configuration/resources/user.html">users</a> at all, only supplementary groups. Instead leave it to <a href="/v0.1.x/configuration/resources/user.html">user</a> resources and the operating system to create and delete primary groups when necessary.</em></blockquote>
+	</p>
+	<h4>Parameters</h4>
+	<p>
+	  To declare a resource within the <code>[[resources]]</code> array as a group, set the <code>type</code> parameter to <code>group</code>.
+	</p>
+	<p>
+	  In addition to the meta-parameters listed in <a href="/v0.1.x/configuration/resources.html">Resources</a>, this table lists all resource-specific parameters:
+	</p>
+	<table>
+	  <thead>
+	    <tr>
+	      <th scope="col">Name</th>
+	      <th scope="col" data-tooltip="The type that the value is declared as in the configuration file">TOML type</th>
+	      <th scope="col">Description</th>
+	      <th scope="col">Mandatory</th>
+	      <th scope="col" data-tooltip="The default value applies when a parameter is omitted">Default</th>
+	    </tr>
+	  </thead>
+	  <tbody>
+	    <tr>
+	      <td><code>name</code></td>
+	      <td>string</td>
+	      <td><u>Primary parameter</u>. The unique name of the group.</td>
+	      <td>yes</td>
+	      <td></td>
+	    </tr>
+	    <tr>
+	      <td><code>system</code></td>
+	      <td>boolean</td>
+	      <td>Determines if the group is a system group.</td>
+	      <td>yes</td>
+	      <td><code>false</code></td>
+	    </tr>
+	  </tbody>
+	</table>
+	<h4>Examples</h4>
+	<h6>Minimal</h6>
+	<p>
+	  <pre>
+	    <code style="padding-top: 0; padding-bottom: 0;">
+[[resources]]
+type = "group"
+name = "mygroup"
+	    </code>
+	  </pre>
+	</p>
+	<h6>Full</h6>
+	<p>
+	  <pre>
+	    <code style="padding-top: 0; padding-bottom: 0;">
+[[resources]]
+type = "group"
+ensure = "present"
+name = "mygroup"
+system = true
+	    </code>
+	  </pre>
+	</p>
+      </div>
+    </main>
+  </body>
+</html>

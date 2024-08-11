@@ -1,0 +1,18 @@
+[Unit]
+Description=Pullconf configuration management system daemon
+After=network.target
+
+[Service]
+User=pullconf
+ExecStart=/usr/bin/pullconfd
+ExecReload=kill -HUP $MAINPID
+EnvironmentFile=/etc/pullconfd/environment
+Restart=on-abnormal
+RestartSec=5
+ProtectSystem=strict
+ReadWritePaths=/var/lib/pullconfd
+StandardError=append:/var/log/pullconfd/pullconfd.log
+
+[Install]
+WantedBy=multi-user.target
+

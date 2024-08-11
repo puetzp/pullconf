@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"></meta>
+    <meta name="viewport" content="width=device-width, initial-scale=1"></meta>
+    <link rel="stylesheet" href="/css/pico.min.css">
+    <link rel="stylesheet" href="/css/custom.css">
+    <script src="/js/htmx.min.js"></script>
+    <title>Pullconf - Documentation</title>
+  </head>
+  <body>
+    <div hx-get="/header.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+    <main class="container">
+      <div hx-get="/v0.1.x/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+      <div id="content">
+	<hgroup>
+	  <p>Configuration</p>
+	  <h2>Resources</h2>
+	  <hr>
+	</hgroup>
+	<p>
+	  Resources are the main building blocks of your configuration. They define which <a href="/v0.1.x/configuration/resources/file.html">files</a>, <a href="/v0.1.x/configuration/resources/host.html">hosts</a> etc. are managed on the client.
+	</p>
+	<p>
+	  Resources are defined in an <a href="https://toml.io/en/v1.0.0#array-of-tables" target="_blank">array-of-tables</a> using the header <code>[[resources]]</code> in the <a href="/v0.1.x/configuration/client.html">client</a> and <a href="/v0.1.x/configuration/group.html">group</a> configuration files.
+	</p>
+	<p>
+	  Apart from resource-specific parameters (such as <code>path</code> in a <a href="/v0.1.x/configuration/resources/file.html">file</a> resource), each resource contains meta-parameters. These meta-parameters can be applied to every kind of resource. Note that meta-parameters are exempt from <a href="/v0.1.x/configuration/variables.html">variable substitution</a>.</p>
+	<p>The following table describes the meta-parameters that are currently supported.
+	</p>
+	<table>
+	  <thead>
+	    <tr>
+	      <th scope="col">Name</th>
+	      <th scope="col">TOML type</th>
+	      <th scope="col">Description</th>
+	      <th scope="col">Mandatory</th>
+	      <th scope="col">Default</th>
+	    </tr>
+	  </thead>
+	  <tbody>
+	    <tr>
+	      <td><code>type</code></td>
+	      <td>string</td>
+	      <td>
+		<p>Tells <em>pullconfd</em> how to parse this resource. One of:</p>
+		<ul>
+		  <li><code>directory</code></li>
+		  <li><code>file</code></li>
+		  <li><code>group</code></li>
+		  <li><code>host</code></li>
+		  <li><code>resolv.conf</code></li>
+		  <li><code>symlink</code></li>
+		  <li><code>user</code></li>
+		</ul>
+	      </td>
+	      <td>yes</td>
+	      <td></td>
+	    </tr>
+	    <tr>
+	      <td><code>ensure</code></td>
+	      <td>string</td>
+	      <td>Determines if the resource should be present (created and kept up-to-date) or absent (deleted)</td>
+	      <td>yes</td>
+	      <td><code>present</code></td>
+	    </tr>
+	    <tr>
+	      <td><code>requires</code></td>
+	      <td>array</td>
+	      <td>Defines dependencies between this and other resources. See <a href="/v0.1.x/configuration/dependencies.html">Dependencies</a> for more information.</td>
+	      <td>no</td>
+	      <td><code>[]</code></td>
+	    </tr>
+	  </tbody>
+	</table>
+	<p>
+	  In addition to these general configuration options, each resource is described in detail in their respective documentation page.
+	</p>
+      </div>
+    </main>
+  </body>
+</html>

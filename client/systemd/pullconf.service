@@ -1,0 +1,8 @@
+[Unit]
+Description=Pullconf configuration management system client
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/pullconf
+EnvironmentFile=/etc/pullconf/environment
+StandardError=append:/var/log/pullconf/pullconf.log

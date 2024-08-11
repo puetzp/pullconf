@@ -1,0 +1,11 @@
+#!/bin/sh
+
+set -e
+
+if [ "$1" = "purge" ]; then
+    rm -r /etc/pullconf
+    rm -r /var/lib/pullconf
+    rm -r /var/log/pullconf
+fi
+
+#DEBHELPER#

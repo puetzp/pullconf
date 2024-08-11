@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"></meta>
+    <meta name="viewport" content="width=device-width, initial-scale=1"></meta>
+    <link rel="stylesheet" href="/css/pico.min.css">
+    <link rel="stylesheet" href="/css/custom.css">
+    <script src="/js/htmx.min.js"></script>
+    <title>Pullconf - Documentation</title>
+  </head>
+  <body>
+    <div hx-get="/header.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+    <main class="container">
+      <div hx-get="/v0.1.x/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+      <div id="content">
+	<hgroup>
+	  <p>Configuration > Resources</p>
+	  <h2>host</h2>
+	  <hr>
+	</hgroup>
+	<h4>Description</h4>
+	<p>
+	  This resource manages an entry in the file <code>/etc/hosts</code>. Its main parameter is <code>ip_address</code>.
+	</p>
+	<h4>Relationship to other resources</h4>
+	<p>
+	  Hosts (or host entries), as identified by the value of the <code>ip_address</code> parameter, must be unique. In other words there can only be one host entry per IP address.
+	</p>
+	<p>
+	  If there is a <a href="/v0.1.x/configuration/resources/file.html">file</a> or <a href="/v0.1.x/configuration/resources/symlink.html">symlink</a> resource whose <code>path</code> parameter is <code>/etc/hosts</code>, all host resources depend on it implicitly. However it is not possible to manage the contents of the <code>/etc/hosts</code> file via a file resource and manage one or more host resources at the same time. The <code>content</code> and <code>source</code> parameters of the file resource must be omitted in this case to avoi conflicting resource definitions.
+	</p>
+	<h4>Parameters</h4>
+	<p>
+	  To declare a resource within the <code>[[resources]]</code> array as a host, set the <code>type</code> parameter to <code>host</code>.
+	</p>
+	<p>
+	  In addition to the meta-parameters listed in <a href="/v0.1.x/configuration/resources.html">Resources</a>, this table lists all resource-specific parameters:
+	</p>
+	<table>
+	  <thead>
+	    <tr>
+	      <th scope="col">Name</th>
+	      <th scope="col" data-tooltip="The type that the value is declared as in the configuration file">TOML type</th>
+	      <th scope="col">Description</th>
+	      <th scope="col">Mandatory</th>
+	      <th scope="col" data-tooltip="The default value applies when a parameter is omitted">Default</th>
+	    </tr>
+	  </thead>
+	  <tbody>
+	    <tr>
+	      <td><code>ip_address</code></td>
+	      <td>string</td>
+	      <td><u>Primary parameter</u>. The IP address for this host entry. Both IPv4 and IPv6 addresses are allowed.</td>
+	      <td>yes</td>
+	      <td></td>
+	    </tr>
+	    <tr>
+	      <td><code>hostname</code></td>
+	      <td>string</td>
+	      <td>The canonical hostname associated with the IP address.</td>
+	      <td>yes</td>
+	      <td></td>
+	    </tr>
+	    <tr>
+	      <td><code>aliases</code></td>
+	      <td>array of strings</td>
+	      <td>One or more host aliases associated with the IP address</td>
+	      <td>no</td>
+	      <td></td>
+	    </tr>
+	  </tbody>
+	</table>
+	<h4>Examples</h4>
+	<h6>Minimal</h6>
+	<p>
+	  <pre>
+	    <code style="padding-top: 0; padding-bottom: 0;">
+[[resources]]
+type = "host"
+ip_address = "172.16.0.2"
+hostname = "my.example.local"
+	    </code>
+	  </pre>
+	</p>
+	<h6>With aliases</h6>
+	<p>
+	  <pre>
+	    <code style="padding-top: 0; padding-bottom: 0;">
+[[resources]]
+type = "host"
+ip_address = "172.16.0.2"
+hostname = "my.example.local"
+aliases = [ "my.example", "example" ]
+	    </code>
+	  </pre>
+	</p>
+      </div>
+    </main>
+  </body>
+</html>

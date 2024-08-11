@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"></meta>
+    <meta name="viewport" content="width=device-width, initial-scale=1"></meta>
+    <link rel="stylesheet" href="/css/pico.min.css">
+    <link rel="stylesheet" href="/css/custom.css">
+    <script src="/js/htmx.min.js"></script>
+    <title>Pullconf - Documentation</title>
+  </head>
+  <body>
+    <div hx-get="/header.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+    <main class="container">
+      <div hx-get="/v0.1.x/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+      <div id="content">
+	<hgroup>
+	  <p>About</p>
+	  <h2>Compatibility</h2>
+	  <hr>
+	</hgroup>
+	<p>
+	  <em>pullconf</em> and <em>pullconfd</em> have been tried and tested on the following Debian and Debian-based distributions:
+	</p>
+	<table>
+	  <thead>
+	    <tr>
+	      <th scope="col">Name</th>
+	      <th scope="col">Version</th>
+	      <th scope="col">Codename</th>
+	    </tr>
+	  </thead>
+	  <tbody>
+	    <tr>
+	      <td rowspan="2">Debian GNU/Linux</td>
+	      <td>11</td>
+	      <td>Bullseye</td>
+	    </tr>
+	    <tr>
+	      <td>12</td>
+	      <td>Bookworm</td>
+	    </tr>
+	    <tr>
+	      <td>Ubuntu</td>
+	      <td>22.04</td>
+	      <td>Jammy Jellyfish</td>
+	    </tr>
+	  </tbody>
+	</table>
+	<p>
+	  While <em>Pullconf</em> is currently limited to Debian-based Linux distributions it may become available for other platforms (e.g. RedHat Linux Enterprise Server) in the future.
+	</p>
+      </div>
+    </main>
+  </body>
+</html>

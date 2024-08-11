@@ -1,0 +1,36 @@
+[package]
+name = "pullconf"
+version = "0.1.0"
+edition = "2021"
+authors = ["Peter Sebastian Puetz <pullconf@proton.me>"]
+description = "Pull-based Linux configuration management system, client component"
+readme = "README.md"
+license = "MIT"
+
+[dependencies]
+anyhow = "1.0"
+common = { path = "../common" }
+log = "0.4"
+nix = { version = "0.28", features = ["user"] }
+rustls = "0.22"
+rustls-pemfile = "2.1"
+serde = { version = "1", features = ["derive"] }
+sha2 = "0.10"
+std-logger = "0.5"
+time = { version = "0.3", features = ["macros"] }
+ureq = { version = "2.9", features = ["brotli", "json"] }
+url = "2.5"
+uuid = { version = "1.8", features = ["serde", "v4"] }
+webpki-roots = "0.26"
+
+[package.metadata.deb]
+extended-description = "Pullconf is a configuration management system for Debian GNU/Linux and other Debian-based distributions. It defines resources in static configuration files that are then consumed and applied by a client on a target server."
+section = "admin"
+priority = "optional"
+maintainer-scripts = "deb/"
+systemd-units = { unit-name = "pullconf", unit-scripts = "systemd/"} 
+assets = [
+       ["target/release/pullconf", "/usr/bin/pullconf", "755"],
+       ["logrotate.d/pullconf", "/etc/logrotate.d/pullconf", "644" ],
+]
+depends = "$auto"

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"></meta>
+    <meta name="viewport" content="width=device-width, initial-scale=1"></meta>
+    <link rel="stylesheet" href="/css/pico.min.css">
+    <link rel="stylesheet" href="/css/custom.css">
+    <script src="/js/htmx.min.js"></script>
+    <title>Pullconf - Documentation</title>
+  </head>
+  <body>
+    <div hx-get="/header.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+    <main class="container">
+      <div hx-get="/v0.1.x/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+      <div id="content">
+	<hgroup>
+	  <p>About</p>
+	  <h2>Use cases</h2>
+	  <hr>
+	</hgroup>
+	<p>
+	  As far as configuration management systems go, Pullconf's features are and will remain to be quite minimal and straightforward.
+	</p>
+	<p>
+	  You might want to consider using it when:
+	  <ul>
+	    <li>you operate a fleet of homogeneous server systems and your needs for extensive customization are thus low.</li>
+	    <li>you are just getting started with system configuration management and other, more powerful systems such as Ansible, Puppet or Chef may be overkill.</li>
+	    <li>all the resource types that you require are covered by Pullconf.</li>
+	    <li>you do not care so much about DRY ("don't repeat yourself") and value having your client configuration in a comparatively flat structure, instead of having a multi-layered hierarchy and complex rules of inheritance.</li>
+	    <li>you can live without a DSL (domain-specific language) that would enable you to conditionally include or exclude resources or resource parameters.</li>
+	    <li>you want to turn your pet systems to cattle (to some extent), because it just happens that this is what configuration management systems are for.</li>
+	  </ul>
+	</p>
+      </div>
+    </main>
+  </body>
+</html>

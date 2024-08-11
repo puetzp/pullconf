@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"></meta>
+    <meta name="viewport" content="width=device-width, initial-scale=1"></meta>
+    <link rel="stylesheet" href="/css/pico.min.css">
+    <link rel="stylesheet" href="/css/custom.css">
+    <script src="/js/htmx.min.js"></script>
+    <title>Pullconf - Documentation</title>
+  </head>
+  <body>
+    <div hx-get="/header.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+    <main class="container">
+      <div hx-get="/v0.1.x/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+      <div id="content">
+	<hgroup>
+	  <p>Configuration</p>
+	  <h2>Variables</h2>
+	  <hr>
+	</hgroup>
+	<p>
+	  Variables are defined within the <code>[variables]</code> table in <a href="/v0.1.x/configuration/client.html">client configuration files</a>. Almost every resource parameter from resources defined in a <code>[[resources]]</code> array can be substituted with a variable. Since clients inherit the resources from groups that they are a member of, variable substitution at the client level applies to resources from groups as well, once they are loaded into the client resource catalog.
+	</p>
+	<p>
+	  Each type of resource has parameters that are described in a table in the resource documentation, e.g. in <a href="/v0.1.x/configuration/resources/host.html">host</a>. Each of these parameters (except for meta-parameters) can be substituted by a variable. The "TOML type" (see table) can be seen as the final type of the value in the parameter, after variable substitution has taken place. As such the type of the variable in <code>[variables]</code> must match the expected TOML type of the parameter that is being substituted.
+	</p>
+	<p>
+	  To replace the value of a parameter with a variable, specify a string in the format <code>"$pullconf::&ltvariable-name&gt"</code>. <code>variable-name</code> must match a key in the <code>[variables]</code> table.
+	</p>
+	<p>
+	  Note that if a variable is used to substitute the value of a parameter whose type is complex, e.g an <a href="https://toml.io/en/v1.0.0#array" target="_blank">array</a> or a <a href="https://toml.io/en/v1.0.0#table" target="_blank">table</a>, the values within the complex type can be variables as well. Variables can thus be nested.
+	</p>
+	<p>
+	  In summary there are two ways to specify values for parameters in a resource description:
+	  <ul>
+	    <li>use a value of the designated type directly, e.g. a string, a boolean or an integer.</li>
+	    <li>use a variable (a string starting with <code>$pullconf::</code>) that resolves to a value of the designated type (string, boolean, integer etc.) as specified in the <code>[variables]</code> table.
+	  </ul>
+	</p>
+	<p>
+	  The following variables are reserved and can always be used in configuration files, regardless of other variables defined in the <code>[variables]</code> array.
+	</p>
+	<table>
+	  <thead>
+	    <tr>
+	      <th scope="col">Name</th>
+	      <th scope="col">Value</th>
+	      <th scope="col">Example</th>
+	    </tr>
+	  </thead>
+	  <tbody>
+	    <tr>
+	      <td><code>hostname</code></td>
+	      <td>The hostname of the client. The hostname is determined by the name of the client configuration file. See <a href="/v0.1.x/configuration/client.html">client</a>.</td>
+	      <td><code>my.example.com</code></td>
+	    </tr>
+	  </tbody>
+	</table>
+	<h4>Limitations</h4>
+	<p>
+	  It is currently not possible to template values using variables. Variables can only be used to substitute the whole value of a given parameter. For example given a variable <code>some-variable</code> with the string value <code>xyz</code>, the string <code>abc$pullconf::some-variable</code> would not even be detected as a variable by <em>pullconfd</em>, much less substituted to <code>abcxyz</code>. It is only possible to specify the string <code>$pullconf::some-variable</code> and have it substituted by <code>xyz</code>.
+	</p>
+	<p>
+	  This will change in the future to allow composing strings (and other types) from a templated string containing multiple variables.
+	</p>
+	<h4>Examples</h4>
+	<h6>Substitution of primitive TOML types</h6>
+	<p>
+	  <pre>
+	    <code style="padding-top: 0; padding-bottom: 0;">
+# ../clients/my.example.com.toml
+api-key = "..."
+
+[variables]
+internal-ip-address = "172.16.3.46"
+
+[[resources]]
+type = "host"
+ensure = "present"
+ip-address = "$pullconf::internal-ip-address"
+hostname = "$pullconf::hostname"
+	    </code>
+	  </pre>
+	</p>
+	<p>
+	  <pre>
+	    <code style="padding-top: 0; padding-bottom: 0;">
+# ../clients/my.example.com.toml
+api-key = "..."
+
+[variables]
+system = true
+
+[[resources]]
+type = "group"
+ensure = "present"
+name = "example-group"
+system = "$pullconf::system"
+	    </code>
+	  </pre>
+	</p>
+	<h6>Substitution of complex TOML types</h6>
+	<p>
+	  <pre>
+	    <code style="padding-top: 0; padding-bottom: 0;">
+# ../clients/my.example.com.toml
+api-key = "..."
+
+[variables]
+aliases = [ "my.example", "example", "$pullconf::another-alias" ]
+another-alias = "last.alias"
+
+[[resources]]
+type = "host"
+ensure = "present"
+ip-address = "172.16.3.46"
+hostname = "$pullconf::hostname"
+aliases = "$pullconf::aliases"
+	    </code>
+	  </pre>
+	</p>
+      </div>
+    </main>
+  </body>
+</html>

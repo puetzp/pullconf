@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"></meta>
+    <meta name="viewport" content="width=device-width, initial-scale=1"></meta>
+    <link rel="stylesheet" href="/css/pico.min.css">
+    <link rel="stylesheet" href="/css/custom.css">
+    <script src="/js/htmx.min.js"></script>
+    <title>Pullconf - Documentation</title>
+  </head>
+  <body>
+    <div hx-get="/header.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+    <main class="container">
+      <div hx-get="/v0.1.x/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+      <div id="content">
+	<hgroup>
+	  <p>Configuration > Resources</p>
+	  <h2>directory</h2>
+	  <hr>
+	</hgroup>
+	<h4>Description</h4>
+	<p>
+	  This resource manages a directory within the fileystem hierarchy of the client. Its main parameter is <code>path</code>.
+	</p>
+	<h4>Relationship to other resources</h4>
+	<p>
+	  The value of the <code>path</code> parameter must be unique among all directory, <a href="/v0.1.x/configuration/resources/file.html">file</a> and <a href="/v0.1.x/configuration/resources/symlink.html">symlink</a> resources.
+	</p>
+	<p>
+	  A directory implicitly depends on any other directory or <a href="/v0.1.x/configuration/resources/symlink.html">symlink</a> resources whose <code>path</code> parameters are ancestors to the directory <code>path</code>. For example when the <code>path</code> parameter of this directory is set to <code>/my/very/elaborate/example</code> and there is another directory whose <code>path</code> is <code>/my/very/elaborate</code>, then the former implicitly depends on the latter.
+	</p>
+	<p>
+	  A directory also forms a relationship with child nodes, that is <a href="/v0.1.x/configuration/resources/directory.html">directory</a>, <a href="/v0.1.x/configuration/resources/file.html">file</a> and <a href="/v0.1.x/configuration/resources/symlink.html">symlink</a> resources who this directory is a parent to. A directory resource needs to keep track of managed child nodes, because if will remove unmanaged child nodes if the <code>purge</code> parameter is set to <code>true</code>.
+	</p>
+	<h4>Parameters</h4>
+	<p>
+	  To declare a resource within the <code>[[resources]]</code> array as a directory, set the <code>type</code> parameter to <code>directory</code>.
+	</p>
+	<p>
+	  In addition to the meta-parameters listed in <a href="/v0.1.x/configuration/resources.html">Resources</a>, this table lists all resource-specific parameters:
+	</p>
+	<table>
+	  <thead>
+	    <tr>
+	      <th scope="col">Name</th>
+	      <th scope="col" data-tooltip="The type that the value is declared as in the configuration file">TOML type</th>
+	      <th scope="col">Description</th>
+	      <th scope="col">Mandatory</th>
+	      <th scope="col" data-tooltip="The default value applies when a parameter is omitted">Default</th>
+	    </tr>
+	  </thead>
+	  <tbody>
+	    <tr>
+	      <td><code>path</code></td>
+	      <td>string</td>
+	      <td><u>Primary parameter</u>. An absolute filesystem path.</td>
+	      <td>yes</td>
+	      <td></td>
+	    </tr>
+	    <tr>
+	      <td><code>owner</code></td>
+	      <td>string</td>
+	      <td>The name of the user who owns this directory.</td>
+	      <td>yes</td>
+	      <td><code>root</code></td>
+	    </tr>
+	    <tr>
+	      <td><code>group</code></td>
+	      <td>string</td>
+	      <td>The name of the group who owns this directory.</td>
+	      <td>no</td>
+	      <td></td>
+	    </tr>
+	    <tr>
+	      <td><code>purge</code></td>
+	      <td>boolean</td>
+	      <td>
+		<p>Determines if unknown child nodes, that is <a href="/v0.1.x/configuration/resources/directory.html">directory</a>, <a href="/v0.1.x/configuration/resources/file.html">file</a> and <a href="/v0.1.x/configuration/resources/symlink.html">symlink</a> resources who are not managed by Pullconf, should be removed from the directory.</p>
+		<p>
+		  Note that only direct children will be removed. That means if a directory `A` contains another directory `B`, but Pullconf does not manage `B`, `B` will be recursively deleted if `A` has <code>purge</code> set to <code>true</code>.</p>
+		<p>However if both `A` and `B` are managed directory resources and `A` has <code>purge</code> set to <code>true</code>, `B` and its contents will remain intact (unless of course, `B` also has <code>purge</code> set to <code>true</code>).
+		</p>
+		<p>
+		  This setting allows you to easily manage the contents of entire directories and purge unwanted files that may have been forgotten, added temporarily for testing purposes, or falsely created in this directory in the first place.
+		</p>
+	      </td>
+	      <td>no</td>
+	      <td><code>false</code></td>
+	    </tr>
+	  </tbody>
+	</table>
+	<h4>Examples</h4>
+	<h6>Minimal</h6>
+	<p>
+	  <pre>
+	    <code style="padding-top: 0; padding-bottom: 0;">
+[[resources]]
+type = "directory"
+path = "/my/elaborate/example"
+	    </code>
+	  </pre>
+	</p>
+	<h6>Full</h6>
+	<p>
+	  <pre>
+	    <code style="padding-top: 0; padding-bottom: 0;">
+[[resources]]
+type = "directory"
+ensure = "present"
+path = "/my/elaborate/example"
+owner = "myuser"
+group = "mygroup"
+	    </code>
+	  </pre>
+	</p>
+      </div>
+    </main>
+  </body>
+</html>
