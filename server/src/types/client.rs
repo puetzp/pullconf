@@ -926,6 +926,24 @@ impl Client {
                 directory.relationships.children.push(child.into());
             }
 
+            // Save the metadata of user resources whose `home` directory
+            // matches this directory's `path`.
+            for user in self
+                .users
+                .iter()
+                .filter(|u| u.parameters.home == directory.parameters.path)
+            {
+                let metadata = directory.metadata();
+                let other = user.metadata().clone();
+
+                self.dependencies
+                    .entry(metadata.id)
+                    .or_default()
+                    .insert(other.id);
+
+                directory.relationships.requires.push(other);
+            }
+
             // Save the metadata of ancestral directories and symlinks
             // that this directory depends on.
             for ancestor in self.directories.iter().filter(|d| {

@@ -171,6 +171,7 @@ impl User {
 
     pub fn may_depend_on(&self, resource: &Resource) -> bool {
         match resource {
+            Resource::Directory(directory) => self.parameters.home != directory.parameters.path,
             Resource::Group(group) => !self.parameters.groups.contains(&group.parameters.name),
             Resource::User(user) => user.parameters.name != self.parameters.name,
             _ => true,

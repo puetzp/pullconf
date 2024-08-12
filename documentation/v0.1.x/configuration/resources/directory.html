@@ -30,6 +30,9 @@
 	  A directory implicitly depends on any other directory or <a href="/v0.1.x/configuration/resources/symlink.html">symlink</a> resources whose <code>path</code> parameters are ancestors to the directory <code>path</code>. For example when the <code>path</code> parameter of this directory is set to <code>/my/very/elaborate/example</code> and there is another directory whose <code>path</code> is <code>/my/very/elaborate</code>, then the former implicitly depends on the latter.
 	</p>
 	<p>
+	  A directory also implicitly depends on <a href="/v0.1.x/configuration/resources/user.html">user</a> resources whose <code>home</code> parameter matches the directory's <code>path</code>. This is because the tools creating the user already create a home directory. So in most cases the home directory does not need to be managed by a directory resource. But when it is it will be applied after the user resource and operate on the existing home directory.
+	</p>
+	<p>
 	  A directory also forms a relationship with child nodes, that is <a href="/v0.1.x/configuration/resources/directory.html">directory</a>, <a href="/v0.1.x/configuration/resources/file.html">file</a> and <a href="/v0.1.x/configuration/resources/symlink.html">symlink</a> resources who this directory is a parent to. A directory resource needs to keep track of managed child nodes, because if will remove unmanaged child nodes if the <code>purge</code> parameter is set to <code>true</code>.
 	</p>
 	<h4>Parameters</h4>
