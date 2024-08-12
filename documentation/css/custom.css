@@ -49,3 +49,11 @@ aside#table-of-contents {
 div#content {
     grid-area: content;
 }
+
+path {
+    fill: black;
+}
+
+@media (prefers-color-scheme: dark) {
+    path { fill: white; }
+}
