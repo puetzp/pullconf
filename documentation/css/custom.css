@@ -36,6 +36,10 @@ details ul li > summary {
     font-weight: unset;
 }
 
+nav details.dropdown {
+    margin-bottom: 2rem;
+}
+
 aside > nav {
     position: sticky;
     top: calc(var(--pico-spacing) * 2);
