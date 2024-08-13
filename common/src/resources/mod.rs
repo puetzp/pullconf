@@ -1,3 +1,4 @@
+pub mod apt;
 pub mod directory;
 pub mod file;
 pub mod resolv_conf;
