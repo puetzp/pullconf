@@ -6,10 +6,13 @@ body > main {
     display: grid;
     grid-template-rows: auto;
     grid-template-columns: 1fr 5fr;
-    grid-template-areas:
-	"header header"
-	"table-of-contents content";
     column-gap: 5rem;
+}
+
+@media only screen and (max-width: 720px) {
+  body > main {
+    grid-template-columns: 1fr;
+  }
 }
 
 summary {
@@ -36,18 +39,6 @@ details ul li > summary {
 aside > nav {
     position: sticky;
     top: calc(var(--pico-spacing) * 2);
-}
-
-header {
-    grid-area: header;
-}
-
-aside#table-of-contents {
-    grid-area: table-of-contents;
-}
-
-div#content {
-    grid-area: content;
 }
 
 path {
