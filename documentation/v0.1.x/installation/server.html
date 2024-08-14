@@ -37,7 +37,7 @@
 	  <kbd>$ sudo systemctl status pullconfd.service</kbd>
 	</p>
 	<p>
-	  If this is your first installation the unit will likely be in the "failed" state, because some mandatory configuration parameters may need to be set up.
+	  If this is your first installation the unit will likely be in the "failed" state, because some mandatory configuration parameters may need to be set up. Refer to the log at <code>/var/log/pullconfd/pullconfd.log</code> to see what might be missing to start the unit.
 	</p>
 	<p><em>pullconfd</em> is configured via environment variables. As you can see in the systemd unit file the unit reads environment variables from <code>/etc/pullconfd/environment</code> (the required format is documented <a href="https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html#EnvironmentFile=" target="_blank">here</a>). Refer to the following table for all available parameters.
 	</p>
