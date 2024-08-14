@@ -97,7 +97,7 @@ impl VariableOrValue {
     }
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[serde(deny_unknown_fields, tag = "type")]
 pub enum Dependency {
     #[serde(rename = "directory")]
@@ -167,7 +167,7 @@ _str = "bar"
 
     #[test]
     fn deserialize_dependency() -> Result<(), anyhow::Error> {
-        #[derive(Deserialize)]
+        #[derive(Debug, Deserialize)]
         struct TestStruct {
             requires: Vec<Dependency>,
         }
@@ -195,6 +195,8 @@ requires = [
                 ip_address: IpAddr::from_str("127.0.0.1").unwrap(),
             },
         ];
+
+        assert_eq!(object.requires, expected);
 
         Ok(())
     }
