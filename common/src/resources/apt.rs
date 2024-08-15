@@ -3,6 +3,18 @@ use std::fmt;
 use std::ops::Deref;
 use std::str::FromStr;
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+pub enum PackageEnsure {
+    #[default]
+    #[serde(rename = "present")]
+    Present,
+    #[serde(rename = "absent")]
+    Absent,
+    #[serde(rename = "purged")]
+    Purged,
+}
+
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct PackageName(String);
 

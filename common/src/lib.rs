@@ -5,6 +5,7 @@ pub mod resources;
 
 pub use name::{Groupname, Hostname, Username};
 pub use path::SafePathBuf;
+pub use resources::apt::{PackageEnsure, PackageName, PackageVersion};
 pub use resources::directory::ChildNode as DirectoryChildNode;
 pub use resources::file::Mode as FileMode;
 
@@ -15,6 +16,8 @@ use uuid::Uuid;
 
 #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 pub enum ResourceType {
+    #[serde(rename = "apt::package")]
+    AptPackage,
     #[serde(rename = "directory")]
     Directory,
     #[serde(rename = "file")]
@@ -36,6 +39,7 @@ impl FromStr for ResourceType {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
+            "apt::package" => Ok(Self::AptPackage),
             "directory" => Ok(Self::Directory),
             "file" => Ok(Self::File),
             "group" => Ok(Self::Group),
@@ -51,6 +55,7 @@ impl FromStr for ResourceType {
 impl fmt::Display for ResourceType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::AptPackage => f.write_str("apt::package"),
             Self::Directory => f.write_str("directory"),
             Self::File => f.write_str("file"),
             Self::Group => f.write_str("group"),

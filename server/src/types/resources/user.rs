@@ -207,4 +207,10 @@ pub mod de {
         #[serde(default)]
         pub requires: Vec<Dependency>,
     }
+
+    impl Parameters {
+        pub fn kind(&self) -> &str {
+            "user"
+        }
+    }
 }

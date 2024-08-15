@@ -1,5 +1,5 @@
-use super::{directory, file, group, host, resolv_conf, symlink, user};
-use common::{Groupname, SafePathBuf, Username};
+use super::{apt, directory, file, group, host, resolv_conf, symlink, user};
+use common::{Groupname, PackageName, SafePathBuf, Username};
 use serde::{
     de::{DeserializeOwned, Error as SerdeError, Unexpected},
     Deserialize, Deserializer,
@@ -10,6 +10,8 @@ use toml::Value;
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields, tag = "type")]
 pub enum Resource {
+    #[serde(rename = "apt::package")]
+    AptPackage(apt::package::de::Parameters),
     #[serde(rename = "directory")]
     Directory(directory::de::Parameters),
     #[serde(rename = "file")]
@@ -100,6 +102,8 @@ impl VariableOrValue {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[serde(deny_unknown_fields, tag = "type")]
 pub enum Dependency {
+    #[serde(rename = "apt::package")]
+    AptPackage { name: PackageName },
     #[serde(rename = "directory")]
     Directory { path: SafePathBuf },
     #[serde(rename = "file")]
@@ -122,6 +126,7 @@ pub enum Dependency {
 impl Dependency {
     pub fn repr(&self) -> String {
         match self {
+            Self::AptPackage { name } => format!("apt::package `{}`", name),
             Self::Directory { path } => format!("directory `{}`", path.display()),
             Self::File { path } => format!("file `{}`", path.display()),
             Self::Group { name } => format!("group `{}`", name),

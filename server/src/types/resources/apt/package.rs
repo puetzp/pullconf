@@ -1,8 +1,10 @@
-use super::{
+use crate::types::resources::{
     deserialize::{Dependency, VariableOrValue},
     Resource,
 };
-use common::{DirectoryChildNode, Ensure, Hostname, ResourceMetadata, ResourceType, SafePathBuf};
+use common::{
+    Hostname, PackageEnsure, PackageName, PackageVersion, ResourceMetadata, ResourceType,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use toml::Value;
@@ -10,9 +12,9 @@ use uuid::Uuid;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Parameters {
-    pub path: SafePathBuf,
-    pub ensure: Ensure,
-    pub target: SafePathBuf,
+    pub ensure: PackageEnsure,
+    pub name: PackageName,
+    pub version: Option<PackageVersion>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -32,7 +34,7 @@ impl From<Vec<Dependency>> for Relationships {
 }
 
 #[derive(Clone, Debug, Serialize)]
-pub struct Symlink {
+pub struct Package {
     #[serde(flatten)]
     pub metadata: ResourceMetadata,
     pub parameters: Parameters,
@@ -40,7 +42,7 @@ pub struct Symlink {
     pub from_group: Option<Hostname>,
 }
 
-impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Symlink {
+impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Package {
     type Error = String;
 
     fn try_from(
@@ -51,23 +53,26 @@ impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Symlink {
         let parameters = {
             let ensure = match &parameters.ensure {
                 Some(parameter) => parameter.resolve("ensure", variables)?,
-                None => Ensure::default(),
+                None => PackageEnsure::default(),
             };
 
-            let path = parameters.path.resolve("path", variables)?;
+            let name = parameters.name.resolve("name", variables)?;
 
-            let target = parameters.target.resolve("target", variables)?;
+            let version = match &parameters.version {
+                Some(parameter) => parameter.resolve("version", variables)?,
+                None => None,
+            };
 
             Parameters {
                 ensure,
-                path,
-                target,
+                name,
+                version,
             }
         };
 
         Ok(Self {
             metadata: ResourceMetadata {
-                kind: ResourceType::Symlink,
+                kind: ResourceType::AptPackage,
                 id: Uuid::new_v4(),
             },
             parameters,
@@ -77,13 +82,13 @@ impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Symlink {
     }
 }
 
-impl Symlink {
+impl Package {
     pub fn kind(&self) -> &str {
-        "symlink"
+        "apt::package"
     }
 
     pub fn display(&self) -> String {
-        self.parameters.path.display().to_string()
+        self.parameters.name.to_string()
     }
 
     pub fn id(&self) -> Uuid {
@@ -98,25 +103,9 @@ impl Symlink {
         format!("{} `{}`", self.kind(), self.display())
     }
 
-    pub fn may_depend_on(&self, resource: &Resource) -> bool {
-        match resource {
-            Resource::Directory(directory) => directory.parameters.path != self.parameters.target,
-            Resource::File(file) => file.parameters.path != self.parameters.target,
-            Resource::Host(host) => host.parameters.target != *self.parameters.path,
-            Resource::ResolvConf(resolv_conf) => {
-                resolv_conf.parameters.target != *self.parameters.path
-            }
-            Resource::Symlink(symlink) => symlink.parameters.path != self.parameters.path,
-            _ => true,
-        }
-    }
-}
-
-impl From<&Symlink> for DirectoryChildNode {
-    fn from(symlink: &Symlink) -> Self {
-        Self::Symlink {
-            path: symlink.parameters.path.clone(),
-        }
+    /// This resource may depend on any other resource.
+    pub fn may_depend_on(&self, _resource: &Resource) -> bool {
+        true
     }
 }
 
@@ -128,15 +117,15 @@ pub mod de {
     pub struct Parameters {
         #[serde(default)]
         pub ensure: Option<VariableOrValue>,
-        pub path: VariableOrValue,
-        pub target: VariableOrValue,
+        pub name: VariableOrValue,
+        pub version: Option<VariableOrValue>,
         #[serde(default)]
         pub requires: Vec<Dependency>,
     }
 
     impl Parameters {
         pub fn kind(&self) -> &str {
-            "symlink"
+            "apt::package"
         }
     }
 }

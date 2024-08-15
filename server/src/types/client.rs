@@ -1,5 +1,6 @@
 use crate::types::{
     resources::{
+        apt,
         deserialize::{Dependency, Resource as DeResource},
         directory, file, group, host, resolv_conf, symlink, user, Resource,
     },
@@ -22,6 +23,7 @@ pub struct Client {
     pub api_key: ApiKey,
     pub assigned_groups: Vec<Hostname>,
     pub variables: HashMap<String, toml::Value>,
+    pub apt_packages: Vec<apt::package::Package>,
     pub directories: Vec<directory::Directory>,
     pub files: Vec<file::File>,
     pub groups: Vec<group::Group>,
@@ -101,6 +103,7 @@ impl
         client.validate_groups()?;
         client.validate_users()?;
         client.validate_resolv_conf()?;
+        client.validate_apt_packages()?;
 
         Ok(client)
     }
@@ -122,6 +125,7 @@ impl TryFrom<(Hostname, deserialize::Client)> for Client {
             api_key: intermediate.api_key,
             assigned_groups: intermediate.assigned_groups,
             variables: intermediate.variables,
+            apt_packages: vec![],
             directories: vec![],
             files: vec![],
             groups: vec![],
@@ -134,13 +138,28 @@ impl TryFrom<(Hostname, deserialize::Client)> for Client {
 
         for resource in intermediate.resources {
             match resource {
+                DeResource::AptPackage(item) => {
+                    let parameters = apt::package::Package::try_from((&item, &client.variables))
+                        .map_err(|error| {
+                            error!(
+                                scope,
+                                client:% = client.name,
+                                resource = item.kind();
+                                "{}",
+                                error
+                            );
+                            Terminate
+                        })?;
+
+                    client.apt_packages.push(parameters);
+                }
                 DeResource::Directory(item) => {
                     let parameters = directory::Directory::try_from((&item, &client.variables))
                         .map_err(|error| {
                             error!(
                                 scope,
                                 client:% = client.name,
-                                resource = "directory";
+                                resource = item.kind();
                                 "{}",
                                 error
                             );
@@ -155,7 +174,7 @@ impl TryFrom<(Hostname, deserialize::Client)> for Client {
                             error!(
                                 scope,
                                 client:% = client.name,
-                                resource = "file";
+                                resource = item.kind();
                                 "{}",
                                 error
                             );
@@ -170,7 +189,7 @@ impl TryFrom<(Hostname, deserialize::Client)> for Client {
                             error!(
                                 scope,
                                 client:% = client.name,
-                                resource = "group";
+                                resource = item.kind();
                                 "{}",
                                 error
                             );
@@ -185,7 +204,7 @@ impl TryFrom<(Hostname, deserialize::Client)> for Client {
                             error!(
                                 scope,
                                 client:% = client.name,
-                                resource = "host";
+                                resource = item.kind();
                                 "{}",
                                 error
                             );
@@ -200,7 +219,7 @@ impl TryFrom<(Hostname, deserialize::Client)> for Client {
                             error!(
                                 scope,
                                 client:% = client.name,
-                                resource = "resolv.conf";
+                                resource = item.kind();
                                 "{}",
                                 error
                             );
@@ -211,7 +230,7 @@ impl TryFrom<(Hostname, deserialize::Client)> for Client {
                         error!(
                             scope,
                             client:% = client.name,
-                            resource = "resolv.conf";
+                            resource = item.kind();
                             "resource appears multiple times, cannot be more than one of this kind",
                         );
 
@@ -224,7 +243,7 @@ impl TryFrom<(Hostname, deserialize::Client)> for Client {
                             error!(
                                 scope,
                                 client:% = client.name,
-                                resource = "symlink";
+                                resource = item.kind();
                                 "{}",
                                 error
                             );
@@ -239,7 +258,7 @@ impl TryFrom<(Hostname, deserialize::Client)> for Client {
                             error!(
                                 scope,
                                 client:% = client.name,
-                                resource = "user";
+                                resource = item.kind();
                                 "{}",
                                 error
                             );
@@ -289,6 +308,11 @@ impl Client {
     /// correspond to a known resource, `None` is returned.
     fn resolve_dependency(&self, dependency: &Dependency) -> Option<Resource> {
         match dependency {
+            Dependency::AptPackage { name } => self
+                .apt_packages
+                .iter()
+                .find(|p| p.parameters.name == *name)
+                .map(Resource::AptPackage),
             Dependency::Directory { path } => self
                 .directories
                 .iter()
@@ -347,6 +371,56 @@ impl Client {
 
             *count += 1;
 
+            // Process `apt::package` resources according to the rules described above.
+            for item in &group.apt_packages {
+                // Replace variables in parameters.
+                let mut package = apt::package::Package::try_from((item, &self.variables))
+                    .map_err(|error| {
+                        error!(
+                            scope,
+                            client:% = self.name,
+                            group:% = group_name,
+                            resource = item.kind();
+                            "{}",
+                            error
+                        );
+                        Terminate
+                    })?;
+
+                // Check if a similar resource is already present ...
+                if let Some(duplicate) = self
+                    .apt_packages
+                    .iter()
+                    .find(|p| p.parameters.name == package.parameters.name)
+                {
+                    // ... and if it was sourced from another group in which case
+                    // processing fails. Otherwise the group resource is skipped
+                    // because the saved resource originates from the client
+                    // and takes precedence.
+                    if let Some(origin) = &duplicate.from_group {
+                        error!(
+                            scope,
+                            client:% = self.name,
+                            group:% = group_name,
+                            resource = package.kind(),
+                            name:% = package.parameters.name;
+                            "duplicate resource defined in group `{}`",
+                            origin,
+                        );
+
+                        return Err(Terminate);
+                    } else {
+                        continue;
+                    }
+                } else {
+                    // If no similar resource is present, save this one into
+                    // the catalog and also record that this resource stems from
+                    // a group.
+                    package.from_group = Some(group_name.clone());
+                    self.apt_packages.push(package);
+                }
+            }
+
             // Process directory resources according to the rules described above.
             for item in &group.directories {
                 // Replace variables in parameters.
@@ -356,7 +430,7 @@ impl Client {
                             scope,
                             client:% = self.name,
                             group:% = group_name,
-                            resource = "directory";
+                            resource = item.kind();
                             "{}",
                             error
                         );
@@ -378,7 +452,7 @@ impl Client {
                             scope,
                             client:% = self.name,
                             group:% = group_name,
-                            resource = "directory",
+                            resource = directory.kind(),
                             path:% = directory.parameters.path.display();
                             "duplicate resource defined in group `{}`",
                             origin,
@@ -405,7 +479,7 @@ impl Client {
                         scope,
                         client:% = self.name,
                         group:% = group_name,
-                        resource = "file";
+                        resource = item.kind();
                         "{}",
                         error
                     );
@@ -427,7 +501,7 @@ impl Client {
                             scope,
                             client:% = self.name,
                             group:% = group_name,
-                            resource = "file",
+                            resource = file.kind(),
                             path:% = file.parameters.path.display();
                             "duplicate resource defined in group `{}`",
                             origin,
@@ -455,7 +529,7 @@ impl Client {
                             scope,
                             client:% = self.name,
                             group:% = group_name,
-                            resource = "group";
+                            resource = item.kind();
                             "{}",
                             error
                         );
@@ -477,7 +551,7 @@ impl Client {
                             scope,
                             client:% = self.name,
                             group:% = group_name,
-                            resource = "group",
+                            resource = _group.kind(),
                             name:% = _group.parameters.name;
                             "duplicate resource defined in group `{}`",
                             origin,
@@ -504,7 +578,7 @@ impl Client {
                         scope,
                         client:% = self.name,
                         group:% = group_name,
-                        resource = "host";
+                        resource = item.kind();
                         "{}",
                         error
                     );
@@ -526,7 +600,7 @@ impl Client {
                             scope,
                             client:% = self.name,
                             group:% = group_name,
-                            resource = "host",
+                            resource = host.kind(),
                             ip_address:% = host.parameters.ip_address;
                             "duplicate resource defined in group `{}`",
                             origin,
@@ -554,7 +628,7 @@ impl Client {
                             scope,
                             client:% = self.name,
                             group:% = group_name,
-                            resource = "resolv.conf";
+                            resource = item.kind();
                             "{}",
                             error
                         );
@@ -572,7 +646,7 @@ impl Client {
                             scope,
                             client:% = self.name,
                             group:% = group_name,
-                            resource = "resolv.conf";
+                            resource = resolv_conf.kind();
                             "duplicate resource defined in group `{}`",
                             origin,
                         );
@@ -599,7 +673,7 @@ impl Client {
                             scope,
                             client:% = self.name,
                             group:% = group_name,
-                            resource = "symlink";
+                            resource = item.kind();
                             "{}",
                             error
                         );
@@ -621,7 +695,7 @@ impl Client {
                             scope,
                             client:% = self.name,
                             group:% = group_name,
-                            resource = "symlink",
+                            resource = symlink.kind(),
                             path:% = symlink.parameters.path.display();
                             "duplicate resource defined in group `{}`",
                             origin,
@@ -648,7 +722,7 @@ impl Client {
                         scope,
                         client:% = self.name,
                         group:% = group_name,
-                        resource = "user";
+                        resource = item.kind();
                         "{}",
                         error
                     );
@@ -670,7 +744,7 @@ impl Client {
                             scope,
                             client:% = self.name,
                             group:% = group_name,
-                            resource = "user",
+                            resource = user.kind(),
                             name:% = user.parameters.name;
                             "duplicate resource defined in group `{}`",
                             origin,
@@ -826,7 +900,7 @@ impl Client {
                         error!(
                             scope,
                             client:% = self.name,
-                            resource = "file",
+                            resource = file.kind(),
                             path;
                             "{} depends on {} which cannot be found",
                             file.repr(),
@@ -870,7 +944,7 @@ impl Client {
                 error!(
                     scope,
                     client:% = self.name,
-                    resource = "directory",
+                    resource = directory.kind(),
                     path;
                     "path `{}` appears multiple times, must be unique among resources of type `file`, `symlink` and `directory`",
                     path
@@ -886,7 +960,7 @@ impl Client {
                     error!(
                         scope,
                         client:% = self.name,
-                        resource = "directory",
+                        resource = directory.kind(),
                         path;
                         "file `{}` is found to be a parent of this directory, but files cannot be parents to directories",
                         parent.display()
@@ -996,7 +1070,7 @@ impl Client {
                                 error!(
                                     scope,
                                     client:% = self.name,
-                                    resource = "directory",
+                                    resource = directory.kind(),
                                     path;
                                     "{} cannot depend on {} as it would introduce a dependency loop",
                                     directory.repr(),
@@ -1016,7 +1090,7 @@ impl Client {
                             error!(
                                 scope,
                                 client:% = self.name,
-                                resource = "directory",
+                                resource = directory.kind(),
                                 path;
                                 "{} cannot depend on {}",
                                 directory.repr(),
@@ -1030,7 +1104,7 @@ impl Client {
                         error!(
                             scope,
                             client:% = self.name,
-                            resource = "directory",
+                            resource = directory.kind(),
                             path;
                             "{} depends on {} which cannot be found",
                             directory.repr(),
@@ -1074,7 +1148,7 @@ impl Client {
                 error!(
                     scope,
                     client:% = self.name,
-                    resource = "symlink",
+                    resource = symlink.kind(),
                     path;
                     "path `{}` appears multiple times, must be unique among resources of type `file`, `symlink` and `directory`",
                     path
@@ -1090,7 +1164,7 @@ impl Client {
                     error!(
                         scope,
                         client:% = self.name,
-                        resource = "symlink",
+                        resource = symlink.kind(),
                         path;
                         "file `{}` is found to be a parent of this symlink, but files cannot be parents to symlinks",
                         parent.display()
@@ -1175,7 +1249,7 @@ impl Client {
                                 error!(
                                     scope,
                                     client:% = self.name,
-                                    resource = "symlink",
+                                    resource = symlink.kind(),
                                     path;
                                     "{} cannot depend on {} as it would introduce a dependency loop",
                                     symlink.repr(),
@@ -1195,7 +1269,7 @@ impl Client {
                             error!(
                                 scope,
                                 client:% = self.name,
-                                resource = "symlink",
+                                resource = symlink.kind(),
                                 path;
                                 "{} cannot depend on {}",
                                 symlink.repr(),
@@ -1209,7 +1283,7 @@ impl Client {
                         error!(
                             scope,
                             client:% = self.name,
-                            resource = "symlink",
+                            resource = symlink.kind(),
                             path;
                             "{} depends on {} which cannot be found",
                             symlink.repr(),
@@ -1251,7 +1325,7 @@ impl Client {
                 error!(
                     scope,
                     client:% = self.name,
-                    resource = "host",
+                    resource = host.kind(),
                     ip_address;
                     "IP address `{}` appears multiple times, must be unique among host entries",
                     ip_address
@@ -1273,7 +1347,7 @@ impl Client {
                     error!(
                         scope,
                         client:% = self.name,
-                        resource = "host",
+                        resource = host.kind(),
                         ip_address;
                         "there cannot be both a {} resource and a {} whose `content` or `source` parameters are set",
                         host.repr(),
@@ -1323,7 +1397,7 @@ impl Client {
                                 error!(
                                     scope,
                                     client:% = self.name,
-                                    resource = "host",
+                                    resource = host.kind(),
                                     ip_address;
                                     "{} cannot depend on {} as it would introduce a dependency loop",
                                     host.repr(),
@@ -1343,7 +1417,7 @@ impl Client {
                             error!(
                                 scope,
                                 client:% = self.name,
-                                resource = "host",
+                                resource = host.kind(),
                                 ip_address;
                                 "{} cannot depend on {}",
                                 host.repr(),
@@ -1357,7 +1431,7 @@ impl Client {
                         error!(
                             scope,
                             client:% = self.name,
-                            resource = "host",
+                            resource = host.kind(),
                             ip_address;
                             "{} depends on {} which cannot be found",
                             host.repr(),
@@ -1399,7 +1473,7 @@ impl Client {
                 error!(
                     scope,
                     client:% = self.name,
-                    resource = "group",
+                    resource = group.kind(),
                     name;
                     "group name `{}` appears multiple times, group names must be unique",
                     name
@@ -1439,7 +1513,7 @@ impl Client {
                                 error!(
                                     scope,
                                     client:% = self.name,
-                                    resource = "group",
+                                    resource = group.kind(),
                                     name;
                                     "{} cannot depend on {} as it would introduce a dependency loop",
                                     group.repr(),
@@ -1459,7 +1533,7 @@ impl Client {
                             error!(
                                 scope,
                                 client:% = self.name,
-                                resource = "group",
+                                resource = group.kind(),
                                 name;
                                 "{} cannot depend on {}",
                                 group.repr(),
@@ -1473,7 +1547,7 @@ impl Client {
                         error!(
                             scope,
                             client:% = self.name,
-                            resource = "group",
+                            resource = group.kind(),
                             name;
                             "{} depends on {} which cannot be found",
                             group.repr(),
@@ -1515,7 +1589,7 @@ impl Client {
                 error!(
                     scope,
                     client:% = self.name,
-                    resource = "user",
+                    resource = user.kind(),
                     name;
                     "user name `{}` appears multiple times, user names must be unique",
                     name
@@ -1558,7 +1632,7 @@ impl Client {
                                 error!(
                                     scope,
                                     client:% = self.name,
-                                    resource = "user",
+                                    resource = user.kind(),
                                     name;
                                     "{} cannot depend on {} as it would introduce a dependency loop",
                                     user.repr(),
@@ -1578,7 +1652,7 @@ impl Client {
                             error!(
                                 scope,
                                 client:% = self.name,
-                                resource = "user",
+                                resource = user.kind(),
                                 name;
                                 "{} cannot depend on {}",
                                 user.repr(),
@@ -1592,7 +1666,7 @@ impl Client {
                         error!(
                             scope,
                             client:% = self.name,
-                            resource = "user",
+                            resource = user.kind(),
                             name;
                             "{} depends on {} which cannot be found",
                             user.repr(),
@@ -1638,7 +1712,7 @@ impl Client {
                     error!(
                         scope,
                         client:% = self.name,
-                        resource = "resolv.conf";
+                        resource = resolv_conf.kind();
                         "there cannot be both a {} resource and a {} whose `content` or `source` parameters are set",
                         resolv_conf.repr(),
                         file.repr()
@@ -1687,7 +1761,7 @@ impl Client {
                                 error!(
                                     scope,
                                     client:% = self.name,
-                                    resource = "resolv.conf";
+                                    resource = resolv_conf.kind();
                                     "{} cannot depend on {} as it would introduce a dependency loop",
                                     resolv_conf.repr(),
                                     resource.repr()
@@ -1706,7 +1780,7 @@ impl Client {
                             error!(
                                 scope,
                                 client:% = self.name,
-                                resource = "resolv.conf";
+                                resource = resolv_conf.kind();
                                 "{} cannot depend on {}",
                                 resolv_conf.repr(),
                                 resource.repr()
@@ -1719,7 +1793,7 @@ impl Client {
                         error!(
                             scope,
                             client:% = self.name,
-                            resource = "resolv.conf";
+                            resource = resolv_conf.kind();
                             "{} depends on {} which cannot be found",
                             resolv_conf.repr(),
                             dependency.repr()
@@ -1732,6 +1806,104 @@ impl Client {
 
             self.resolv_conf = Some(resolv_conf);
         }
+
+        Ok(())
+    }
+
+    fn validate_apt_packages(&mut self) -> Result<(), Terminate> {
+        let scope = "validation";
+
+        // Save package names to check for their uniqueness.
+        let mut names = HashSet::new();
+
+        // To iterate and modify `apt::package` resources the collection
+        // must be cloned.
+        // Each resource is modified on the basis of other (`apt::package`)
+        // resources, e.g. to validate dependencies.
+        // As such we need both a mutable object as well as immutable
+        // collections of resources to check against.
+        // Since ownerships rules need to be satisfied as well, a clone
+        // is inevitable.
+        let mut _apt_packages = self.apt_packages.clone();
+
+        for package in _apt_packages.iter_mut() {
+            let name = package.parameters.name.to_string();
+
+            // Check for uniqueness of the name parameter.
+            if !names.insert(package.parameters.name.clone()) {
+                error!(
+                    scope,
+                    client:% = self.name,
+                    resource = package.kind(),
+                    name;
+                    "package name `{}` appears multiple times, package names must be unique",
+                    name
+                );
+
+                return Err(Terminate);
+            }
+
+            // Save the metadata of explicit dependencies that this
+            // `apt::package` should depend on.
+            for dependency in &package.relationships._requires {
+                match self.resolve_dependency(dependency) {
+                    Some(resource) => {
+                        if package.may_depend_on(&resource) {
+                            let metadata = package.metadata();
+                            let other = resource.metadata().clone();
+
+                            if self.dependency_introduces_loop(other.id, metadata.id) {
+                                error!(
+                                    scope,
+                                    client:% = self.name,
+                                    resource = package.kind(),
+                                    name;
+                                    "{} cannot depend on {} as it would introduce a dependency loop",
+                                    package.repr(),
+                                    resource.repr()
+                                );
+
+                                return Err(Terminate);
+                            } else if self
+                                .dependencies
+                                .entry(metadata.id)
+                                .or_default()
+                                .insert(other.id)
+                            {
+                                package.relationships.requires.push(metadata.clone());
+                            }
+                        } else {
+                            error!(
+                                scope,
+                                client:% = self.name,
+                                resource = package.kind(),
+                                name;
+                                "{} cannot depend on {}",
+                                package.repr(),
+                                resource.repr()
+                            );
+
+                            return Err(Terminate);
+                        }
+                    }
+                    None => {
+                        error!(
+                            scope,
+                            client:% = self.name,
+                            resource = package.kind(),
+                            name;
+                            "{} depends on {} which cannot be found",
+                            package.repr(),
+                            dependency.repr()
+                        );
+
+                        return Err(Terminate);
+                    }
+                }
+            }
+        }
+
+        self.apt_packages = _apt_packages;
 
         Ok(())
     }

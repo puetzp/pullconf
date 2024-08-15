@@ -1,3 +1,4 @@
+pub mod apt;
 pub mod deserialize;
 pub mod directory;
 pub mod file;
@@ -7,6 +8,7 @@ pub mod resolv_conf;
 pub mod symlink;
 pub mod user;
 
+pub use apt::package::Package as AptPackage;
 pub use directory::Directory;
 pub use file::File;
 pub use group::Group;
@@ -22,6 +24,7 @@ use uuid::Uuid;
 #[derive(Clone, Debug, Serialize)]
 #[serde(untagged)]
 pub enum Resource<'a> {
+    AptPackage(&'a AptPackage),
     Directory(&'a Directory),
     File(&'a File),
     Group(&'a Group),
@@ -29,6 +32,12 @@ pub enum Resource<'a> {
     ResolvConf(&'a ResolvConf),
     Symlink(&'a Symlink),
     User(&'a User),
+}
+
+impl<'a> From<&'a AptPackage> for Resource<'a> {
+    fn from(package: &'a AptPackage) -> Self {
+        Self::AptPackage(package)
+    }
 }
 
 impl<'a> From<&'a Directory> for Resource<'a> {
@@ -76,6 +85,7 @@ impl<'a> From<&'a User> for Resource<'a> {
 impl<'a> Resource<'a> {
     pub fn id(&self) -> Uuid {
         match self {
+            Self::AptPackage(package) => package.id(),
             Self::Directory(directory) => directory.id(),
             Self::File(file) => file.id(),
             Self::Group(group) => group.id(),
@@ -88,6 +98,7 @@ impl<'a> Resource<'a> {
 
     pub fn repr(&self) -> String {
         match self {
+            Self::AptPackage(package) => package.repr(),
             Self::Directory(directory) => directory.repr(),
             Self::File(file) => file.repr(),
             Self::Group(group) => group.repr(),
@@ -100,6 +111,7 @@ impl<'a> Resource<'a> {
 
     pub fn metadata(&self) -> &ResourceMetadata {
         match self {
+            Self::AptPackage(package) => package.metadata(),
             Self::Directory(directory) => directory.metadata(),
             Self::File(file) => file.metadata(),
             Self::Group(group) => group.metadata(),
