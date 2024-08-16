@@ -1,3 +1,4 @@
+pub mod apt;
 pub mod directory;
 pub mod file;
 pub mod group;
@@ -38,6 +39,8 @@ pub struct Resources {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum Resource {
+    #[serde(rename = "apt::package")]
+    AptPackage(apt::package::Package),
     Directory(directory::Directory),
     File(file::File),
     Group(group::Group),
@@ -55,6 +58,7 @@ impl Resource {
     /// matching stuff to infer the resource type.
     pub fn id(&self) -> Uuid {
         match self {
+            Self::AptPackage(package) => package.id(),
             Self::Directory(directory) => directory.id(),
             Self::File(file) => file.id(),
             Self::Group(group) => group.id(),
@@ -71,6 +75,7 @@ impl Resource {
     /// matching stuff to infer the resource type.
     pub fn repr(&self) -> String {
         match self {
+            Self::AptPackage(package) => package.repr(),
             Self::Directory(directory) => directory.repr(),
             Self::File(file) => file.repr(),
             Self::Group(group) => group.repr(),
@@ -87,6 +92,7 @@ impl Resource {
     /// matching stuff to infer the resource type.
     pub fn is_ready(&self, applied_resources: &HashMap<Uuid, Resource>) -> bool {
         match self {
+            Self::AptPackage(package) => package.is_ready(applied_resources),
             Self::Directory(directory) => directory.is_ready(applied_resources),
             Self::File(file) => file.is_ready(applied_resources),
             Self::Group(group) => group.is_ready(applied_resources),
@@ -109,6 +115,7 @@ impl Resource {
         applied_resources: &HashMap<Uuid, Resource>,
     ) {
         match self {
+            Self::AptPackage(ref mut package) => package.apply(pid, applied_resources),
             Self::Directory(ref mut directory) => directory.apply(pid, applied_resources),
             Self::File(ref mut file) => {
                 file.apply(pid, agent, base_url, api_key, applied_resources)
@@ -124,6 +131,7 @@ impl Resource {
     /// Check whether the resource has been skipped.
     pub fn is_skipped(&self) -> bool {
         match self {
+            Self::AptPackage(package) => package.action == Action::Skipped,
             Self::Directory(directory) => directory.action == Action::Skipped,
             Self::File(file) => file.action == Action::Skipped,
             Self::Group(group) => group.action == Action::Skipped,
@@ -137,6 +145,7 @@ impl Resource {
     /// Check whether the resource has failed to apply.
     pub fn is_failed(&self) -> bool {
         match self {
+            Self::AptPackage(package) => package.action == Action::Failed,
             Self::Directory(directory) => directory.action == Action::Failed,
             Self::File(file) => file.action == Action::Failed,
             Self::Group(group) => group.action == Action::Failed,
@@ -150,6 +159,9 @@ impl Resource {
     /// Check whether the resource is set to absent.
     pub fn is_absent(&self) -> bool {
         match self {
+            Self::AptPackage(package) => {
+                package.parameters.ensure.is_absent() || package.parameters.ensure.is_purged()
+            }
             Self::Directory(directory) => directory.parameters.ensure.is_absent(),
             Self::File(file) => file.parameters.ensure.is_absent(),
             Self::Group(group) => group.parameters.ensure.is_absent(),

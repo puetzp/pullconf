@@ -15,6 +15,20 @@ pub enum PackageEnsure {
     Purged,
 }
 
+impl PackageEnsure {
+    pub fn is_present(&self) -> bool {
+        *self == Self::Present
+    }
+
+    pub fn is_absent(&self) -> bool {
+        *self == Self::Absent
+    }
+
+    pub fn is_purged(&self) -> bool {
+        *self == Self::Purged
+    }
+}
+
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct PackageName(String);
 
@@ -25,19 +39,28 @@ impl FromStr for PackageName {
     /// https://www.debian.org/doc/debian-policy/ch-controlfields.html#s-f-source
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.chars().count() < 2 {
-            return Err("package name must be at least two characters long".to_string());
+            return Err(format!(
+                "package name `{}` must be at least two characters long",
+                s
+            ));
         }
 
         let first = s.chars().next().unwrap();
 
         if !(first.is_ascii_lowercase() || first.is_ascii_digit()) {
-            return Err("package name must start with an alphanumeric character".to_string());
+            return Err(format!(
+                "package name `{}` must start with an alphanumeric character",
+                s
+            ));
         }
 
         if let Some(ref c) = s.chars().find(|c| {
             !(c.is_ascii_lowercase() || c.is_ascii_digit() || *c == '+' || *c == '-' || *c == '.')
         }) {
-            return Err(format!("package name contains invalid character `{}`", c));
+            return Err(format!(
+                "package name `{}` contains invalid character `{}`",
+                s, c
+            ));
         }
 
         Ok(Self(s.to_owned()))
@@ -90,13 +113,15 @@ impl FromStr for PackageVersion {
     /// Package version syntax rules are taken from:
     /// https://www.debian.org/doc/debian-policy/ch-controlfields.html#version
     fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let copy = s.to_string();
+
         let s = match s.split_once(':') {
             None => s,
             Some((epoch, rest)) => match epoch.parse::<u8>() {
                 Err(error) => {
                     return Err(format!(
-                        "epoch component of package version string is invalid: {}",
-                        error
+                        "epoch component of package version `{}` is invalid: {}",
+                        copy, error
                     ))
                 }
                 Ok(_) => rest,
@@ -111,8 +136,8 @@ impl FromStr for PackageVersion {
                     .find(|c| !(c.is_ascii_alphanumeric() || *c == '+' || *c == '~' || *c == '.'))
                 {
                     return Err(format!(
-                        "Debian revision component of package version string contains invalid character: `{}`",
-                        c
+                        "Debian revision component of package version `{}` contains invalid character: `{}`",
+                        copy, c
                     ));
                 } else {
                     rest
@@ -124,12 +149,12 @@ impl FromStr for PackageVersion {
             !(c.is_ascii_alphanumeric() || *c == '+' || *c == '-' || *c == '~' || *c == '.')
         }) {
             return Err(format!(
-                "upstream version component of package version string contains invalid character: `{}`",
-                c
+                "upstream version component of package version `{}` contains invalid character: `{}`",
+                copy, c
             ));
         }
 
-        Ok(Self(s.to_owned()))
+        Ok(Self(copy.to_owned()))
     }
 }
 
