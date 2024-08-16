@@ -52,10 +52,13 @@ impl VariableOrValue {
             VariableOrValue::Value(value) => value,
         };
 
-        value
-            .clone()
-            .try_into()
-            .map_err(|error| format!("parameter `{}` contains an invalid value: {}", label, error))
+        value.clone().try_into().map_err(|error| {
+            format!(
+                "parameter `{}` contains an invalid value: {}",
+                label,
+                error.to_string().trim_end()
+            )
+        })
     }
 }
 
