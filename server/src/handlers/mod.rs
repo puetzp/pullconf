@@ -181,12 +181,13 @@ fn handle_route(
 
                     let mut data: Vec<Resource> = vec![];
 
-                    data.extend(client.directories.iter().map(|d| d.into()));
-                    data.extend(client.files.iter().map(|f| f.into()));
-                    data.extend(client.groups.iter().map(|g| g.into()));
-                    data.extend(client.hosts.iter().map(|h| h.into()));
-                    data.extend(client.symlinks.iter().map(|s| s.into()));
-                    data.extend(client.users.iter().map(|u| u.into()));
+                    data.extend(client.directories.iter().map(|item| item.into()));
+                    data.extend(client.files.iter().map(|item| item.into()));
+                    data.extend(client.groups.iter().map(|item| item.into()));
+                    data.extend(client.hosts.iter().map(|item| item.into()));
+                    data.extend(client.symlinks.iter().map(|item| item.into()));
+                    data.extend(client.users.iter().map(|item| item.into()));
+                    data.extend(client.apt_packages.iter().map(|item| item.into()));
 
                     if let Some(resolv_conf) = &client.resolv_conf {
                         data.push(resolv_conf.into());
