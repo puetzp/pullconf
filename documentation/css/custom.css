@@ -52,3 +52,7 @@ path {
 @media (prefers-color-scheme: dark) {
     path { fill: white; }
 }
+
+hgroup p:has(ins) {
+    margin-top: 0.5rem;
+}
