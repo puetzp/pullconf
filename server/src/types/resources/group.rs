@@ -37,6 +37,7 @@ pub struct Group {
     pub metadata: ResourceMetadata,
     pub parameters: Parameters,
     pub relationships: Relationships,
+    #[serde(skip_serializing)]
     pub from_group: Option<Hostname>,
 }
 
