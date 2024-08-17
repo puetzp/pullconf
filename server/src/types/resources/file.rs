@@ -3,8 +3,8 @@ use super::{
     Resource,
 };
 use common::{
-    DirectoryChildNode, Ensure, FileMode, Groupname, Hostname, ResourceMetadata, ResourceType,
-    SafePathBuf, Username,
+    DirectoryChildNode, Ensure, FileMode, Groupname, ResourceMetadata, ResourceType, SafePathBuf,
+    Username,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -44,8 +44,6 @@ pub struct File {
     pub metadata: ResourceMetadata,
     pub parameters: Parameters,
     pub relationships: Relationships,
-    #[serde(skip_serializing)]
-    pub from_group: Option<Hostname>,
 }
 
 impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for File {
@@ -116,7 +114,6 @@ impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for File {
             },
             parameters,
             relationships: Relationships::from(requires),
-            from_group: None,
         })
     }
 }

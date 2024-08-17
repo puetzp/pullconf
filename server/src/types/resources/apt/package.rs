@@ -2,9 +2,7 @@ use crate::types::resources::{
     deserialize::{Dependency, VariableOrValue},
     Resource,
 };
-use common::{
-    Hostname, PackageEnsure, PackageName, PackageVersion, ResourceMetadata, ResourceType,
-};
+use common::{PackageEnsure, PackageName, PackageVersion, ResourceMetadata, ResourceType};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use toml::Value;
@@ -39,8 +37,6 @@ pub struct Package {
     pub metadata: ResourceMetadata,
     pub parameters: Parameters,
     pub relationships: Relationships,
-    #[serde(skip_serializing)]
-    pub from_group: Option<Hostname>,
 }
 
 impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Package {
@@ -78,7 +74,6 @@ impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Package {
             },
             parameters,
             relationships: Relationships::from(requires),
-            from_group: None,
         })
     }
 }

@@ -37,6 +37,12 @@ pub struct ValidationHelpers {
     /// that each resource depends on. This is used during validation
     /// to detect dependency loops.
     pub dependencies: HashMap<Uuid, HashSet<Uuid>>,
+    /// This list contains IDs from resources that were sourced/inherited
+    /// from a group instead of the client configuration. The name
+    /// of the group is stored in order to return accurate errors if
+    /// another, conflicting resource is found and give the user a hint
+    /// which groups must be reconciled.
+    pub origins: HashMap<Uuid, Hostname>,
 }
 
 /// The `Client` struct contains all data parsed from configuration
@@ -397,8 +403,8 @@ impl Client {
             // Process `apt::package` resources according to the rules described above.
             for item in &group.apt_packages {
                 // Replace variables in parameters.
-                let mut package = apt::package::Package::try_from((item, &self.variables))
-                    .map_err(|error| {
+                let package =
+                    apt::package::Package::try_from((item, &self.variables)).map_err(|error| {
                         error!(
                             scope,
                             client:% = self.name,
@@ -421,7 +427,7 @@ impl Client {
                     // processing fails. Otherwise the group resource is skipped
                     // because the saved resource originates from the client
                     // and takes precedence.
-                    if let Some(origin) = &duplicate.from_group {
+                    if let Some(origin) = self.temporary.origins.get(&duplicate.id()) {
                         error!(
                             scope,
                             client:% = self.name,
@@ -440,7 +446,9 @@ impl Client {
                     // If no similar resource is present, save this one into
                     // the catalog and also record that this resource stems from
                     // a group.
-                    package.from_group = Some(group_name.clone());
+                    self.temporary
+                        .origins
+                        .insert(package.id(), group_name.clone());
                     self.resources.apt_packages.push(package);
                 }
             }
@@ -448,8 +456,8 @@ impl Client {
             // Process directory resources according to the rules described above.
             for item in &group.directories {
                 // Replace variables in parameters.
-                let mut directory = directory::Directory::try_from((item, &self.variables))
-                    .map_err(|error| {
+                let directory =
+                    directory::Directory::try_from((item, &self.variables)).map_err(|error| {
                         error!(
                             scope,
                             client:% = self.name,
@@ -472,7 +480,7 @@ impl Client {
                     // processing fails. Otherwise the group resource is skipped
                     // because the saved resource originates from the client
                     // and takes precedence.
-                    if let Some(origin) = &duplicate.from_group {
+                    if let Some(origin) = self.temporary.origins.get(&duplicate.id()) {
                         error!(
                             scope,
                             client:% = self.name,
@@ -491,7 +499,9 @@ impl Client {
                     // If no similar resource is present, save this one into
                     // the catalog and also record that this resource stems from
                     // a group.
-                    directory.from_group = Some(group_name.clone());
+                    self.temporary
+                        .origins
+                        .insert(directory.id(), group_name.clone());
                     self.resources.directories.push(directory);
                 }
             }
@@ -499,7 +509,7 @@ impl Client {
             // Process file resources according to the rules described above.
             for item in &group.files {
                 // Replace variables in parameters.
-                let mut file = file::File::try_from((item, &self.variables)).map_err(|error| {
+                let file = file::File::try_from((item, &self.variables)).map_err(|error| {
                     error!(
                         scope,
                         client:% = self.name,
@@ -522,7 +532,7 @@ impl Client {
                     // processing fails. Otherwise the group resource is skipped
                     // because the saved resource originates from the client
                     // and takes precedence.
-                    if let Some(origin) = &duplicate.from_group {
+                    if let Some(origin) = self.temporary.origins.get(&duplicate.id()) {
                         error!(
                             scope,
                             client:% = self.name,
@@ -541,7 +551,7 @@ impl Client {
                     // If no similar resource is present, save this one into
                     // the catalog and also record that this resource stems from
                     // a group.
-                    file.from_group = Some(group_name.clone());
+                    self.temporary.origins.insert(file.id(), group_name.clone());
                     self.resources.files.push(file);
                 }
             }
@@ -549,18 +559,17 @@ impl Client {
             // Process group resources according to the rules described above.
             for item in &group.groups {
                 // Replace variables in parameters.
-                let mut _group =
-                    group::Group::try_from((item, &self.variables)).map_err(|error| {
-                        error!(
-                            scope,
-                            client:% = self.name,
-                            group:% = group_name,
-                            resource = item.kind();
-                            "{}",
-                            error
-                        );
-                        Terminate
-                    })?;
+                let _group = group::Group::try_from((item, &self.variables)).map_err(|error| {
+                    error!(
+                        scope,
+                        client:% = self.name,
+                        group:% = group_name,
+                        resource = item.kind();
+                        "{}",
+                        error
+                    );
+                    Terminate
+                })?;
 
                 // Check if a similar resource is already present ...
                 if let Some(duplicate) = self
@@ -573,7 +582,7 @@ impl Client {
                     // processing fails. Otherwise the group resource is skipped
                     // because the saved resource originates from the client
                     // and takes precedence.
-                    if let Some(origin) = &duplicate.from_group {
+                    if let Some(origin) = self.temporary.origins.get(&duplicate.id()) {
                         error!(
                             scope,
                             client:% = self.name,
@@ -592,7 +601,9 @@ impl Client {
                     // If no similar resource is present, save this one into
                     // the catalog and also record that this resource stems from
                     // a group.
-                    _group.from_group = Some(group_name.clone());
+                    self.temporary
+                        .origins
+                        .insert(_group.id(), group_name.clone());
                     self.resources.groups.push(_group);
                 }
             }
@@ -600,7 +611,7 @@ impl Client {
             // Process host resources according to the rules described above.
             for item in &group.hosts {
                 // Replace variables in parameters.
-                let mut host = host::Host::try_from((item, &self.variables)).map_err(|error| {
+                let host = host::Host::try_from((item, &self.variables)).map_err(|error| {
                     error!(
                         scope,
                         client:% = self.name,
@@ -623,7 +634,7 @@ impl Client {
                     // processing fails. Otherwise the group resource is skipped
                     // because the saved resource originates from the client
                     // and takes precedence.
-                    if let Some(origin) = &duplicate.from_group {
+                    if let Some(origin) = self.temporary.origins.get(&duplicate.id()) {
                         error!(
                             scope,
                             client:% = self.name,
@@ -642,7 +653,7 @@ impl Client {
                     // If no similar resource is present, save this one into
                     // the catalog and also record that this resource stems from
                     // a group.
-                    host.from_group = Some(group_name.clone());
+                    self.temporary.origins.insert(host.id(), group_name.clone());
                     self.resources.hosts.push(host);
                 }
             }
@@ -650,7 +661,7 @@ impl Client {
             // Process resolv.conf resources according to the rules described above.
             for item in &group.resolv_conf {
                 // Replace variables in parameters.
-                let mut resolv_conf = resolv_conf::ResolvConf::try_from((item, &self.variables))
+                let resolv_conf = resolv_conf::ResolvConf::try_from((item, &self.variables))
                     .map_err(|error| {
                         error!(
                             scope,
@@ -669,7 +680,7 @@ impl Client {
                     // processing fails. Otherwise the group resource is skipped
                     // because the saved resource originates from the client
                     // and takes precedence.
-                    if let Some(origin) = &duplicate.from_group {
+                    if let Some(origin) = self.temporary.origins.get(&duplicate.id()) {
                         error!(
                             scope,
                             client:% = self.name,
@@ -687,7 +698,9 @@ impl Client {
                     // If no similar resource is present, save this one into
                     // the catalog and also record that this resource stems from
                     // a group.
-                    resolv_conf.from_group = Some(group_name.clone());
+                    self.temporary
+                        .origins
+                        .insert(resolv_conf.id(), group_name.clone());
                     self.resources.resolv_conf = Some(resolv_conf);
                 }
             }
@@ -695,7 +708,7 @@ impl Client {
             // Process symlink resources according to the rules described above.
             for item in &group.symlinks {
                 // Replace variables in parameters.
-                let mut symlink =
+                let symlink =
                     symlink::Symlink::try_from((item, &self.variables)).map_err(|error| {
                         error!(
                             scope,
@@ -719,7 +732,7 @@ impl Client {
                     // processing fails. Otherwise the group resource is skipped
                     // because the saved resource originates from the client
                     // and takes precedence.
-                    if let Some(origin) = &duplicate.from_group {
+                    if let Some(origin) = self.temporary.origins.get(&duplicate.id()) {
                         error!(
                             scope,
                             client:% = self.name,
@@ -738,7 +751,9 @@ impl Client {
                     // If no similar resource is present, save this one into
                     // the catalog and also record that this resource stems from
                     // a group.
-                    symlink.from_group = Some(group_name.clone());
+                    self.temporary
+                        .origins
+                        .insert(symlink.id(), group_name.clone());
                     self.resources.symlinks.push(symlink);
                 }
             }
@@ -746,7 +761,7 @@ impl Client {
             // Process user resources according to the rules described above.
             for item in &group.users {
                 // Replace variables in parameters.
-                let mut user = user::User::try_from((item, &self.variables)).map_err(|error| {
+                let user = user::User::try_from((item, &self.variables)).map_err(|error| {
                     error!(
                         scope,
                         client:% = self.name,
@@ -769,7 +784,7 @@ impl Client {
                     // processing fails. Otherwise the group resource is skipped
                     // because the saved resource originates from the client
                     // and takes precedence.
-                    if let Some(origin) = &duplicate.from_group {
+                    if let Some(origin) = self.temporary.origins.get(&duplicate.id()) {
                         error!(
                             scope,
                             client:% = self.name,
@@ -788,7 +803,7 @@ impl Client {
                     // If no similar resource is present, save this one into
                     // the catalog and also record that this resource stems from
                     // a group.
-                    user.from_group = Some(group_name.clone());
+                    self.temporary.origins.insert(user.id(), group_name.clone());
                     self.resources.users.push(user);
                 }
             }

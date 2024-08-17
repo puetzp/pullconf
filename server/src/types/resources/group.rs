@@ -2,7 +2,7 @@ use super::{
     deserialize::{Dependency, VariableOrValue},
     Resource,
 };
-use common::{Ensure, Groupname, Hostname, ResourceMetadata, ResourceType};
+use common::{Ensure, Groupname, ResourceMetadata, ResourceType};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use toml::Value;
@@ -37,8 +37,6 @@ pub struct Group {
     pub metadata: ResourceMetadata,
     pub parameters: Parameters,
     pub relationships: Relationships,
-    #[serde(skip_serializing)]
-    pub from_group: Option<Hostname>,
 }
 
 impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Group {
@@ -76,7 +74,6 @@ impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Group {
             },
             parameters,
             relationships: Relationships::from(requires),
-            from_group: None,
         })
     }
 }

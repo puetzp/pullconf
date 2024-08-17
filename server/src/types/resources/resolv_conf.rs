@@ -47,8 +47,6 @@ pub struct ResolvConf {
     pub metadata: ResourceMetadata,
     pub parameters: Parameters,
     pub relationships: Relationships,
-    #[serde(skip_serializing)]
-    pub from_group: Option<Hostname>,
 }
 
 impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for ResolvConf {
@@ -118,7 +116,6 @@ impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for ResolvConf {
             },
             parameters,
             relationships: Relationships::from(requires),
-            from_group: None,
         })
     }
 }

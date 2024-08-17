@@ -4,7 +4,7 @@ use super::{
 };
 use common::{
     resources::user::{serialize_expiry_date, Password},
-    Ensure, Groupname, Hostname, ResourceMetadata, ResourceType, SafePathBuf, Username,
+    Ensure, Groupname, ResourceMetadata, ResourceType, SafePathBuf, Username,
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, str::FromStr};
@@ -51,8 +51,6 @@ pub struct User {
     pub metadata: ResourceMetadata,
     pub parameters: Parameters,
     pub relationships: Relationships,
-    #[serde(skip_serializing)]
-    pub from_group: Option<Hostname>,
 }
 
 impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for User {
@@ -144,7 +142,6 @@ impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for User {
             },
             parameters,
             relationships: Relationships::from(requires),
-            from_group: None,
         })
     }
 }

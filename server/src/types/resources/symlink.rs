@@ -2,7 +2,7 @@ use super::{
     deserialize::{Dependency, VariableOrValue},
     Resource,
 };
-use common::{DirectoryChildNode, Ensure, Hostname, ResourceMetadata, ResourceType, SafePathBuf};
+use common::{DirectoryChildNode, Ensure, ResourceMetadata, ResourceType, SafePathBuf};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use toml::Value;
@@ -37,8 +37,6 @@ pub struct Symlink {
     pub metadata: ResourceMetadata,
     pub parameters: Parameters,
     pub relationships: Relationships,
-    #[serde(skip_serializing)]
-    pub from_group: Option<Hostname>,
 }
 
 impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Symlink {
@@ -73,7 +71,6 @@ impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Symlink {
             },
             parameters,
             relationships: Relationships::from(requires),
-            from_group: None,
         })
     }
 }
