@@ -43,6 +43,12 @@ pub struct ValidationHelpers {
     /// another, conflicting resource is found and give the user a hint
     /// which groups must be reconciled.
     pub origins: HashMap<Uuid, Hostname>,
+    /// This collection stores resource dependencies that were
+    /// explicitly mentioned in configuration files.
+    /// During validation these dependencies are resolved and
+    /// the actual resource metadata of a given dependency is added
+    /// to the resource relationship data.
+    pub requires: HashMap<Uuid, Vec<Dependency>>,
 }
 
 /// The `Client` struct contains all data parsed from configuration
@@ -157,7 +163,7 @@ impl TryFrom<(Hostname, deserialize::Client)> for Client {
         for resource in intermediate.resources {
             match resource {
                 DeResource::AptPackage(item) => {
-                    let parameters = apt::package::Package::try_from((&item, &client.variables))
+                    let resource = apt::package::Package::try_from((&item, &client.variables))
                         .map_err(|error| {
                             error!(
                                 scope,
@@ -169,10 +175,15 @@ impl TryFrom<(Hostname, deserialize::Client)> for Client {
                             Terminate
                         })?;
 
-                    client.resources.apt_packages.push(parameters);
+                    client
+                        .temporary
+                        .requires
+                        .insert(resource.id(), item.requires);
+
+                    client.resources.apt_packages.push(resource);
                 }
                 DeResource::Directory(item) => {
-                    let parameters = directory::Directory::try_from((&item, &client.variables))
+                    let resource = directory::Directory::try_from((&item, &client.variables))
                         .map_err(|error| {
                             error!(
                                 scope,
@@ -184,10 +195,15 @@ impl TryFrom<(Hostname, deserialize::Client)> for Client {
                             Terminate
                         })?;
 
-                    client.resources.directories.push(parameters);
+                    client
+                        .temporary
+                        .requires
+                        .insert(resource.id(), item.requires);
+
+                    client.resources.directories.push(resource);
                 }
                 DeResource::File(item) => {
-                    let parameters =
+                    let resource =
                         file::File::try_from((&item, &client.variables)).map_err(|error| {
                             error!(
                                 scope,
@@ -199,10 +215,15 @@ impl TryFrom<(Hostname, deserialize::Client)> for Client {
                             Terminate
                         })?;
 
-                    client.resources.files.push(parameters)
+                    client
+                        .temporary
+                        .requires
+                        .insert(resource.id(), item.requires);
+
+                    client.resources.files.push(resource);
                 }
                 DeResource::Group(item) => {
-                    let parameters =
+                    let resource =
                         group::Group::try_from((&item, &client.variables)).map_err(|error| {
                             error!(
                                 scope,
@@ -214,10 +235,15 @@ impl TryFrom<(Hostname, deserialize::Client)> for Client {
                             Terminate
                         })?;
 
-                    client.resources.groups.push(parameters)
+                    client
+                        .temporary
+                        .requires
+                        .insert(resource.id(), item.requires);
+
+                    client.resources.groups.push(resource);
                 }
                 DeResource::Host(item) => {
-                    let parameters =
+                    let resource =
                         host::Host::try_from((&item, &client.variables)).map_err(|error| {
                             error!(
                                 scope,
@@ -229,10 +255,15 @@ impl TryFrom<(Hostname, deserialize::Client)> for Client {
                             Terminate
                         })?;
 
-                    client.resources.hosts.push(parameters)
+                    client
+                        .temporary
+                        .requires
+                        .insert(resource.id(), item.requires);
+
+                    client.resources.hosts.push(resource);
                 }
                 DeResource::ResolvConf(item) => {
-                    let parameters = resolv_conf::ResolvConf::try_from((&item, &client.variables))
+                    let resource = resolv_conf::ResolvConf::try_from((&item, &client.variables))
                         .map_err(|error| {
                             error!(
                                 scope,
@@ -244,7 +275,12 @@ impl TryFrom<(Hostname, deserialize::Client)> for Client {
                             Terminate
                         })?;
 
-                    if client.resources.resolv_conf.replace(parameters).is_some() {
+                    client
+                        .temporary
+                        .requires
+                        .insert(resource.id(), item.requires.clone());
+
+                    if client.resources.resolv_conf.replace(resource).is_some() {
                         error!(
                             scope,
                             client:% = client.name,
@@ -256,8 +292,8 @@ impl TryFrom<(Hostname, deserialize::Client)> for Client {
                     }
                 }
                 DeResource::Symlink(item) => {
-                    let parameters = symlink::Symlink::try_from((&item, &client.variables))
-                        .map_err(|error| {
+                    let resource = symlink::Symlink::try_from((&item, &client.variables)).map_err(
+                        |error| {
                             error!(
                                 scope,
                                 client:% = client.name,
@@ -266,12 +302,18 @@ impl TryFrom<(Hostname, deserialize::Client)> for Client {
                                 error
                             );
                             Terminate
-                        })?;
+                        },
+                    )?;
 
-                    client.resources.symlinks.push(parameters)
+                    client
+                        .temporary
+                        .requires
+                        .insert(resource.id(), item.requires);
+
+                    client.resources.symlinks.push(resource);
                 }
                 DeResource::User(item) => {
-                    let parameters =
+                    let resource =
                         user::User::try_from((&item, &client.variables)).map_err(|error| {
                             error!(
                                 scope,
@@ -283,7 +325,12 @@ impl TryFrom<(Hostname, deserialize::Client)> for Client {
                             Terminate
                         })?;
 
-                    client.resources.users.push(parameters)
+                    client
+                        .temporary
+                        .requires
+                        .insert(resource.id(), item.requires);
+
+                    client.resources.users.push(resource);
                 }
             }
         }
@@ -416,6 +463,10 @@ impl Client {
                         Terminate
                     })?;
 
+                self.temporary
+                    .requires
+                    .insert(package.id(), item.requires.clone());
+
                 // Check if a similar resource is already present ...
                 if let Some(duplicate) = self
                     .resources
@@ -469,6 +520,10 @@ impl Client {
                         Terminate
                     })?;
 
+                self.temporary
+                    .requires
+                    .insert(directory.id(), item.requires.clone());
+
                 // Check if a similar resource is already present ...
                 if let Some(duplicate) = self
                     .resources
@@ -521,6 +576,10 @@ impl Client {
                     Terminate
                 })?;
 
+                self.temporary
+                    .requires
+                    .insert(file.id(), item.requires.clone());
+
                 // Check if a similar resource is already present ...
                 if let Some(duplicate) = self
                     .resources
@@ -570,6 +629,10 @@ impl Client {
                     );
                     Terminate
                 })?;
+
+                self.temporary
+                    .requires
+                    .insert(_group.id(), item.requires.clone());
 
                 // Check if a similar resource is already present ...
                 if let Some(duplicate) = self
@@ -623,6 +686,10 @@ impl Client {
                     Terminate
                 })?;
 
+                self.temporary
+                    .requires
+                    .insert(host.id(), item.requires.clone());
+
                 // Check if a similar resource is already present ...
                 if let Some(duplicate) = self
                     .resources
@@ -674,6 +741,10 @@ impl Client {
                         Terminate
                     })?;
 
+                self.temporary
+                    .requires
+                    .insert(resolv_conf.id(), item.requires.clone());
+
                 // Check if a similar resource is already present ...
                 if let Some(duplicate) = &self.resources.resolv_conf {
                     // ... and if it was sourced from another group in which case
@@ -720,6 +791,10 @@ impl Client {
                         );
                         Terminate
                     })?;
+
+                self.temporary
+                    .requires
+                    .insert(symlink.id(), item.requires.clone());
 
                 // Check if a similar resource is already present ...
                 if let Some(duplicate) = self
@@ -772,6 +847,10 @@ impl Client {
                     );
                     Terminate
                 })?;
+
+                self.temporary
+                    .requires
+                    .insert(user.id(), item.requires.clone());
 
                 // Check if a similar resource is already present ...
                 if let Some(duplicate) = self
@@ -903,7 +982,13 @@ impl Client {
 
             // Save the metadata of explicit dependencies that this
             // file should depend on.
-            for dependency in &file.relationships._requires {
+            for dependency in self
+                .temporary
+                .requires
+                .get(&file.id())
+                .map(|c| c.as_slice())
+                .unwrap_or_default()
+            {
                 match self.resolve_dependency(dependency) {
                     Some(resource) => {
                         if file.may_depend_on(&resource) {
@@ -1111,7 +1196,13 @@ impl Client {
 
             // Save the metadata of explicit dependencies that this
             // directory should depend on.
-            for dependency in &directory.relationships._requires {
+            for dependency in self
+                .temporary
+                .requires
+                .get(&directory.id())
+                .map(|c| c.as_slice())
+                .unwrap_or_default()
+            {
                 match self.resolve_dependency(dependency) {
                     Some(resource) => {
                         if directory.may_depend_on(&resource) {
@@ -1294,9 +1385,16 @@ impl Client {
 
                 symlink.relationships.requires.push(other);
             }
+
             // Save the metadata of explicit dependencies that this
             // symlink should depend on.
-            for dependency in &symlink.relationships._requires {
+            for dependency in self
+                .temporary
+                .requires
+                .get(&symlink.id())
+                .map(|c| c.as_slice())
+                .unwrap_or_default()
+            {
                 match self.resolve_dependency(dependency) {
                     Some(resource) => {
                         if symlink.may_depend_on(&resource) {
@@ -1449,7 +1547,13 @@ impl Client {
 
             // Save the metadata of explicit dependencies that this
             // host should depend on.
-            for dependency in &host.relationships._requires {
+            for dependency in self
+                .temporary
+                .requires
+                .get(&host.id())
+                .map(|c| c.as_slice())
+                .unwrap_or_default()
+            {
                 match self.resolve_dependency(dependency) {
                     Some(resource) => {
                         if host.may_depend_on(&resource) {
@@ -1567,7 +1671,13 @@ impl Client {
 
             // Save the metadata of explicit dependencies that this
             // group should depend on.
-            for dependency in &group.relationships._requires {
+            for dependency in self
+                .temporary
+                .requires
+                .get(&group.id())
+                .map(|c| c.as_slice())
+                .unwrap_or_default()
+            {
                 match self.resolve_dependency(dependency) {
                     Some(resource) => {
                         if group.may_depend_on(&resource) {
@@ -1689,7 +1799,13 @@ impl Client {
 
             // Save the metadata of explicit dependencies that this
             // user should depend on.
-            for dependency in &user.relationships._requires {
+            for dependency in self
+                .temporary
+                .requires
+                .get(&user.id())
+                .map(|c| c.as_slice())
+                .unwrap_or_default()
+            {
                 match self.resolve_dependency(dependency) {
                     Some(resource) => {
                         if user.may_depend_on(&resource) {
@@ -1823,7 +1939,13 @@ impl Client {
 
             // Save the metadata of explicit dependencies that this
             // resource should depend on.
-            for dependency in &resolv_conf.relationships._requires {
+            for dependency in self
+                .temporary
+                .requires
+                .get(&resolv_conf.id())
+                .map(|c| c.as_slice())
+                .unwrap_or_default()
+            {
                 match self.resolve_dependency(dependency) {
                     Some(resource) => {
                         if resolv_conf.may_depend_on(&resource) {
@@ -1919,7 +2041,13 @@ impl Client {
 
             // Save the metadata of explicit dependencies that this
             // `apt::package` should depend on.
-            for dependency in &package.relationships._requires {
+            for dependency in self
+                .temporary
+                .requires
+                .get(&package.id())
+                .map(|c| c.as_slice())
+                .unwrap_or_default()
+            {
                 match self.resolve_dependency(dependency) {
                     Some(resource) => {
                         if package.may_depend_on(&resource) {

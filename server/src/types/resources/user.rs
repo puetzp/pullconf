@@ -29,20 +29,9 @@ pub struct Parameters {
     pub groups: Vec<Groupname>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Default, Serialize)]
 pub struct Relationships {
-    #[serde(skip_serializing)]
-    pub _requires: Vec<Dependency>,
     pub requires: Vec<ResourceMetadata>,
-}
-
-impl From<Vec<Dependency>> for Relationships {
-    fn from(_requires: Vec<Dependency>) -> Self {
-        Self {
-            _requires,
-            requires: vec![],
-        }
-    }
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -59,8 +48,6 @@ impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for User {
     fn try_from(
         (parameters, variables): (&de::Parameters, &HashMap<String, Value>),
     ) -> Result<Self, Self::Error> {
-        let requires = parameters.requires.clone();
-
         let parameters = {
             let ensure = match &parameters.ensure {
                 Some(parameter) => parameter.resolve("ensure", variables)?,
@@ -141,7 +128,7 @@ impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for User {
                 id: Uuid::new_v4(),
             },
             parameters,
-            relationships: Relationships::from(requires),
+            relationships: Relationships::default(),
         })
     }
 }
