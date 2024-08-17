@@ -15,6 +15,8 @@ use std::{
 };
 use uuid::Uuid;
 
+/// This struct contains all parsed and validated resources that
+/// belong to this client.
 #[derive(Clone, Debug, Default)]
 pub struct ClientResources {
     pub apt_packages: Vec<apt::package::Package>,
@@ -27,13 +29,26 @@ pub struct ClientResources {
     pub users: Vec<user::User>,
 }
 
+/// This struct contains temporary helper collections that are
+/// freed after configuration validation has concluded.
+#[derive(Clone, Debug, Default)]
+pub struct ValidationHelpers {
+    /// This list contains every resource ID and the IDs of resources
+    /// that each resource depends on. This is used during validation
+    /// to detect dependency loops.
+    pub dependencies: HashMap<Uuid, HashSet<Uuid>>,
+}
+
+/// The `Client` struct contains all data parsed from configuration
+/// files as well as temporary helper objects and collections that
+/// help during resource validation.
 #[derive(Clone, Debug)]
 pub struct Client {
     pub name: Hostname,
     pub api_key: ApiKey,
     pub assigned_groups: Vec<Hostname>,
     pub variables: HashMap<String, toml::Value>,
-    pub dependencies: HashMap<Uuid, HashSet<Uuid>>,
+    pub temporary: ValidationHelpers,
     pub resources: ClientResources,
 }
 
@@ -129,7 +144,7 @@ impl TryFrom<(Hostname, deserialize::Client)> for Client {
             api_key: intermediate.api_key,
             assigned_groups: intermediate.assigned_groups,
             variables: intermediate.variables,
-            dependencies: HashMap::new(),
+            temporary: ValidationHelpers::default(),
             resources: ClientResources::default(),
         };
 
@@ -287,7 +302,7 @@ impl Client {
     /// If the search turns up empty, the relationship can be safely
     /// established.
     fn dependency_introduces_loop(&self, node: Uuid, target: Uuid) -> bool {
-        match self.dependencies.get(&node) {
+        match self.temporary.dependencies.get(&node) {
             Some(ids) => {
                 ids.contains(&target)
                     || ids
@@ -845,7 +860,8 @@ impl Client {
             }) {
                 let metadata = ancestor.metadata().clone();
 
-                self.dependencies
+                self.temporary
+                    .dependencies
                     .entry(file.id())
                     .or_default()
                     .insert(metadata.id);
@@ -861,7 +877,8 @@ impl Client {
             }) {
                 let metadata = ancestor.metadata().clone();
 
-                self.dependencies
+                self.temporary
+                    .dependencies
                     .entry(file.id())
                     .or_default()
                     .insert(metadata.id);
@@ -890,6 +907,7 @@ impl Client {
 
                                 return Err(Terminate);
                             } else if self
+                                .temporary
                                 .dependencies
                                 .entry(file.id())
                                 .or_default()
@@ -1026,7 +1044,8 @@ impl Client {
                 let metadata = directory.metadata();
                 let other = user.metadata().clone();
 
-                self.dependencies
+                self.temporary
+                    .dependencies
                     .entry(metadata.id)
                     .or_default()
                     .insert(other.id);
@@ -1047,7 +1066,8 @@ impl Client {
                 let metadata = directory.metadata();
                 let other = ancestor.metadata().clone();
 
-                self.dependencies
+                self.temporary
+                    .dependencies
                     .entry(metadata.id)
                     .or_default()
                     .insert(other.id);
@@ -1065,7 +1085,8 @@ impl Client {
                 let metadata = directory.metadata();
                 let other = ancestor.metadata().clone();
 
-                self.dependencies
+                self.temporary
+                    .dependencies
                     .entry(metadata.id)
                     .or_default()
                     .insert(other.id);
@@ -1095,6 +1116,7 @@ impl Client {
 
                                 return Err(Terminate);
                             } else if self
+                                .temporary
                                 .dependencies
                                 .entry(metadata.id)
                                 .or_default()
@@ -1202,7 +1224,8 @@ impl Client {
                 let metadata = symlink.metadata();
                 let other = ancestor.metadata().clone();
 
-                self.dependencies
+                self.temporary
+                    .dependencies
                     .entry(metadata.id)
                     .or_default()
                     .insert(other.id);
@@ -1223,7 +1246,8 @@ impl Client {
                 let metadata = symlink.metadata();
                 let other = ancestor.metadata().clone();
 
-                self.dependencies
+                self.temporary
+                    .dependencies
                     .entry(metadata.id)
                     .or_default()
                     .insert(other.id);
@@ -1247,7 +1271,8 @@ impl Client {
             {
                 let metadata = symlink.metadata();
 
-                self.dependencies
+                self.temporary
+                    .dependencies
                     .entry(metadata.id)
                     .or_default()
                     .insert(other.id);
@@ -1276,6 +1301,7 @@ impl Client {
 
                                 return Err(Terminate);
                             } else if self
+                                .temporary
                                 .dependencies
                                 .entry(metadata.id)
                                 .or_default()
@@ -1378,7 +1404,8 @@ impl Client {
                     let metadata = host.metadata();
                     let other = file.metadata().clone();
 
-                    self.dependencies
+                    self.temporary
+                        .dependencies
                         .entry(metadata.id)
                         .or_default()
                         .insert(other.id);
@@ -1396,7 +1423,8 @@ impl Client {
                 let metadata = host.metadata();
                 let other = symlink.metadata().clone();
 
-                self.dependencies
+                self.temporary
+                    .dependencies
                     .entry(metadata.id)
                     .or_default()
                     .insert(other.id);
@@ -1426,6 +1454,7 @@ impl Client {
 
                                 return Err(Terminate);
                             } else if self
+                                .temporary
                                 .dependencies
                                 .entry(metadata.id)
                                 .or_default()
@@ -1511,7 +1540,8 @@ impl Client {
                     let metadata = group.metadata();
                     let other = user.metadata().clone();
 
-                    self.dependencies
+                    self.temporary
+                        .dependencies
                         .entry(metadata.id)
                         .or_default()
                         .insert(other.id);
@@ -1542,6 +1572,7 @@ impl Client {
 
                                 return Err(Terminate);
                             } else if self
+                                .temporary
                                 .dependencies
                                 .entry(metadata.id)
                                 .or_default()
@@ -1631,7 +1662,8 @@ impl Client {
                     let metadata = user.metadata();
                     let other = group.metadata().clone();
 
-                    self.dependencies
+                    self.temporary
+                        .dependencies
                         .entry(metadata.id)
                         .or_default()
                         .insert(other.id);
@@ -1662,6 +1694,7 @@ impl Client {
 
                                 return Err(Terminate);
                             } else if self
+                                .temporary
                                 .dependencies
                                 .entry(metadata.id)
                                 .or_default()
@@ -1745,7 +1778,8 @@ impl Client {
                     let metadata = resolv_conf.metadata();
                     let other = file.metadata().clone();
 
-                    self.dependencies
+                    self.temporary
+                        .dependencies
                         .entry(metadata.id)
                         .or_default()
                         .insert(other.id);
@@ -1763,7 +1797,8 @@ impl Client {
                 let metadata = resolv_conf.metadata();
                 let other = symlink.metadata().clone();
 
-                self.dependencies
+                self.temporary
+                    .dependencies
                     .entry(metadata.id)
                     .or_default()
                     .insert(other.id);
@@ -1792,6 +1827,7 @@ impl Client {
 
                                 return Err(Terminate);
                             } else if self
+                                .temporary
                                 .dependencies
                                 .entry(metadata.id)
                                 .or_default()
@@ -1888,6 +1924,7 @@ impl Client {
 
                                 return Err(Terminate);
                             } else if self
+                                .temporary
                                 .dependencies
                                 .entry(metadata.id)
                                 .or_default()
