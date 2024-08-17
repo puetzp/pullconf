@@ -1,5 +1,8 @@
 use super::{apt, directory, file, group, host, resolv_conf, symlink, user};
-use common::{resources::apt::package::Name as PackageName, Groupname, SafePathBuf, Username};
+use common::{
+    resources::apt::package::Name as PackageName, resources::user::Name as Username, Groupname,
+    SafePathBuf,
+};
 use serde::{
     de::{DeserializeOwned, Error as SerdeError, Unexpected},
     Deserialize, Deserializer,

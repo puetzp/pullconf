@@ -1,7 +1,7 @@
 use super::{group, Action, Resource, ResourceTrait};
 use common::{
-    resources::user::{Parameters, Password, Relationships, EXPIRY_DATE_FORMAT},
-    Ensure, ResourceMetadata, SafePathBuf, Username,
+    resources::user::{Name, Parameters, Password, Relationships, EXPIRY_DATE_FORMAT},
+    Ensure, ResourceMetadata, SafePathBuf,
 };
 use log::{debug, error, info, warn};
 use serde::Deserialize;
@@ -501,7 +501,7 @@ struct CurrentUser {
 
 /// Try to find this user account in the system. If it exists, return the
 /// relevant subset of the current user configuration.
-fn find(name: &Username) -> Result<Option<CurrentUser>, anyhow::Error> {
+fn find(name: &Name) -> Result<Option<CurrentUser>, anyhow::Error> {
     let (comment, home, shell) = {
         match fs::read_to_string("/etc/passwd")?
             .lines()

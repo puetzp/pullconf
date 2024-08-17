@@ -1,4 +1,5 @@
-use crate::{Ensure, Groupname, ResourceMetadata, SafePathBuf, Username};
+use super::user::Name as Username;
+use crate::{Ensure, Groupname, ResourceMetadata, SafePathBuf};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 

@@ -3,7 +3,7 @@ pub mod name;
 pub mod path;
 pub mod resources;
 
-pub use name::{Groupname, Hostname, Username};
+pub use name::{Groupname, Hostname};
 pub use path::SafePathBuf;
 pub use resources::directory::ChildNode as DirectoryChildNode;
 pub use resources::file::Mode as FileMode;

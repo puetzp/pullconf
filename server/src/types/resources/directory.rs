@@ -3,8 +3,11 @@ use super::{
     Resource,
 };
 use common::{
-    resources::directory::{ChildNode, Parameters, Relationships},
-    Ensure, ResourceMetadata, ResourceType, Username,
+    resources::{
+        directory::{ChildNode, Parameters, Relationships},
+        user::Name as Username,
+    },
+    Ensure, ResourceMetadata, ResourceType,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
