@@ -1,6 +1,8 @@
 use super::{apt, directory, file, group, host, resolv_conf, symlink, user};
 use common::{
-    resources::apt::package::Name as PackageName, resources::user::Name as Username, Groupname,
+    resources::{
+        apt::package::Name as PackageName, group::Name as Groupname, user::Name as Username,
+    },
     SafePathBuf,
 };
 use serde::{

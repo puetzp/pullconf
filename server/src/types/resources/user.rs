@@ -3,8 +3,11 @@ use super::{
     Resource,
 };
 use common::{
-    resources::user::{Parameters, Password, Relationships},
-    Ensure, Groupname, ResourceMetadata, ResourceType, SafePathBuf,
+    resources::{
+        group::Name as Groupname,
+        user::{Parameters, Password, Relationships},
+    },
+    Ensure, ResourceMetadata, ResourceType, SafePathBuf,
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, str::FromStr};

@@ -1,5 +1,5 @@
 use anyhow::Context;
-use common::{resources::user::Name as Username, Groupname};
+use common::{resources::group::Name as Groupname, resources::user::Name as Username};
 use log::debug;
 use nix::unistd::{Group, User};
 

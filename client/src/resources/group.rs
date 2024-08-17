@@ -1,7 +1,7 @@
 use super::{Action, Resource, ResourceTrait};
 use common::{
-    resources::group::{Parameters, Relationships},
-    Ensure, Groupname, ResourceMetadata,
+    resources::group::{Name, Parameters, Relationships},
+    Ensure, ResourceMetadata,
 };
 use log::{debug, error, info, warn};
 use serde::Deserialize;
@@ -270,7 +270,7 @@ impl Group {
 }
 
 /// Try to find a group by its name within the system.
-pub(super) fn exists(name: &Groupname) -> Result<bool, anyhow::Error> {
+pub(super) fn exists(name: &Name) -> Result<bool, anyhow::Error> {
     for line in fs::read_to_string("/etc/group")?.lines() {
         if let Some((first_column, _)) = line.split_once(':') {
             if first_column == name.as_str() {

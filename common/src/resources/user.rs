@@ -1,4 +1,5 @@
-use crate::{Ensure, Groupname, ResourceMetadata, SafePathBuf};
+use super::group::Name as Groupname;
+use crate::{Ensure, ResourceMetadata, SafePathBuf};
 use serde::{
     de::{Error as SerdeError, Unexpected},
     Deserialize, Deserializer, Serialize, Serializer,
