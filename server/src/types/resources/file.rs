@@ -5,10 +5,10 @@ use super::{
 use common::{
     resources::{
         directory::ChildNode,
-        file::{Parameters, Relationships},
+        file::{Mode, Parameters, Relationships},
         user::Name as Username,
     },
-    Ensure, FileMode, ResourceMetadata, ResourceType,
+    Ensure, ResourceMetadata, ResourceType,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -39,7 +39,7 @@ impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for File {
 
             let mode = match &parameters.mode {
                 Some(parameter) => parameter.resolve("mode", variables)?,
-                None => FileMode::default(),
+                None => Mode::default(),
             };
 
             let owner = match &parameters.owner {

@@ -5,8 +5,6 @@ pub mod resources;
 
 pub use name::Hostname;
 pub use path::SafePathBuf;
-pub use resources::directory::ChildNode as DirectoryChildNode;
-pub use resources::file::Mode as FileMode;
 
 use serde::{Deserialize, Serialize};
 use std::fmt;
