@@ -130,6 +130,7 @@ fn handle_route(
 
     if let Some(request) = request.remove_prefix("/assets") {
         if !client
+            .resources
             .files
             .iter()
             .filter_map(|file| {
@@ -181,15 +182,15 @@ fn handle_route(
 
                     let mut data: Vec<Resource> = vec![];
 
-                    data.extend(client.directories.iter().map(|item| item.into()));
-                    data.extend(client.files.iter().map(|item| item.into()));
-                    data.extend(client.groups.iter().map(|item| item.into()));
-                    data.extend(client.hosts.iter().map(|item| item.into()));
-                    data.extend(client.symlinks.iter().map(|item| item.into()));
-                    data.extend(client.users.iter().map(|item| item.into()));
-                    data.extend(client.apt_packages.iter().map(|item| item.into()));
+                    data.extend(client.resources.directories.iter().map(|item| item.into()));
+                    data.extend(client.resources.files.iter().map(|item| item.into()));
+                    data.extend(client.resources.groups.iter().map(|item| item.into()));
+                    data.extend(client.resources.hosts.iter().map(|item| item.into()));
+                    data.extend(client.resources.symlinks.iter().map(|item| item.into()));
+                    data.extend(client.resources.users.iter().map(|item| item.into()));
+                    data.extend(client.resources.apt_packages.iter().map(|item| item.into()));
 
-                    if let Some(resolv_conf) = &client.resolv_conf {
+                    if let Some(resolv_conf) = &client.resources.resolv_conf {
                         data.push(resolv_conf.into());
                     }
 

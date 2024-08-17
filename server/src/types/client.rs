@@ -8,7 +8,6 @@ use crate::types::{
 };
 use common::{error::Terminate, Hostname, SafePathBuf};
 use log::error;
-use serde::Serialize;
 use std::{
     collections::{HashMap, HashSet},
     hash::{Hash, Hasher},
@@ -16,13 +15,8 @@ use std::{
 };
 use uuid::Uuid;
 
-#[derive(Clone, Debug, Serialize)]
-#[serde(into = "serialize::Client")]
-pub struct Client {
-    pub name: Hostname,
-    pub api_key: ApiKey,
-    pub assigned_groups: Vec<Hostname>,
-    pub variables: HashMap<String, toml::Value>,
+#[derive(Clone, Debug, Default)]
+pub struct ClientResources {
     pub apt_packages: Vec<apt::package::Package>,
     pub directories: Vec<directory::Directory>,
     pub files: Vec<file::File>,
@@ -31,7 +25,16 @@ pub struct Client {
     pub resolv_conf: Option<resolv_conf::ResolvConf>,
     pub symlinks: Vec<symlink::Symlink>,
     pub users: Vec<user::User>,
+}
+
+#[derive(Clone, Debug)]
+pub struct Client {
+    pub name: Hostname,
+    pub api_key: ApiKey,
+    pub assigned_groups: Vec<Hostname>,
+    pub variables: HashMap<String, toml::Value>,
     pub dependencies: HashMap<Uuid, HashSet<Uuid>>,
+    pub resources: ClientResources,
 }
 
 impl Hash for Client {
@@ -91,6 +94,7 @@ impl
         let mut paths = HashSet::new();
 
         let file_paths = client
+            .resources
             .files
             .iter()
             .map(|f| f.parameters.path.to_path_buf())
@@ -125,15 +129,8 @@ impl TryFrom<(Hostname, deserialize::Client)> for Client {
             api_key: intermediate.api_key,
             assigned_groups: intermediate.assigned_groups,
             variables: intermediate.variables,
-            apt_packages: vec![],
-            directories: vec![],
-            files: vec![],
-            groups: vec![],
-            hosts: vec![],
-            resolv_conf: None,
-            symlinks: vec![],
-            users: vec![],
             dependencies: HashMap::new(),
+            resources: ClientResources::default(),
         };
 
         for resource in intermediate.resources {
@@ -151,7 +148,7 @@ impl TryFrom<(Hostname, deserialize::Client)> for Client {
                             Terminate
                         })?;
 
-                    client.apt_packages.push(parameters);
+                    client.resources.apt_packages.push(parameters);
                 }
                 DeResource::Directory(item) => {
                     let parameters = directory::Directory::try_from((&item, &client.variables))
@@ -166,7 +163,7 @@ impl TryFrom<(Hostname, deserialize::Client)> for Client {
                             Terminate
                         })?;
 
-                    client.directories.push(parameters);
+                    client.resources.directories.push(parameters);
                 }
                 DeResource::File(item) => {
                     let parameters =
@@ -181,7 +178,7 @@ impl TryFrom<(Hostname, deserialize::Client)> for Client {
                             Terminate
                         })?;
 
-                    client.files.push(parameters)
+                    client.resources.files.push(parameters)
                 }
                 DeResource::Group(item) => {
                     let parameters =
@@ -196,7 +193,7 @@ impl TryFrom<(Hostname, deserialize::Client)> for Client {
                             Terminate
                         })?;
 
-                    client.groups.push(parameters)
+                    client.resources.groups.push(parameters)
                 }
                 DeResource::Host(item) => {
                     let parameters =
@@ -211,7 +208,7 @@ impl TryFrom<(Hostname, deserialize::Client)> for Client {
                             Terminate
                         })?;
 
-                    client.hosts.push(parameters)
+                    client.resources.hosts.push(parameters)
                 }
                 DeResource::ResolvConf(item) => {
                     let parameters = resolv_conf::ResolvConf::try_from((&item, &client.variables))
@@ -226,7 +223,7 @@ impl TryFrom<(Hostname, deserialize::Client)> for Client {
                             Terminate
                         })?;
 
-                    if client.resolv_conf.replace(parameters).is_some() {
+                    if client.resources.resolv_conf.replace(parameters).is_some() {
                         error!(
                             scope,
                             client:% = client.name,
@@ -250,7 +247,7 @@ impl TryFrom<(Hostname, deserialize::Client)> for Client {
                             Terminate
                         })?;
 
-                    client.symlinks.push(parameters)
+                    client.resources.symlinks.push(parameters)
                 }
                 DeResource::User(item) => {
                     let parameters =
@@ -265,7 +262,7 @@ impl TryFrom<(Hostname, deserialize::Client)> for Client {
                             Terminate
                         })?;
 
-                    client.users.push(parameters)
+                    client.resources.users.push(parameters)
                 }
             }
         }
@@ -309,37 +306,48 @@ impl Client {
     fn resolve_dependency(&self, dependency: &Dependency) -> Option<Resource> {
         match dependency {
             Dependency::AptPackage { name } => self
+                .resources
                 .apt_packages
                 .iter()
                 .find(|p| p.parameters.name == *name)
                 .map(Resource::AptPackage),
             Dependency::Directory { path } => self
+                .resources
                 .directories
                 .iter()
                 .find(|d| d.parameters.path == *path)
                 .map(Resource::Directory),
             Dependency::File { path } => self
+                .resources
                 .files
                 .iter()
                 .find(|f| f.parameters.path == *path)
                 .map(Resource::File),
             Dependency::Group { name } => self
+                .resources
                 .groups
                 .iter()
                 .find(|g| g.parameters.name == *name)
                 .map(Resource::Group),
             Dependency::Host { ip_address } => self
+                .resources
                 .hosts
                 .iter()
                 .find(|h| h.parameters.ip_address == *ip_address)
                 .map(Resource::Host),
-            Dependency::ResolvConf => self.resolv_conf.as_ref().map(Resource::ResolvConf),
+            Dependency::ResolvConf => self
+                .resources
+                .resolv_conf
+                .as_ref()
+                .map(Resource::ResolvConf),
             Dependency::Symlink { path } => self
+                .resources
                 .symlinks
                 .iter()
                 .find(|s| s.parameters.path == *path)
                 .map(Resource::Symlink),
             Dependency::User { name } => self
+                .resources
                 .users
                 .iter()
                 .find(|u| u.parameters.name == *name)
@@ -389,6 +397,7 @@ impl Client {
 
                 // Check if a similar resource is already present ...
                 if let Some(duplicate) = self
+                    .resources
                     .apt_packages
                     .iter()
                     .find(|p| p.parameters.name == package.parameters.name)
@@ -417,7 +426,7 @@ impl Client {
                     // the catalog and also record that this resource stems from
                     // a group.
                     package.from_group = Some(group_name.clone());
-                    self.apt_packages.push(package);
+                    self.resources.apt_packages.push(package);
                 }
             }
 
@@ -439,6 +448,7 @@ impl Client {
 
                 // Check if a similar resource is already present ...
                 if let Some(duplicate) = self
+                    .resources
                     .directories
                     .iter()
                     .find(|d| d.parameters.path == directory.parameters.path)
@@ -467,7 +477,7 @@ impl Client {
                     // the catalog and also record that this resource stems from
                     // a group.
                     directory.from_group = Some(group_name.clone());
-                    self.directories.push(directory);
+                    self.resources.directories.push(directory);
                 }
             }
 
@@ -488,6 +498,7 @@ impl Client {
 
                 // Check if a similar resource is already present ...
                 if let Some(duplicate) = self
+                    .resources
                     .files
                     .iter()
                     .find(|f| f.parameters.path == file.parameters.path)
@@ -516,7 +527,7 @@ impl Client {
                     // the catalog and also record that this resource stems from
                     // a group.
                     file.from_group = Some(group_name.clone());
-                    self.files.push(file);
+                    self.resources.files.push(file);
                 }
             }
 
@@ -538,6 +549,7 @@ impl Client {
 
                 // Check if a similar resource is already present ...
                 if let Some(duplicate) = self
+                    .resources
                     .groups
                     .iter()
                     .find(|g| g.parameters.name == _group.parameters.name)
@@ -566,7 +578,7 @@ impl Client {
                     // the catalog and also record that this resource stems from
                     // a group.
                     _group.from_group = Some(group_name.clone());
-                    self.groups.push(_group);
+                    self.resources.groups.push(_group);
                 }
             }
 
@@ -587,6 +599,7 @@ impl Client {
 
                 // Check if a similar resource is already present ...
                 if let Some(duplicate) = self
+                    .resources
                     .hosts
                     .iter()
                     .find(|h| h.parameters.ip_address == host.parameters.ip_address)
@@ -615,7 +628,7 @@ impl Client {
                     // the catalog and also record that this resource stems from
                     // a group.
                     host.from_group = Some(group_name.clone());
-                    self.hosts.push(host);
+                    self.resources.hosts.push(host);
                 }
             }
 
@@ -636,7 +649,7 @@ impl Client {
                     })?;
 
                 // Check if a similar resource is already present ...
-                if let Some(duplicate) = &self.resolv_conf {
+                if let Some(duplicate) = &self.resources.resolv_conf {
                     // ... and if it was sourced from another group in which case
                     // processing fails. Otherwise the group resource is skipped
                     // because the saved resource originates from the client
@@ -660,7 +673,7 @@ impl Client {
                     // the catalog and also record that this resource stems from
                     // a group.
                     resolv_conf.from_group = Some(group_name.clone());
-                    self.resolv_conf = Some(resolv_conf);
+                    self.resources.resolv_conf = Some(resolv_conf);
                 }
             }
 
@@ -682,6 +695,7 @@ impl Client {
 
                 // Check if a similar resource is already present ...
                 if let Some(duplicate) = self
+                    .resources
                     .symlinks
                     .iter()
                     .find(|s| s.parameters.path == symlink.parameters.path)
@@ -710,7 +724,7 @@ impl Client {
                     // the catalog and also record that this resource stems from
                     // a group.
                     symlink.from_group = Some(group_name.clone());
-                    self.symlinks.push(symlink);
+                    self.resources.symlinks.push(symlink);
                 }
             }
 
@@ -731,6 +745,7 @@ impl Client {
 
                 // Check if a similar resource is already present ...
                 if let Some(duplicate) = self
+                    .resources
                     .users
                     .iter()
                     .find(|u| u.parameters.name == user.parameters.name)
@@ -759,7 +774,7 @@ impl Client {
                     // the catalog and also record that this resource stems from
                     // a group.
                     user.from_group = Some(group_name.clone());
-                    self.users.push(user);
+                    self.resources.users.push(user);
                 }
             }
         }
@@ -782,7 +797,7 @@ impl Client {
         // collections of resources to check against.
         // Since ownerships rules need to be satisfied as well, a clone
         // is inevitable.
-        let mut _files = self.files.clone();
+        let mut _files = self.resources.files.clone();
         _files.sort_by(|a, b| a.parameters.path.cmp(&b.parameters.path));
 
         for file in _files.iter_mut() {
@@ -822,7 +837,7 @@ impl Client {
 
             // Save the metadata of ancestral directories and symlinks
             // that this file depends on.
-            for ancestor in self.directories.iter().filter(|d| {
+            for ancestor in self.resources.directories.iter().filter(|d| {
                 file.parameters
                     .path
                     .ancestors()
@@ -838,7 +853,7 @@ impl Client {
                 file.relationships.requires.push(metadata);
             }
 
-            for ancestor in self.symlinks.iter().filter(|s| {
+            for ancestor in self.resources.symlinks.iter().filter(|s| {
                 file.parameters
                     .path
                     .ancestors()
@@ -913,7 +928,7 @@ impl Client {
             }
         }
 
-        self.files = _files;
+        self.resources.files = _files;
 
         Ok(())
     }
@@ -933,7 +948,7 @@ impl Client {
         // collections of resources to check against.
         // Since ownerships rules need to be satisfied as well, a clone
         // is inevitable.
-        let mut _directories = self.directories.clone();
+        let mut _directories = self.resources.directories.clone();
         _directories.sort_by(|a, b| a.parameters.path.cmp(&b.parameters.path));
 
         for directory in _directories.iter_mut() {
@@ -973,7 +988,7 @@ impl Client {
             // Save the paths of child nodes. This becomes relevant when
             // the `purge` parameter is `true` and the directory must
             // remove unmanaged child nodes it may contain.
-            for child in self.directories.iter().filter(|d| {
+            for child in self.resources.directories.iter().filter(|d| {
                 d.parameters
                     .path
                     .parent()
@@ -982,7 +997,7 @@ impl Client {
                 directory.relationships.children.push(child.into());
             }
 
-            for child in self.files.iter().filter(|f| {
+            for child in self.resources.files.iter().filter(|f| {
                 f.parameters
                     .path
                     .parent()
@@ -991,7 +1006,7 @@ impl Client {
                 directory.relationships.children.push(child.into());
             }
 
-            for child in self.symlinks.iter().filter(|s| {
+            for child in self.resources.symlinks.iter().filter(|s| {
                 s.parameters
                     .path
                     .parent()
@@ -1003,6 +1018,7 @@ impl Client {
             // Save the metadata of user resources whose `home` directory
             // matches this directory's `path`.
             for user in self
+                .resources
                 .users
                 .iter()
                 .filter(|u| u.parameters.home == directory.parameters.path)
@@ -1020,7 +1036,7 @@ impl Client {
 
             // Save the metadata of ancestral directories and symlinks
             // that this directory depends on.
-            for ancestor in self.directories.iter().filter(|d| {
+            for ancestor in self.resources.directories.iter().filter(|d| {
                 directory
                     .parameters
                     .path
@@ -1039,7 +1055,7 @@ impl Client {
                 directory.relationships.requires.push(other);
             }
 
-            for ancestor in self.symlinks.iter().filter(|s| {
+            for ancestor in self.resources.symlinks.iter().filter(|s| {
                 directory
                     .parameters
                     .path
@@ -1117,7 +1133,7 @@ impl Client {
             }
         }
 
-        self.directories = _directories;
+        self.resources.directories = _directories;
 
         Ok(())
     }
@@ -1137,7 +1153,7 @@ impl Client {
         // collections of resources to check against.
         // Since ownerships rules need to be satisfied as well, a clone
         // is inevitable.
-        let mut _symlinks = self.symlinks.clone();
+        let mut _symlinks = self.resources.symlinks.clone();
         _symlinks.sort_by(|a, b| a.parameters.path.cmp(&b.parameters.path));
 
         for symlink in _symlinks.iter_mut() {
@@ -1176,7 +1192,7 @@ impl Client {
 
             // Save metadata of ancestral directories that the symlink
             // depends on.
-            for ancestor in self.directories.iter().filter(|d| {
+            for ancestor in self.resources.directories.iter().filter(|d| {
                 symlink
                     .parameters
                     .path
@@ -1196,7 +1212,7 @@ impl Client {
 
             // Save metadata of ancestral symlinks that this symlink
             // depends on.
-            for ancestor in self.symlinks.iter().filter(|s| {
+            for ancestor in self.resources.symlinks.iter().filter(|s| {
                 symlink
                     .parameters
                     .path
@@ -1217,11 +1233,13 @@ impl Client {
 
             // Save metadata of the target that this symlink points to.
             if let Some(other) = self
+                .resources
                 .directories
                 .iter()
                 .find(|d| d.parameters.path == symlink.parameters.target)
                 .map(|d| d.metadata().clone())
                 .or(self
+                    .resources
                     .files
                     .iter()
                     .find(|f| f.parameters.path == symlink.parameters.target)
@@ -1296,7 +1314,7 @@ impl Client {
             }
         }
 
-        self.symlinks = _symlinks;
+        self.resources.symlinks = _symlinks;
 
         Ok(())
     }
@@ -1315,7 +1333,7 @@ impl Client {
         // collections of resources to check against.
         // Since ownerships rules need to be satisfied as well, a clone
         // is inevitable.
-        let mut _hosts = self.hosts.clone();
+        let mut _hosts = self.resources.hosts.clone();
 
         for host in _hosts.iter_mut() {
             let ip_address = host.parameters.ip_address.to_string();
@@ -1339,6 +1357,7 @@ impl Client {
             // Also check if the target is a file resource that sets its
             // content  or source parameter. This combination is not supported.
             if let Some(file) = self
+                .resources
                 .files
                 .iter()
                 .find(|f| *f.parameters.path == host.parameters.target)
@@ -1369,6 +1388,7 @@ impl Client {
             }
 
             if let Some(symlink) = self
+                .resources
                 .symlinks
                 .iter()
                 .find(|s| *s.parameters.path == host.parameters.target)
@@ -1444,7 +1464,7 @@ impl Client {
             }
         }
 
-        self.hosts = _hosts;
+        self.resources.hosts = _hosts;
 
         Ok(())
     }
@@ -1463,7 +1483,7 @@ impl Client {
         // collections of resources to check against.
         // Since ownerships rules need to be satisfied as well, a clone
         // is inevitable.
-        let mut _groups = self.groups.clone();
+        let mut _groups = self.resources.groups.clone();
 
         for group in _groups.iter_mut() {
             let name = group.parameters.name.to_string();
@@ -1486,7 +1506,7 @@ impl Client {
             // user's primary group.
             // Primary groups must be handled after users as user creation
             // usually involves creating the primary group as well.
-            for user in &self.users {
+            for user in &self.resources.users {
                 if user.parameters.group == group.parameters.name {
                     let metadata = group.metadata();
                     let other = user.metadata().clone();
@@ -1560,7 +1580,7 @@ impl Client {
             }
         }
 
-        self.groups = _groups;
+        self.resources.groups = _groups;
 
         Ok(())
     }
@@ -1579,7 +1599,7 @@ impl Client {
         // collections of resources to check against.
         // Since ownerships rules need to be satisfied as well, a clone
         // is inevitable.
-        let mut _users = self.users.clone();
+        let mut _users = self.resources.users.clone();
 
         for user in _users.iter_mut() {
             let name = user.parameters.name.to_string();
@@ -1603,6 +1623,7 @@ impl Client {
             // Supplementary groups must be processed before users.
             for name in &user.parameters.groups {
                 if let Some(group) = self
+                    .resources
                     .groups
                     .iter()
                     .find(|group| group.parameters.name == *name)
@@ -1679,7 +1700,7 @@ impl Client {
             }
         }
 
-        self.users = _users;
+        self.resources.users = _users;
 
         Ok(())
     }
@@ -1694,9 +1715,9 @@ impl Client {
         // resource catalog to check against.
         // Since ownerships rules need to be satisfied as well, a clone
         // is inevitable.
-        let mut _resolv_conf = self.resolv_conf.clone();
+        let mut _resolv_conf = self.resources.resolv_conf.clone();
 
-        self.resolv_conf = None;
+        self.resources.resolv_conf = None;
 
         if let Some(mut resolv_conf) = _resolv_conf {
             // Save the metadata of the target file or symlink corresponding to the
@@ -1704,6 +1725,7 @@ impl Client {
             // Also check if the target is a file resource that sets its
             // content or source parameter. This combination is not supported.
             if let Some(file) = self
+                .resources
                 .files
                 .iter()
                 .find(|f| *f.parameters.path == resolv_conf.parameters.target)
@@ -1733,6 +1755,7 @@ impl Client {
             }
 
             if let Some(symlink) = self
+                .resources
                 .symlinks
                 .iter()
                 .find(|s| *s.parameters.path == resolv_conf.parameters.target)
@@ -1804,7 +1827,7 @@ impl Client {
                 }
             }
 
-            self.resolv_conf = Some(resolv_conf);
+            self.resources.resolv_conf = Some(resolv_conf);
         }
 
         Ok(())
@@ -1824,7 +1847,7 @@ impl Client {
         // collections of resources to check against.
         // Since ownerships rules need to be satisfied as well, a clone
         // is inevitable.
-        let mut _apt_packages = self.apt_packages.clone();
+        let mut _apt_packages = self.resources.apt_packages.clone();
 
         for package in _apt_packages.iter_mut() {
             let name = package.parameters.name.to_string();
@@ -1903,7 +1926,7 @@ impl Client {
             }
         }
 
-        self.apt_packages = _apt_packages;
+        self.resources.apt_packages = _apt_packages;
 
         Ok(())
     }
@@ -1924,28 +1947,5 @@ pub mod deserialize {
         pub variables: HashMap<String, toml::Value>,
         #[serde(default)]
         pub resources: Vec<DeResource>,
-    }
-}
-
-pub mod serialize {
-    use common::{Hostname, Links};
-    use serde::Serialize;
-
-    #[derive(Clone, Debug, Serialize)]
-    pub struct Client {
-        links: Links,
-        name: Hostname,
-    }
-
-    impl From<super::Client> for Client {
-        fn from(client: super::Client) -> Self {
-            Self {
-                links: Links {
-                    this: format!("/api/clients/{}", client.name()),
-                    ..Default::default()
-                },
-                name: client.name().clone(),
-            }
-        }
     }
 }
