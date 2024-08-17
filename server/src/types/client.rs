@@ -51,6 +51,15 @@ pub struct ValidationHelpers {
     pub requires: HashMap<Uuid, Vec<Dependency>>,
 }
 
+impl ValidationHelpers {
+    /// Replace the currently allocated collections with new, empty
+    /// collections, which results in deallocating the old collections
+    /// that are not longer relevant when validation is finished.
+    fn clear(&mut self) {
+        *self = Self::default();
+    }
+}
+
 /// The `Client` struct contains all data parsed from configuration
 /// files as well as temporary helper objects and collections that
 /// help during resource validation.
@@ -135,6 +144,8 @@ impl
         client.validate_users()?;
         client.validate_resolv_conf()?;
         client.validate_apt_packages()?;
+
+        client.temporary.clear();
 
         Ok(client)
     }
