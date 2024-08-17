@@ -1,5 +1,22 @@
+use crate::{Ensure, Groupname, ResourceMetadata, SafePathBuf, Username};
 use serde::{de::Error, Deserialize, Deserializer, Serialize};
 use std::{ops::Deref, str::FromStr};
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Parameters {
+    pub path: SafePathBuf,
+    pub ensure: Ensure,
+    pub mode: Mode,
+    pub owner: Username,
+    pub group: Option<Groupname>,
+    pub content: Option<String>,
+    pub source: Option<SafePathBuf>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct Relationships {
+    pub requires: Vec<ResourceMetadata>,
+}
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
 pub struct Mode(String);

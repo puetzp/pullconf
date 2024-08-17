@@ -1,6 +1,9 @@
 use super::{Action, Resource, ResourceTrait};
 use anyhow::Context;
-use common::{Ensure, ResourceMetadata, SafePathBuf};
+use common::{
+    resources::symlink::{Parameters, Relationships},
+    Ensure, ResourceMetadata,
+};
 use log::{debug, error, info, warn};
 use serde::Deserialize;
 use std::{
@@ -257,16 +260,4 @@ impl Symlink {
 
         Ok(Action::Deleted)
     }
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct Parameters {
-    pub path: SafePathBuf,
-    pub ensure: Ensure,
-    pub target: SafePathBuf,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct Relationships {
-    requires: Vec<ResourceMetadata>,
 }

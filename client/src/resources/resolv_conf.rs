@@ -1,8 +1,8 @@
 use super::{Action, Resource, ResourceTrait};
 use anyhow::Context;
 use common::{
-    resources::resolv_conf::{ResolverOption, SortlistPair},
-    Ensure, Hostname, ResourceMetadata,
+    resources::resolv_conf::{Parameters, Relationships},
+    Ensure, ResourceMetadata,
 };
 use log::{debug, error, info, warn};
 use serde::Deserialize;
@@ -11,8 +11,6 @@ use std::{
     collections::HashMap,
     fs,
     io::{self, Read},
-    net::IpAddr,
-    path::PathBuf,
 };
 use uuid::Uuid;
 
@@ -307,19 +305,4 @@ impl ResolvConf {
 
         Ok(Action::Deleted)
     }
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct Parameters {
-    pub ensure: Ensure,
-    pub target: PathBuf,
-    pub nameservers: Vec<IpAddr>,
-    pub search: Vec<Hostname>,
-    pub sortlist: Vec<SortlistPair>,
-    pub options: Vec<ResolverOption>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct Relationships {
-    requires: Vec<ResourceMetadata>,
 }

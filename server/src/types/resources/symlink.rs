@@ -2,23 +2,15 @@ use super::{
     deserialize::{Dependency, VariableOrValue},
     Resource,
 };
-use common::{DirectoryChildNode, Ensure, ResourceMetadata, ResourceType, SafePathBuf};
+use common::{
+    resources::directory::ChildNode,
+    resources::symlink::{Parameters, Relationships},
+    Ensure, ResourceMetadata, ResourceType,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use toml::Value;
 use uuid::Uuid;
-
-#[derive(Clone, Debug, Serialize)]
-pub struct Parameters {
-    pub path: SafePathBuf,
-    pub ensure: Ensure,
-    pub target: SafePathBuf,
-}
-
-#[derive(Clone, Debug, Default, Serialize)]
-pub struct Relationships {
-    pub requires: Vec<ResourceMetadata>,
-}
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Symlink {
@@ -72,7 +64,7 @@ impl Symlink {
     }
 
     pub fn id(&self) -> Uuid {
-        self.metadata.id
+        self.metadata.id()
     }
 
     pub fn metadata(&self) -> &ResourceMetadata {
@@ -97,7 +89,7 @@ impl Symlink {
     }
 }
 
-impl From<&Symlink> for DirectoryChildNode {
+impl From<&Symlink> for ChildNode {
     fn from(symlink: &Symlink) -> Self {
         Self::Symlink {
             path: symlink.parameters.path.clone(),

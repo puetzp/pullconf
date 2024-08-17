@@ -5,7 +5,6 @@ pub mod resources;
 
 pub use name::{Groupname, Hostname, Username};
 pub use path::SafePathBuf;
-pub use resources::apt::{PackageEnsure, PackageName, PackageVersion};
 pub use resources::directory::ChildNode as DirectoryChildNode;
 pub use resources::file::Mode as FileMode;
 
@@ -105,6 +104,10 @@ impl PartialEq for ResourceMetadata {
 }
 
 impl ResourceMetadata {
+    pub fn kind(&self) -> String {
+        self.kind.to_string()
+    }
+
     pub fn id(&self) -> Uuid {
         self.id
     }

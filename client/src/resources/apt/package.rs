@@ -1,8 +1,11 @@
 use crate::resources::{Action, Resource, ResourceTrait};
-use common::{PackageEnsure, PackageName, PackageVersion, ResourceMetadata};
+use common::{
+    resources::apt::package::{Ensure, Parameters, Relationships, Version},
+    ResourceMetadata,
+};
 use log::{debug, error, info, warn};
 use serde::Deserialize;
-use std::{collections::HashMap, default::Default, fs, process::Command, str::FromStr};
+use std::{collections::HashMap, fs, process::Command, str::FromStr};
 use uuid::Uuid;
 
 const DPKG_QUERY: &str = "/usr/bin/dpkg-query";
@@ -192,7 +195,7 @@ impl Package {
     pub fn _apply(&self, pid: u32) -> Result<Action, anyhow::Error> {
         if let Some(current_version) = self.exists(pid)? {
             match self.parameters.ensure {
-                PackageEnsure::Present => {
+                Ensure::Present => {
                     if self
                         .parameters
                         .version
@@ -204,13 +207,13 @@ impl Package {
                         Ok(Action::Unchanged)
                     }
                 }
-                PackageEnsure::Absent => self.remove(pid, false),
-                PackageEnsure::Purged => self.remove(pid, true),
+                Ensure::Absent => self.remove(pid, false),
+                Ensure::Purged => self.remove(pid, true),
             }
         } else {
             match self.parameters.ensure {
-                PackageEnsure::Present => self.install(pid, Action::Created),
-                PackageEnsure::Absent | PackageEnsure::Purged => Ok(Action::Unchanged),
+                Ensure::Present => self.install(pid, Action::Created),
+                Ensure::Absent | Ensure::Purged => Ok(Action::Unchanged),
             }
         }
     }
@@ -293,7 +296,7 @@ impl Package {
     }
 
     /// Try to find a package by this name within the system.
-    fn exists(&self, pid: u32) -> Result<Option<PackageVersion>, anyhow::Error> {
+    fn exists(&self, pid: u32) -> Result<Option<Version>, anyhow::Error> {
         let mut command = Command::new(DPKG_QUERY);
         command.args(["-W", "-f", "'${VERSION}'", self.parameters.name.as_str()]);
 
@@ -311,7 +314,7 @@ impl Package {
         let s = String::from_utf8_lossy(&output.stdout).to_owned();
 
         if output.status.success() {
-            match PackageVersion::from_str(s.trim_start_matches('\'').trim_end_matches('\'')) {
+            match Version::from_str(s.trim_start_matches('\'').trim_end_matches('\'')) {
                 Ok(version) => Ok(Some(version)),
                 Err(error) => anyhow::bail!(
                     "failed to parse output from dpkg-query as package version: {}",
@@ -322,16 +325,4 @@ impl Package {
             Ok(None)
         }
     }
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct Parameters {
-    pub ensure: PackageEnsure,
-    pub name: PackageName,
-    pub version: Option<PackageVersion>,
-}
-
-#[derive(Clone, Debug, Default, Deserialize)]
-pub struct Relationships {
-    requires: Vec<ResourceMetadata>,
 }

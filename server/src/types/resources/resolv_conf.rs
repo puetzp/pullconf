@@ -3,32 +3,13 @@ use super::{
     Resource,
 };
 use common::{
-    resources::resolv_conf::{ResolverOption, SortlistPair},
+    resources::resolv_conf::{Parameters, Relationships, ResolverOption, SortlistPair},
     Ensure, Hostname, ResourceMetadata, ResourceType,
 };
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    net::IpAddr,
-    path::{Path, PathBuf},
-};
+use std::{collections::HashMap, net::IpAddr, path::Path};
 use toml::Value;
 use uuid::Uuid;
-
-#[derive(Clone, Debug, Serialize)]
-pub struct Parameters {
-    pub ensure: Ensure,
-    pub target: PathBuf,
-    pub nameservers: Vec<IpAddr>,
-    pub search: Vec<Hostname>,
-    pub sortlist: Vec<SortlistPair>,
-    pub options: Vec<ResolverOption>,
-}
-
-#[derive(Clone, Debug, Default, Serialize)]
-pub struct Relationships {
-    pub requires: Vec<ResourceMetadata>,
-}
 
 #[derive(Clone, Debug, Serialize)]
 pub struct ResolvConf {
@@ -113,7 +94,7 @@ impl ResolvConf {
     }
 
     pub fn id(&self) -> Uuid {
-        self.metadata.id
+        self.metadata.id()
     }
 
     pub fn metadata(&self) -> &ResourceMetadata {

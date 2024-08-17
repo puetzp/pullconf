@@ -1,7 +1,7 @@
 use super::{group, Action, Resource, ResourceTrait};
 use common::{
-    resources::user::{deserialize_expiry_date, Password, EXPIRY_DATE_FORMAT},
-    Ensure, Groupname, ResourceMetadata, SafePathBuf, Username,
+    resources::user::{Parameters, Password, Relationships, EXPIRY_DATE_FORMAT},
+    Ensure, ResourceMetadata, SafePathBuf, Username,
 };
 use log::{debug, error, info, warn};
 use serde::Deserialize;
@@ -486,26 +486,6 @@ impl User {
 
         Ok(Action::Deleted)
     }
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct Parameters {
-    pub ensure: Ensure,
-    pub name: Username,
-    pub system: bool,
-    pub comment: Option<String>,
-    pub shell: Option<SafePathBuf>,
-    pub home: SafePathBuf,
-    pub password: Password,
-    #[serde(deserialize_with = "deserialize_expiry_date")]
-    pub expiry_date: Option<Date>,
-    pub group: Groupname,
-    pub groups: Vec<Groupname>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct Relationships {
-    requires: Vec<ResourceMetadata>,
 }
 
 #[derive(Clone, Debug)]

@@ -1,7 +1,10 @@
 use super::{Action, Resource, ResourceTrait};
 use crate::util::uid_and_gid;
 use anyhow::Context;
-use common::{Ensure, FileMode, Groupname, ResourceMetadata, SafePathBuf, Username};
+use common::{
+    resources::file::{Parameters, Relationships},
+    Ensure, ResourceMetadata,
+};
 use log::{debug, error, info, warn};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -460,20 +463,4 @@ impl File {
 
         Ok(Action::Deleted)
     }
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct Parameters {
-    pub path: SafePathBuf,
-    pub ensure: Ensure,
-    pub mode: FileMode,
-    pub owner: Username,
-    pub group: Option<Groupname>,
-    pub content: Option<String>,
-    pub source: Option<SafePathBuf>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct Relationships {
-    requires: Vec<ResourceMetadata>,
 }

@@ -3,27 +3,13 @@ use super::{
     Resource,
 };
 use common::{
-    DirectoryChildNode, Ensure, Groupname, ResourceMetadata, ResourceType, SafePathBuf, Username,
+    resources::directory::{ChildNode, Parameters, Relationships},
+    Ensure, ResourceMetadata, ResourceType, Username,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use toml::Value;
 use uuid::Uuid;
-
-#[derive(Clone, Debug, Serialize)]
-pub struct Parameters {
-    pub path: SafePathBuf,
-    pub ensure: Ensure,
-    pub owner: Username,
-    pub group: Option<Groupname>,
-    pub purge: bool,
-}
-
-#[derive(Clone, Debug, Default, Serialize)]
-pub struct Relationships {
-    pub requires: Vec<ResourceMetadata>,
-    pub children: Vec<DirectoryChildNode>,
-}
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Directory {
@@ -92,7 +78,7 @@ impl Directory {
     }
 
     pub fn id(&self) -> Uuid {
-        self.metadata.id
+        self.metadata.id()
     }
 
     pub fn metadata(&self) -> &ResourceMetadata {
@@ -145,7 +131,7 @@ impl Directory {
     }
 }
 
-impl From<&Directory> for DirectoryChildNode {
+impl From<&Directory> for ChildNode {
     fn from(directory: &Directory) -> Self {
         Self::Directory {
             path: directory.parameters.path.clone(),

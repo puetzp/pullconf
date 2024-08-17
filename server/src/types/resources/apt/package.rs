@@ -2,23 +2,14 @@ use crate::types::resources::{
     deserialize::{Dependency, VariableOrValue},
     Resource,
 };
-use common::{PackageEnsure, PackageName, PackageVersion, ResourceMetadata, ResourceType};
+use common::{
+    resources::apt::package::{Ensure, Parameters, Relationships},
+    ResourceMetadata, ResourceType,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use toml::Value;
 use uuid::Uuid;
-
-#[derive(Clone, Debug, Serialize)]
-pub struct Parameters {
-    pub ensure: PackageEnsure,
-    pub name: PackageName,
-    pub version: Option<PackageVersion>,
-}
-
-#[derive(Clone, Debug, Default, Serialize)]
-pub struct Relationships {
-    pub requires: Vec<ResourceMetadata>,
-}
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Package {
@@ -37,7 +28,7 @@ impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Package {
         let parameters = {
             let ensure = match &parameters.ensure {
                 Some(parameter) => parameter.resolve("ensure", variables)?,
-                None => PackageEnsure::default(),
+                None => Ensure::default(),
             };
 
             let name = parameters.name.resolve("name", variables)?;
@@ -75,7 +66,7 @@ impl Package {
     }
 
     pub fn id(&self) -> Uuid {
-        self.metadata.id
+        self.metadata.id()
     }
 
     pub fn metadata(&self) -> &ResourceMetadata {

@@ -2,23 +2,14 @@ use super::{
     deserialize::{Dependency, VariableOrValue},
     Resource,
 };
-use common::{Ensure, Groupname, ResourceMetadata, ResourceType};
+use common::{
+    resources::group::{Parameters, Relationships},
+    Ensure, ResourceMetadata, ResourceType,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use toml::Value;
 use uuid::Uuid;
-
-#[derive(Clone, Debug, Serialize)]
-pub struct Parameters {
-    pub ensure: Ensure,
-    pub name: Groupname,
-    pub system: bool,
-}
-
-#[derive(Clone, Debug, Default, Serialize)]
-pub struct Relationships {
-    pub requires: Vec<ResourceMetadata>,
-}
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Group {
@@ -75,7 +66,7 @@ impl Group {
     }
 
     pub fn id(&self) -> Uuid {
-        self.metadata.id
+        self.metadata.id()
     }
 
     pub fn metadata(&self) -> &ResourceMetadata {

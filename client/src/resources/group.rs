@@ -1,10 +1,12 @@
 use super::{Action, Resource, ResourceTrait};
-use common::{Ensure, Groupname, ResourceMetadata};
+use common::{
+    resources::group::{Parameters, Relationships},
+    Ensure, Groupname, ResourceMetadata,
+};
 use log::{debug, error, info, warn};
 use serde::Deserialize;
 use std::{
     collections::HashMap,
-    default::Default,
     fs,
     process::{Command, Stdio},
 };
@@ -278,16 +280,4 @@ pub(super) fn exists(name: &Groupname) -> Result<bool, anyhow::Error> {
     }
 
     Ok(false)
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct Parameters {
-    pub ensure: Ensure,
-    pub name: Groupname,
-    pub system: bool,
-}
-
-#[derive(Clone, Debug, Default, Deserialize)]
-pub struct Relationships {
-    requires: Vec<ResourceMetadata>,
 }

@@ -1,6 +1,21 @@
-use crate::SafePathBuf;
+use crate::{Ensure, Groupname, ResourceMetadata, SafePathBuf, Username};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Parameters {
+    pub path: SafePathBuf,
+    pub ensure: Ensure,
+    pub owner: Username,
+    pub group: Option<Groupname>,
+    pub purge: bool,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct Relationships {
+    pub requires: Vec<ResourceMetadata>,
+    pub children: Vec<ChildNode>,
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "lowercase")]

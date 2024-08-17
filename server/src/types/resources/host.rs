@@ -2,31 +2,14 @@ use super::{
     deserialize::{Dependency, VariableOrValue},
     Resource,
 };
-use common::{Ensure, Hostname, ResourceMetadata, ResourceType};
-use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    net::IpAddr,
-    path::{Path, PathBuf},
+use common::{
+    resources::host::{Parameters, Relationships},
+    Ensure, Hostname, ResourceMetadata, ResourceType,
 };
+use serde::{Deserialize, Serialize};
+use std::{collections::HashMap, path::Path};
 use toml::Value;
 use uuid::Uuid;
-
-#[derive(Clone, Debug, Serialize)]
-pub struct Parameters {
-    pub ensure: Ensure,
-    pub target: PathBuf,
-    #[serde(rename(deserialize = "ip-address"))]
-    pub ip_address: IpAddr,
-    pub hostname: Hostname,
-    #[serde(default)]
-    pub aliases: Vec<Hostname>,
-}
-
-#[derive(Clone, Debug, Default, Serialize)]
-pub struct Relationships {
-    pub requires: Vec<ResourceMetadata>,
-}
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Host {
@@ -100,7 +83,7 @@ impl Host {
     }
 
     pub fn id(&self) -> Uuid {
-        self.metadata.id
+        self.metadata.id()
     }
 
     pub fn metadata(&self) -> &ResourceMetadata {

@@ -1,6 +1,22 @@
+use crate::{Ensure, Hostname, ResourceMetadata};
 use anyhow::bail;
 use serde::{de::Error as SerdeError, Deserialize, Deserializer, Serialize};
-use std::{net::IpAddr, str::FromStr};
+use std::{net::IpAddr, path::PathBuf, str::FromStr};
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Parameters {
+    pub ensure: Ensure,
+    pub target: PathBuf,
+    pub nameservers: Vec<IpAddr>,
+    pub search: Vec<Hostname>,
+    pub sortlist: Vec<SortlistPair>,
+    pub options: Vec<ResolverOption>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct Relationships {
+    pub requires: Vec<ResourceMetadata>,
+}
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
 pub struct SortlistPair(String);

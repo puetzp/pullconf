@@ -1,9 +1,35 @@
+use crate::{Ensure, Groupname, ResourceMetadata, SafePathBuf, Username};
 use serde::{
     de::{Error as SerdeError, Unexpected},
     Deserialize, Deserializer, Serialize, Serializer,
 };
 use std::str::FromStr;
 use time::{format_description::FormatItem, macros::format_description, Date};
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Parameters {
+    pub ensure: Ensure,
+    pub name: Username,
+    pub system: bool,
+    pub comment: Option<String>,
+    pub shell: Option<SafePathBuf>,
+    pub home: SafePathBuf,
+    pub password: Password,
+    #[serde(
+        deserialize_with = "deserialize_expiry_date",
+        serialize_with = "serialize_expiry_date"
+    )]
+    pub expiry_date: Option<Date>,
+    // Primary group name.
+    pub group: Groupname,
+    // Names of supplementary groups.
+    pub groups: Vec<Groupname>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct Relationships {
+    pub requires: Vec<ResourceMetadata>,
+}
 
 pub const EXPIRY_DATE_FORMAT: &[FormatItem] = format_description!("[year]-[month]-[day]");
 

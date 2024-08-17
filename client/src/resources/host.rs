@@ -1,6 +1,9 @@
 use super::{Action, Resource, ResourceTrait};
 use anyhow::Context;
-use common::{Ensure, Hostname, ResourceMetadata};
+use common::{
+    resources::host::{Parameters, Relationships},
+    Ensure, ResourceMetadata,
+};
 use log::{debug, error, info, warn};
 use serde::Deserialize;
 use std::{
@@ -8,8 +11,6 @@ use std::{
     default::Default,
     fs,
     io::{self, Read},
-    net::IpAddr,
-    path::PathBuf,
     time::SystemTime,
 };
 use uuid::Uuid;
@@ -452,18 +453,4 @@ impl Host {
 enum Match {
     Full(usize),
     Partial(usize),
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct Parameters {
-    pub ensure: Ensure,
-    pub target: PathBuf,
-    pub ip_address: IpAddr,
-    pub hostname: Hostname,
-    pub aliases: Vec<Hostname>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct Relationships {
-    requires: Vec<ResourceMetadata>,
 }

@@ -1,7 +1,10 @@
 use super::{Action, Resource, ResourceTrait};
 use crate::util::uid_and_gid;
 use anyhow::Context;
-use common::{DirectoryChildNode, Ensure, Groupname, ResourceMetadata, SafePathBuf, Username};
+use common::{
+    resources::directory::{Parameters, Relationships},
+    Ensure, ResourceMetadata,
+};
 use log::{debug, error, info, warn};
 use serde::Deserialize;
 use std::{
@@ -295,19 +298,4 @@ impl Directory {
 
         Ok(Action::Deleted)
     }
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct Parameters {
-    pub path: SafePathBuf,
-    pub ensure: Ensure,
-    pub owner: Username,
-    pub group: Option<Groupname>,
-    pub purge: bool,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-pub struct Relationships {
-    requires: Vec<ResourceMetadata>,
-    children: Vec<DirectoryChildNode>,
 }

@@ -3,36 +3,13 @@ use super::{
     Resource,
 };
 use common::{
-    resources::user::{serialize_expiry_date, Password},
-    Ensure, Groupname, ResourceMetadata, ResourceType, SafePathBuf, Username,
+    resources::user::{Parameters, Password, Relationships},
+    Ensure, Groupname, ResourceMetadata, ResourceType, SafePathBuf,
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, str::FromStr};
-use time::Date;
 use toml::Value;
 use uuid::Uuid;
-
-#[derive(Clone, Debug, Serialize)]
-pub struct Parameters {
-    pub ensure: Ensure,
-    pub name: Username,
-    pub system: bool,
-    pub comment: Option<String>,
-    pub shell: Option<SafePathBuf>,
-    pub home: SafePathBuf,
-    pub password: Password,
-    #[serde(serialize_with = "serialize_expiry_date")]
-    pub expiry_date: Option<Date>,
-    // Primary group name.
-    pub group: Groupname,
-    // Names of supplementary groups.
-    pub groups: Vec<Groupname>,
-}
-
-#[derive(Clone, Debug, Default, Serialize)]
-pub struct Relationships {
-    pub requires: Vec<ResourceMetadata>,
-}
 
 #[derive(Clone, Debug, Serialize)]
 pub struct User {
@@ -143,7 +120,7 @@ impl User {
     }
 
     pub fn id(&self) -> Uuid {
-        self.metadata.id
+        self.metadata.id()
     }
 
     pub fn metadata(&self) -> &ResourceMetadata {
