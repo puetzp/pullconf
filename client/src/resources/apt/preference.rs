@@ -160,7 +160,7 @@ impl Preference {
                 // Build the desired file content from the resource parameters.
                 let content = format!(
                     "Package: {}\nPin: {}\nPin-Priority: {}\n",
-                    self.parameters.package, self.parameters.pin, self.parameters.priority
+                    self.parameters.package, self.parameters.pin, self.parameters.pin_priority
                 );
 
                 // Create or update the file, depending on the current file

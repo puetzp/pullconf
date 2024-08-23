@@ -37,7 +37,7 @@ impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Preference {
 
             let pin = parameters.pin.resolve("pin", variables)?;
 
-            let priority = parameters.priority.resolve("priority", variables)?;
+            let pin_priority = parameters.pin_priority.resolve("pin-priority", variables)?;
 
             let target = PathBuf::from(format!("/etc/apt/preferences.d/{}", name));
 
@@ -47,7 +47,7 @@ impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Preference {
                 name,
                 package,
                 pin,
-                priority,
+                pin_priority,
             }
         };
 
@@ -104,7 +104,8 @@ pub mod de {
         pub name: VariableOrValue,
         pub package: VariableOrValue,
         pub pin: VariableOrValue,
-        pub priority: VariableOrValue,
+        #[serde(rename = "pin-priority")]
+        pub pin_priority: VariableOrValue,
         #[serde(default)]
         pub requires: Vec<Dependency>,
     }

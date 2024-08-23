@@ -9,7 +9,7 @@ pub struct Parameters {
     pub name: Name,
     pub package: String,
     pub pin: String,
-    pub priority: i16,
+    pub pin_priority: i16,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
