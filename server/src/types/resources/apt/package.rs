@@ -77,9 +77,8 @@ impl Package {
         format!("{} `{}`", self.kind(), self.display())
     }
 
-    /// This resource may depend on any other resource.
-    pub fn may_depend_on(&self, _resource: &Resource) -> bool {
-        true
+    pub fn may_depend_on(&self, resource: &Resource) -> bool {
+        !matches!(resource, Resource::AptPackage(package) if package.parameters.name == self.parameters.name)
     }
 }
 
