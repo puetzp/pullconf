@@ -2199,8 +2199,46 @@ impl Client {
                 return Err(Terminate);
             }
 
+            // Save metadata of ancestral directories that the target file
+            // depends on.
+            for ancestor in self.resources.directories.iter().filter(|d| {
+                preference
+                    .parameters
+                    .target
+                    .ancestors()
+                    .any(|a| a == *d.parameters.path)
+            }) {
+                let other = ancestor.metadata().clone();
+
+                self.temporary
+                    .dependencies
+                    .entry(preference.id())
+                    .or_default()
+                    .insert(other.id);
+
+                preference.relationships.requires.push(other);
+            }
+
+            for ancestor in self.resources.symlinks.iter().filter(|s| {
+                preference
+                    .parameters
+                    .target
+                    .ancestors()
+                    .any(|a| a == *s.parameters.path)
+            }) {
+                let metadata = ancestor.metadata().clone();
+
+                self.temporary
+                    .dependencies
+                    .entry(preference.id())
+                    .or_default()
+                    .insert(metadata.id);
+
+                preference.relationships.requires.push(metadata);
+            }
+
             // Save the metadata of explicit dependencies that this
-            // `apt::package` should depend on.
+            // resource should depend on.
             for dependency in self
                 .temporary
                 .requires
