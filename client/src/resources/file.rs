@@ -355,7 +355,7 @@ impl File {
         Ok(action)
     }
 
-    /// Create the directory and set ownership, mode and content.
+    /// Create the file and set ownership, mode and content.
     /// The file content is either downloaded from the server or copied from the
     /// configuration.
     fn create(
