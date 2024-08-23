@@ -1,26 +1,25 @@
-use super::{
+use crate::types::resources::{
     deserialize::{Dependency, VariableOrValue},
     Resource,
 };
 use common::{
-    resources::directory::ChildNode,
-    resources::symlink::{Parameters, Relationships},
+    resources::apt::preference::{Parameters, Relationships},
     Ensure, ResourceMetadata, ResourceType,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 use toml::Value;
 use uuid::Uuid;
 
 #[derive(Clone, Debug, Serialize)]
-pub struct Symlink {
+pub struct Preference {
     #[serde(flatten)]
     pub metadata: ResourceMetadata,
     pub parameters: Parameters,
     pub relationships: Relationships,
 }
 
-impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Symlink {
+impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Preference {
     type Error = String;
 
     fn try_from(
@@ -32,20 +31,29 @@ impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Symlink {
                 None => Ensure::default(),
             };
 
-            let path = parameters.path.resolve("path", variables)?;
+            let name = parameters.name.resolve("name", variables)?;
 
-            let target = parameters.target.resolve("target", variables)?;
+            let package = parameters.name.resolve("package", variables)?;
+
+            let pin = parameters.name.resolve("pin", variables)?;
+
+            let priority = parameters.name.resolve("priority", variables)?;
+
+            let target = PathBuf::from(format!("/etc/apt/preferences.d/{}", name));
 
             Parameters {
                 ensure,
-                path,
                 target,
+                name,
+                package,
+                pin,
+                priority,
             }
         };
 
         Ok(Self {
             metadata: ResourceMetadata {
-                kind: ResourceType::Symlink,
+                kind: ResourceType::AptPreference,
                 id: Uuid::new_v4(),
             },
             parameters,
@@ -54,13 +62,13 @@ impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Symlink {
     }
 }
 
-impl Symlink {
+impl Preference {
     pub fn kind(&self) -> &str {
-        "symlink"
+        "apt::preference"
     }
 
     pub fn display(&self) -> String {
-        self.parameters.path.display().to_string()
+        self.parameters.name.to_string()
     }
 
     pub fn id(&self) -> Uuid {
@@ -78,24 +86,9 @@ impl Symlink {
     pub fn may_depend_on(&self, resource: &Resource) -> bool {
         match resource {
             Resource::AptPreference(preference) => {
-                preference.parameters.target != *self.parameters.path
+                preference.parameters.name != self.parameters.name
             }
-            Resource::Directory(directory) => directory.parameters.path != self.parameters.target,
-            Resource::File(file) => file.parameters.path != self.parameters.target,
-            Resource::Host(host) => host.parameters.target != *self.parameters.path,
-            Resource::ResolvConf(resolv_conf) => {
-                resolv_conf.parameters.target != *self.parameters.path
-            }
-            Resource::Symlink(symlink) => symlink.parameters.path != self.parameters.path,
             _ => true,
-        }
-    }
-}
-
-impl From<&Symlink> for ChildNode {
-    fn from(symlink: &Symlink) -> Self {
-        Self::Symlink {
-            path: symlink.parameters.path.clone(),
         }
     }
 }
@@ -108,15 +101,17 @@ pub mod de {
     pub struct Parameters {
         #[serde(default)]
         pub ensure: Option<VariableOrValue>,
-        pub path: VariableOrValue,
-        pub target: VariableOrValue,
+        pub name: VariableOrValue,
+        pub package: VariableOrValue,
+        pub pin: VariableOrValue,
+        pub priority: VariableOrValue,
         #[serde(default)]
         pub requires: Vec<Dependency>,
     }
 
     impl Parameters {
         pub fn kind(&self) -> &str {
-            "symlink"
+            "apt::preference"
         }
     }
 }

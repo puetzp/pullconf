@@ -189,6 +189,7 @@ fn handle_route(
                     data.extend(client.resources.symlinks.iter().map(|item| item.into()));
                     data.extend(client.resources.users.iter().map(|item| item.into()));
                     data.extend(client.resources.apt_packages.iter().map(|item| item.into()));
+                    data.extend(client.resources.apt_preferences.iter().map(|item| item.into()));
 
                     if let Some(resolv_conf) = &client.resources.resolv_conf {
                         data.push(resolv_conf.into());

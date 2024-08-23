@@ -7,6 +7,7 @@ use serde::Deserialize;
 #[serde(from = "deserialize::Group")]
 pub struct Group {
     pub apt_packages: Vec<apt::package::de::Parameters>,
+    pub apt_preferences: Vec<apt::preference::de::Parameters>,
     pub directories: Vec<directory::de::Parameters>,
     pub files: Vec<file::de::Parameters>,
     pub groups: Vec<group::de::Parameters>,
@@ -23,6 +24,7 @@ impl From<deserialize::Group> for Group {
         for resource in intermediate.resources {
             match resource {
                 Resource::AptPackage(package) => group.apt_packages.push(package),
+                Resource::AptPreference(preference) => group.apt_preferences.push(preference),
                 Resource::Directory(directory) => group.directories.push(directory),
                 Resource::File(file) => group.files.push(file),
                 Resource::Group(_group) => group.groups.push(_group),

@@ -9,6 +9,7 @@ pub mod symlink;
 pub mod user;
 
 pub use apt::package::Package as AptPackage;
+pub use apt::preference::Preference as AptPreference;
 pub use directory::Directory;
 pub use file::File;
 pub use group::Group;
@@ -25,6 +26,7 @@ use uuid::Uuid;
 #[serde(untagged)]
 pub enum Resource<'a> {
     AptPackage(&'a AptPackage),
+    AptPreference(&'a AptPreference),
     Directory(&'a Directory),
     File(&'a File),
     Group(&'a Group),
@@ -37,6 +39,12 @@ pub enum Resource<'a> {
 impl<'a> From<&'a AptPackage> for Resource<'a> {
     fn from(package: &'a AptPackage) -> Self {
         Self::AptPackage(package)
+    }
+}
+
+impl<'a> From<&'a AptPreference> for Resource<'a> {
+    fn from(preference: &'a AptPreference) -> Self {
+        Self::AptPreference(preference)
     }
 }
 
@@ -86,6 +94,7 @@ impl<'a> Resource<'a> {
     pub fn id(&self) -> Uuid {
         match self {
             Self::AptPackage(package) => package.id(),
+            Self::AptPreference(preference) => preference.id(),
             Self::Directory(directory) => directory.id(),
             Self::File(file) => file.id(),
             Self::Group(group) => group.id(),
@@ -99,6 +108,7 @@ impl<'a> Resource<'a> {
     pub fn repr(&self) -> String {
         match self {
             Self::AptPackage(package) => package.repr(),
+            Self::AptPreference(preference) => preference.repr(),
             Self::Directory(directory) => directory.repr(),
             Self::File(file) => file.repr(),
             Self::Group(group) => group.repr(),
@@ -112,6 +122,7 @@ impl<'a> Resource<'a> {
     pub fn metadata(&self) -> &ResourceMetadata {
         match self {
             Self::AptPackage(package) => package.metadata(),
+            Self::AptPreference(preference) => preference.metadata(),
             Self::Directory(directory) => directory.metadata(),
             Self::File(file) => file.metadata(),
             Self::Group(group) => group.metadata(),

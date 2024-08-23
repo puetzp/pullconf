@@ -6,7 +6,7 @@ use crate::types::{
     },
     ApiKey, Group,
 };
-use common::{error::Terminate, Hostname, SafePathBuf};
+use common::{error::Terminate, Hostname};
 use log::error;
 use std::{
     collections::{HashMap, HashSet},
@@ -20,6 +20,7 @@ use uuid::Uuid;
 #[derive(Clone, Debug, Default)]
 pub struct ClientResources {
     pub apt_packages: Vec<apt::package::Package>,
+    pub apt_preferences: Vec<apt::preference::Preference>,
     pub directories: Vec<directory::Directory>,
     pub files: Vec<file::File>,
     pub groups: Vec<group::Group>,
@@ -144,6 +145,7 @@ impl
         client.validate_users()?;
         client.validate_resolv_conf()?;
         client.validate_apt_packages()?;
+        client.validate_apt_preferences(&mut paths)?;
 
         client.temporary.clear();
 
@@ -192,6 +194,28 @@ impl TryFrom<(Hostname, deserialize::Client)> for Client {
                         .insert(resource.id(), item.requires);
 
                     client.resources.apt_packages.push(resource);
+                }
+                DeResource::AptPreference(item) => {
+                    let resource =
+                        apt::preference::Preference::try_from((&item, &client.variables)).map_err(
+                            |error| {
+                                error!(
+                                    scope,
+                                    client:% = client.name,
+                                    resource = item.kind();
+                                    "{}",
+                                    error
+                                );
+                                Terminate
+                            },
+                        )?;
+
+                    client
+                        .temporary
+                        .requires
+                        .insert(resource.id(), item.requires);
+
+                    client.resources.apt_preferences.push(resource);
                 }
                 DeResource::Directory(item) => {
                     let resource = directory::Directory::try_from((&item, &client.variables))
@@ -390,6 +414,12 @@ impl Client {
                 .iter()
                 .find(|p| p.parameters.name == *name)
                 .map(Resource::AptPackage),
+            Dependency::AptPreference { name } => self
+                .resources
+                .apt_preferences
+                .iter()
+                .find(|p| p.parameters.name == *name)
+                .map(Resource::AptPreference),
             Dependency::Directory { path } => self
                 .resources
                 .directories
@@ -904,7 +934,7 @@ impl Client {
 
     fn validate_files(
         &mut self,
-        paths: &mut HashSet<SafePathBuf>,
+        paths: &mut HashSet<PathBuf>,
         file_paths: &HashSet<PathBuf>,
     ) -> Result<(), Terminate> {
         let scope = "validation";
@@ -924,7 +954,7 @@ impl Client {
             let path = file.parameters.path.display().to_string();
 
             // Check for uniqueness of the path parameter.
-            if !paths.insert(file.parameters.path.clone()) {
+            if !paths.insert(file.parameters.path.to_path_buf()) {
                 error!(
                     scope,
                     client:% = self.name,
@@ -1064,7 +1094,7 @@ impl Client {
 
     fn validate_directories(
         &mut self,
-        paths: &mut HashSet<SafePathBuf>,
+        paths: &mut HashSet<PathBuf>,
         file_paths: &HashSet<PathBuf>,
     ) -> Result<(), Terminate> {
         let scope = "validation";
@@ -1084,7 +1114,7 @@ impl Client {
             let path = directory.parameters.path.display().to_string();
 
             // Check for uniqueness of the path parameter.
-            if !paths.insert(directory.parameters.path.clone()) {
+            if !paths.insert(directory.parameters.path.to_path_buf()) {
                 error!(
                     scope,
                     client:% = self.name,
@@ -1279,7 +1309,7 @@ impl Client {
 
     fn validate_symlinks(
         &mut self,
-        paths: &mut HashSet<SafePathBuf>,
+        paths: &mut HashSet<PathBuf>,
         file_paths: &HashSet<PathBuf>,
     ) -> Result<(), Terminate> {
         let scope = "validation";
@@ -1299,7 +1329,7 @@ impl Client {
             let path = symlink.parameters.path.display().to_string();
 
             // Check for uniqueness of the path parameter.
-            if !paths.insert(symlink.parameters.path.clone()) {
+            if !paths.insert(symlink.parameters.path.to_path_buf()) {
                 error!(
                     scope,
                     client:% = self.name,
@@ -2118,6 +2148,125 @@ impl Client {
         }
 
         self.resources.apt_packages = _apt_packages;
+
+        Ok(())
+    }
+
+    fn validate_apt_preferences(&mut self, paths: &mut HashSet<PathBuf>) -> Result<(), Terminate> {
+        let scope = "validation";
+
+        // Save preference names to check for their uniqueness.
+        let mut names = HashSet::new();
+
+        // To iterate and modify `apt::preferences` resources the collection
+        // must be cloned.
+        // Each resource is modified on the basis of other (`apt::preference`)
+        // resources, e.g. to validate dependencies.
+        // As such we need both a mutable object as well as immutable
+        // collections of resources to check against.
+        // Since ownerships rules need to be satisfied as well, a clone
+        // is inevitable.
+        let mut _apt_preferences = self.resources.apt_preferences.clone();
+
+        for preference in _apt_preferences.iter_mut() {
+            let name = preference.parameters.name.to_string();
+
+            // Check for uniqueness of the name parameter.
+            if !names.insert(preference.parameters.name.clone()) {
+                error!(
+                    scope,
+                    client:% = self.name,
+                    resource = preference.kind(),
+                    name;
+                    "preference name `{}` appears multiple times, preference names must be unique",
+                    name
+                );
+
+                return Err(Terminate);
+            }
+
+            if !paths.insert(preference.parameters.target.clone()) {
+                error!(
+                    scope,
+                    client:% = self.name,
+                    resource = preference.kind(),
+                    name;
+                    "{} conflicts with another resource that manages the target path `{}`",
+                    preference.repr(),
+                    preference.parameters.target.display()
+                );
+
+                return Err(Terminate);
+            }
+
+            // Save the metadata of explicit dependencies that this
+            // `apt::package` should depend on.
+            for dependency in self
+                .temporary
+                .requires
+                .get(&preference.id())
+                .map(|c| c.as_slice())
+                .unwrap_or_default()
+            {
+                match self.resolve_dependency(dependency) {
+                    Some(resource) => {
+                        if preference.may_depend_on(&resource) {
+                            let metadata = preference.metadata();
+                            let other = resource.metadata().clone();
+
+                            if self.dependency_introduces_loop(other.id, metadata.id) {
+                                error!(
+                                    scope,
+                                    client:% = self.name,
+                                    resource = preference.kind(),
+                                    name;
+                                    "{} cannot depend on {} as it would introduce a dependency loop",
+                                    preference.repr(),
+                                    resource.repr()
+                                );
+
+                                return Err(Terminate);
+                            } else if self
+                                .temporary
+                                .dependencies
+                                .entry(metadata.id)
+                                .or_default()
+                                .insert(other.id)
+                            {
+                                preference.relationships.requires.push(metadata.clone());
+                            }
+                        } else {
+                            error!(
+                                scope,
+                                client:% = self.name,
+                                resource = preference.kind(),
+                                name;
+                                "{} cannot depend on {}",
+                                preference.repr(),
+                                resource.repr()
+                            );
+
+                            return Err(Terminate);
+                        }
+                    }
+                    None => {
+                        error!(
+                            scope,
+                            client:% = self.name,
+                            resource = preference.kind(),
+                            name;
+                            "{} depends on {} which cannot be found",
+                            preference.repr(),
+                            dependency.repr()
+                        );
+
+                        return Err(Terminate);
+                    }
+                }
+            }
+        }
+
+        self.resources.apt_preferences = _apt_preferences;
 
         Ok(())
     }

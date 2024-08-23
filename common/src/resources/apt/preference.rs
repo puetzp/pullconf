@@ -1,16 +1,15 @@
 use crate::{Ensure, ResourceMetadata};
 use serde::{de::Error, Deserialize, Deserializer, Serialize};
-use std::fmt;
-use std::ops::Deref;
-use std::str::FromStr;
+use std::{fmt, ops::Deref, path::PathBuf, str::FromStr};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Parameters {
     pub ensure: Ensure,
+    pub target: PathBuf,
     pub name: Name,
     pub package: String,
     pub pin: String,
-    pub priority: String,
+    pub priority: i16,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]

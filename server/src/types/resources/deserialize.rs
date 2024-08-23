@@ -1,7 +1,9 @@
 use super::{apt, directory, file, group, host, resolv_conf, symlink, user};
 use common::{
     resources::{
-        apt::package::Name as PackageName, group::Name as Groupname, user::Name as Username,
+        apt::{package::Name as PackageName, preference::Name as PreferenceName},
+        group::Name as Groupname,
+        user::Name as Username,
     },
     SafePathBuf,
 };
@@ -17,6 +19,8 @@ use toml::Value;
 pub enum Resource {
     #[serde(rename = "apt::package")]
     AptPackage(apt::package::de::Parameters),
+    #[serde(rename = "apt::preference")]
+    AptPreference(apt::preference::de::Parameters),
     #[serde(rename = "directory")]
     Directory(directory::de::Parameters),
     #[serde(rename = "file")]
@@ -112,6 +116,8 @@ impl VariableOrValue {
 pub enum Dependency {
     #[serde(rename = "apt::package")]
     AptPackage { name: PackageName },
+    #[serde(rename = "apt::preference")]
+    AptPreference { name: PreferenceName },
     #[serde(rename = "directory")]
     Directory { path: SafePathBuf },
     #[serde(rename = "file")]
@@ -135,6 +141,7 @@ impl Dependency {
     pub fn repr(&self) -> String {
         match self {
             Self::AptPackage { name } => format!("apt::package `{}`", name),
+            Self::AptPreference { name } => format!("apt::preference `{}`", name),
             Self::Directory { path } => format!("directory `{}`", path.display()),
             Self::File { path } => format!("file `{}`", path.display()),
             Self::Group { name } => format!("group `{}`", name),

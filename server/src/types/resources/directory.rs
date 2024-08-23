@@ -94,6 +94,11 @@ impl Directory {
 
     pub fn may_depend_on(&self, resource: &Resource) -> bool {
         match resource {
+            Resource::AptPreference(preference) => !preference
+                .parameters
+                .target
+                .ancestors()
+                .any(|a| a == *self.parameters.path),
             Resource::Directory(directory) => {
                 directory.parameters.path != self.parameters.path
                     && !directory

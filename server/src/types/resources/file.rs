@@ -116,6 +116,9 @@ impl File {
 
     pub fn may_depend_on(&self, resource: &Resource) -> bool {
         match resource {
+            Resource::AptPreference(preference) => {
+                preference.parameters.target != *self.parameters.path
+            }
             Resource::File(file) => file.parameters.path != self.parameters.path,
             Resource::Host(host) => host.parameters.target != *self.parameters.path,
             Resource::ResolvConf(resolv_conf) => {
