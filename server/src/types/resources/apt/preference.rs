@@ -33,11 +33,11 @@ impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Preference {
 
             let name = parameters.name.resolve("name", variables)?;
 
-            let package = parameters.name.resolve("package", variables)?;
+            let package = parameters.package.resolve("package", variables)?;
 
-            let pin = parameters.name.resolve("pin", variables)?;
+            let pin = parameters.pin.resolve("pin", variables)?;
 
-            let priority = parameters.name.resolve("priority", variables)?;
+            let priority = parameters.priority.resolve("priority", variables)?;
 
             let target = PathBuf::from(format!("/etc/apt/preferences.d/{}", name));
 
