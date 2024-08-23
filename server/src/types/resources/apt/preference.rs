@@ -3,7 +3,10 @@ use crate::types::resources::{
     Resource,
 };
 use common::{
-    resources::apt::preference::{Parameters, Relationships},
+    resources::{
+        apt::preference::{Parameters, Relationships},
+        directory::ChildNode,
+    },
     Ensure, ResourceMetadata, ResourceType,
 };
 use serde::{Deserialize, Serialize};
@@ -89,6 +92,14 @@ impl Preference {
                 preference.parameters.name != self.parameters.name
             }
             _ => true,
+        }
+    }
+}
+
+impl From<&Preference> for ChildNode {
+    fn from(preference: &Preference) -> Self {
+        Self::AptPreference {
+            path: preference.parameters.target.clone(),
         }
     }
 }

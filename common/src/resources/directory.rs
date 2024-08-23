@@ -22,6 +22,7 @@ pub struct Relationships {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum ChildNode {
+    AptPreference { path: PathBuf },
     Directory { path: SafePathBuf },
     File { path: SafePathBuf },
     Symlink { path: SafePathBuf },
@@ -33,7 +34,11 @@ impl ChildNode {
     }
 
     pub fn is_file(&self, _path: &PathBuf) -> bool {
-        matches!(self, Self::File { path } if **path == *_path)
+        match self {
+            Self::AptPreference { path } => path == path,
+            Self::File { path } => **path == *_path,
+            _ => false,
+        }
     }
 
     pub fn is_symlink(&self, _path: &PathBuf) -> bool {

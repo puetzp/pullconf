@@ -1174,6 +1174,15 @@ impl Client {
                 directory.relationships.children.push(child.into());
             }
 
+            for child in self.resources.apt_preferences.iter().filter(|p| {
+                p.parameters
+                    .target
+                    .parent()
+                    .is_some_and(|path| path == *directory.parameters.path)
+            }) {
+                directory.relationships.children.push(child.into());
+            }
+
             // Save the metadata of user resources whose `home` directory
             // matches this directory's `path`.
             for user in self
