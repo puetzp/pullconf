@@ -23,6 +23,14 @@ pub struct File {
     pub relationships: Relationships,
 }
 
+impl PartialEq for File {
+    fn eq(&self, other: &Self) -> bool {
+        self.parameters.path == other.parameters.path
+    }
+}
+
+impl Eq for File {}
+
 impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for File {
     type Error = String;
 

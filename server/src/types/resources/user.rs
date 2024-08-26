@@ -22,6 +22,14 @@ pub struct User {
     pub relationships: Relationships,
 }
 
+impl PartialEq for User {
+    fn eq(&self, other: &Self) -> bool {
+        self.parameters.name == other.parameters.name
+    }
+}
+
+impl Eq for User {}
+
 impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for User {
     type Error = String;
 

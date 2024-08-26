@@ -22,75 +22,75 @@ use common::ResourceMetadata;
 use serde::Serialize;
 use uuid::Uuid;
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(untagged)]
-pub enum Resource<'a> {
-    AptPackage(&'a AptPackage),
-    AptPreference(&'a AptPreference),
-    Directory(&'a Directory),
-    File(&'a File),
-    Group(&'a Group),
-    Host(&'a Host),
-    ResolvConf(&'a ResolvConf),
-    Symlink(&'a Symlink),
-    User(&'a User),
+pub enum Resource {
+    AptPackage(AptPackage),
+    AptPreference(AptPreference),
+    Directory(Directory),
+    File(File),
+    Group(Group),
+    Host(Host),
+    ResolvConf(ResolvConf),
+    Symlink(Symlink),
+    User(User),
 }
 
-impl<'a> From<&'a AptPackage> for Resource<'a> {
-    fn from(package: &'a AptPackage) -> Self {
+impl From<AptPackage> for Resource {
+    fn from(package: AptPackage) -> Self {
         Self::AptPackage(package)
     }
 }
 
-impl<'a> From<&'a AptPreference> for Resource<'a> {
-    fn from(preference: &'a AptPreference) -> Self {
+impl From<AptPreference> for Resource {
+    fn from(preference: AptPreference) -> Self {
         Self::AptPreference(preference)
     }
 }
 
-impl<'a> From<&'a Directory> for Resource<'a> {
-    fn from(directory: &'a Directory) -> Self {
+impl From<Directory> for Resource {
+    fn from(directory: Directory) -> Self {
         Self::Directory(directory)
     }
 }
 
-impl<'a> From<&'a File> for Resource<'a> {
-    fn from(file: &'a File) -> Self {
+impl From<File> for Resource {
+    fn from(file: File) -> Self {
         Self::File(file)
     }
 }
 
-impl<'a> From<&'a Group> for Resource<'a> {
-    fn from(group: &'a Group) -> Self {
+impl From<Group> for Resource {
+    fn from(group: Group) -> Self {
         Self::Group(group)
     }
 }
 
-impl<'a> From<&'a Host> for Resource<'a> {
-    fn from(host: &'a Host) -> Self {
+impl From<Host> for Resource {
+    fn from(host: Host) -> Self {
         Self::Host(host)
     }
 }
 
-impl<'a> From<&'a ResolvConf> for Resource<'a> {
-    fn from(resolv_conf: &'a ResolvConf) -> Self {
+impl From<ResolvConf> for Resource {
+    fn from(resolv_conf: ResolvConf) -> Self {
         Self::ResolvConf(resolv_conf)
     }
 }
 
-impl<'a> From<&'a Symlink> for Resource<'a> {
-    fn from(symlink: &'a Symlink) -> Self {
+impl From<Symlink> for Resource {
+    fn from(symlink: Symlink) -> Self {
         Self::Symlink(symlink)
     }
 }
 
-impl<'a> From<&'a User> for Resource<'a> {
-    fn from(user: &'a User) -> Self {
+impl From<User> for Resource {
+    fn from(user: User) -> Self {
         Self::User(user)
     }
 }
 
-impl<'a> Resource<'a> {
+impl Resource {
     pub fn id(&self) -> Uuid {
         match self {
             Self::AptPackage(package) => package.id(),
@@ -102,6 +102,20 @@ impl<'a> Resource<'a> {
             Self::ResolvConf(resolv_conf) => resolv_conf.id(),
             Self::Symlink(symlink) => symlink.id(),
             Self::User(user) => user.id(),
+        }
+    }
+
+    pub fn kind(&self) -> &str {
+        match self {
+            Self::AptPackage(package) => package.kind(),
+            Self::AptPreference(preference) => preference.kind(),
+            Self::Directory(directory) => directory.kind(),
+            Self::File(file) => file.kind(),
+            Self::Group(group) => group.kind(),
+            Self::Host(host) => host.kind(),
+            Self::ResolvConf(resolv_conf) => resolv_conf.kind(),
+            Self::Symlink(symlink) => symlink.kind(),
+            Self::User(user) => user.kind(),
         }
     }
 
@@ -130,6 +144,69 @@ impl<'a> Resource<'a> {
             Self::ResolvConf(resolv_conf) => resolv_conf.metadata(),
             Self::Symlink(symlink) => symlink.metadata(),
             Self::User(user) => user.metadata(),
+        }
+    }
+
+    pub fn as_apt_package(&self) -> Option<&AptPackage> {
+        match self {
+            Self::AptPackage(item) => Some(item),
+            _ => None,
+        }
+    }
+
+    pub fn as_apt_preference(&self) -> Option<&AptPreference> {
+        match self {
+            Self::AptPreference(item) => Some(item),
+            _ => None,
+        }
+    }
+
+    pub fn as_directory(&self) -> Option<&Directory> {
+        match self {
+            Self::Directory(item) => Some(item),
+            _ => None,
+        }
+    }
+
+    pub fn as_file(&self) -> Option<&File> {
+        match self {
+            Self::File(item) => Some(item),
+            _ => None,
+        }
+    }
+
+    pub fn as_group(&self) -> Option<&Group> {
+        match self {
+            Self::Group(item) => Some(item),
+            _ => None,
+        }
+    }
+
+    pub fn as_host(&self) -> Option<&Host> {
+        match self {
+            Self::Host(item) => Some(item),
+            _ => None,
+        }
+    }
+
+    pub fn as_resolv_conf(&self) -> Option<&ResolvConf> {
+        match self {
+            Self::ResolvConf(item) => Some(item),
+            _ => None,
+        }
+    }
+
+    pub fn as_symlink(&self) -> Option<&Symlink> {
+        match self {
+            Self::Symlink(item) => Some(item),
+            _ => None,
+        }
+    }
+
+    pub fn as_user(&self) -> Option<&User> {
+        match self {
+            Self::User(item) => Some(item),
+            _ => None,
         }
     }
 }

@@ -131,13 +131,14 @@ fn handle_route(
     if let Some(request) = request.remove_prefix("/assets") {
         if !client
             .resources
-            .files
             .iter()
-            .filter_map(|file| {
-                file.parameters
-                    .source
-                    .as_ref()
-                    .and_then(|path| path.to_str())
+            .filter_map(|resource| {
+                resource.as_file().and_then(|file| {
+                    file.parameters
+                        .source
+                        .as_ref()
+                        .and_then(|path| path.to_str())
+                })
             })
             .any(|path| path == request.url())
         {
@@ -180,27 +181,12 @@ fn handle_route(
                         return Ok(Error::forbidden().into());
                     }
 
-                    let mut data: Vec<Resource> = vec![];
-
-                    data.extend(client.resources.directories.iter().map(|item| item.into()));
-                    data.extend(client.resources.files.iter().map(|item| item.into()));
-                    data.extend(client.resources.groups.iter().map(|item| item.into()));
-                    data.extend(client.resources.hosts.iter().map(|item| item.into()));
-                    data.extend(client.resources.symlinks.iter().map(|item| item.into()));
-                    data.extend(client.resources.users.iter().map(|item| item.into()));
-                    data.extend(client.resources.apt_packages.iter().map(|item| item.into()));
-                    data.extend(client.resources.apt_preferences.iter().map(|item| item.into()));
-
-                    if let Some(resolv_conf) = &client.resources.resolv_conf {
-                        data.push(resolv_conf.into());
-                    }
-
                     let response = ApiResponse {
                         links: Links {
                             this: format!("/api/clients/{}", client.name()),
                             ..Default::default()
                         },
-                        data,
+                        data: &client.resources,
                     };
 
                     let bytes = serde_json::to_vec(&response).unwrap();

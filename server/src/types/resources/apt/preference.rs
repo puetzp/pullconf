@@ -22,6 +22,14 @@ pub struct Preference {
     pub relationships: Relationships,
 }
 
+impl PartialEq for Preference {
+    fn eq(&self, other: &Self) -> bool {
+        self.parameters.name == other.parameters.name
+    }
+}
+
+impl Eq for Preference {}
+
 impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Preference {
     type Error = String;
 

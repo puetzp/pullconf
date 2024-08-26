@@ -22,6 +22,14 @@ pub struct Directory {
     pub relationships: Relationships,
 }
 
+impl PartialEq for Directory {
+    fn eq(&self, other: &Self) -> bool {
+        self.parameters.path == other.parameters.path
+    }
+}
+
+impl Eq for Directory {}
+
 impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Directory {
     type Error = String;
 

@@ -19,6 +19,14 @@ pub struct ResolvConf {
     pub relationships: Relationships,
 }
 
+impl PartialEq for ResolvConf {
+    fn eq(&self, _other: &Self) -> bool {
+        true
+    }
+}
+
+impl Eq for ResolvConf {}
+
 impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for ResolvConf {
     type Error = String;
 

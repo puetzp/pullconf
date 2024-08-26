@@ -20,6 +20,14 @@ pub struct Symlink {
     pub relationships: Relationships,
 }
 
+impl PartialEq for Symlink {
+    fn eq(&self, other: &Self) -> bool {
+        self.parameters.path == other.parameters.path
+    }
+}
+
+impl Eq for Symlink {}
+
 impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Symlink {
     type Error = String;
 

@@ -19,6 +19,14 @@ pub struct Group {
     pub relationships: Relationships,
 }
 
+impl PartialEq for Group {
+    fn eq(&self, other: &Self) -> bool {
+        self.parameters.name == other.parameters.name
+    }
+}
+
+impl Eq for Group {}
+
 impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Group {
     type Error = String;
 

@@ -19,6 +19,14 @@ pub struct Host {
     pub relationships: Relationships,
 }
 
+impl PartialEq for Host {
+    fn eq(&self, other: &Self) -> bool {
+        self.parameters.ip_address == other.parameters.ip_address
+    }
+}
+
+impl Eq for Host {}
+
 impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Host {
     type Error = String;
 

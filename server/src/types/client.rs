@@ -15,21 +15,6 @@ use std::{
 };
 use uuid::Uuid;
 
-/// This struct contains all parsed and validated resources that
-/// belong to this client.
-#[derive(Clone, Debug, Default)]
-pub struct ClientResources {
-    pub apt_packages: Vec<apt::package::Package>,
-    pub apt_preferences: Vec<apt::preference::Preference>,
-    pub directories: Vec<directory::Directory>,
-    pub files: Vec<file::File>,
-    pub groups: Vec<group::Group>,
-    pub hosts: Vec<host::Host>,
-    pub resolv_conf: Option<resolv_conf::ResolvConf>,
-    pub symlinks: Vec<symlink::Symlink>,
-    pub users: Vec<user::User>,
-}
-
 /// This struct contains temporary helper collections that are
 /// freed after configuration validation has concluded.
 #[derive(Clone, Debug, Default)]
@@ -71,7 +56,7 @@ pub struct Client {
     pub assigned_groups: Vec<Hostname>,
     pub variables: HashMap<String, toml::Value>,
     pub temporary: ValidationHelpers,
-    pub resources: ClientResources,
+    pub resources: Vec<Resource>,
 }
 
 impl Hash for Client {
@@ -132,9 +117,9 @@ impl
 
         let file_paths = client
             .resources
-            .files
             .iter()
-            .map(|f| f.parameters.path.to_path_buf())
+            .filter_map(|resource| resource.as_file())
+            .map(|file| file.parameters.path.to_path_buf())
             .collect::<HashSet<PathBuf>>();
 
         client.validate_files(&mut paths, &file_paths)?;
@@ -170,35 +155,15 @@ impl TryFrom<(Hostname, deserialize::Client)> for Client {
             assigned_groups: intermediate.assigned_groups,
             variables: intermediate.variables,
             temporary: ValidationHelpers::default(),
-            resources: ClientResources::default(),
+            resources: vec![],
         };
 
         for resource in intermediate.resources {
             match resource {
                 DeResource::AptPackage(item) => {
-                    let resource = apt::package::Package::try_from((&item, &client.variables))
-                        .map_err(|error| {
-                            error!(
-                                scope,
-                                client:% = client.name,
-                                resource = item.kind();
-                                "{}",
-                                error
-                            );
-                            Terminate
-                        })?;
-
-                    client
-                        .temporary
-                        .requires
-                        .insert(resource.id(), item.requires);
-
-                    client.resources.apt_packages.push(resource);
-                }
-                DeResource::AptPreference(item) => {
-                    let resource =
-                        apt::preference::Preference::try_from((&item, &client.variables)).map_err(
-                            |error| {
+                    let resource: Resource =
+                        apt::package::Package::try_from((&item, &client.variables))
+                            .map_err(|error| {
                                 error!(
                                     scope,
                                     client:% = client.name,
@@ -207,98 +172,62 @@ impl TryFrom<(Hostname, deserialize::Client)> for Client {
                                     error
                                 );
                                 Terminate
-                            },
-                        )?;
+                            })?
+                            .into();
 
                     client
                         .temporary
                         .requires
                         .insert(resource.id(), item.requires);
 
-                    client.resources.apt_preferences.push(resource);
+                    client.resources.push(resource);
+                }
+                DeResource::AptPreference(item) => {
+                    let resource: Resource =
+                        apt::preference::Preference::try_from((&item, &client.variables))
+                            .map_err(|error| {
+                                error!(
+                                    scope,
+                                    client:% = client.name,
+                                    resource = item.kind();
+                                    "{}",
+                                    error
+                                );
+                                Terminate
+                            })?
+                            .into();
+
+                    client
+                        .temporary
+                        .requires
+                        .insert(resource.id(), item.requires);
+
+                    client.resources.push(resource);
                 }
                 DeResource::Directory(item) => {
-                    let resource = directory::Directory::try_from((&item, &client.variables))
-                        .map_err(|error| {
-                            error!(
-                                scope,
-                                client:% = client.name,
-                                resource = item.kind();
-                                "{}",
-                                error
-                            );
-                            Terminate
-                        })?;
+                    let resource: Resource =
+                        directory::Directory::try_from((&item, &client.variables))
+                            .map_err(|error| {
+                                error!(
+                                    scope,
+                                    client:% = client.name,
+                                    resource = item.kind();
+                                    "{}",
+                                    error
+                                );
+                                Terminate
+                            })?
+                            .into();
 
                     client
                         .temporary
                         .requires
                         .insert(resource.id(), item.requires);
 
-                    client.resources.directories.push(resource);
+                    client.resources.push(resource);
                 }
                 DeResource::File(item) => {
-                    let resource =
-                        file::File::try_from((&item, &client.variables)).map_err(|error| {
-                            error!(
-                                scope,
-                                client:% = client.name,
-                                resource = item.kind();
-                                "{}",
-                                error
-                            );
-                            Terminate
-                        })?;
-
-                    client
-                        .temporary
-                        .requires
-                        .insert(resource.id(), item.requires);
-
-                    client.resources.files.push(resource);
-                }
-                DeResource::Group(item) => {
-                    let resource =
-                        group::Group::try_from((&item, &client.variables)).map_err(|error| {
-                            error!(
-                                scope,
-                                client:% = client.name,
-                                resource = item.kind();
-                                "{}",
-                                error
-                            );
-                            Terminate
-                        })?;
-
-                    client
-                        .temporary
-                        .requires
-                        .insert(resource.id(), item.requires);
-
-                    client.resources.groups.push(resource);
-                }
-                DeResource::Host(item) => {
-                    let resource =
-                        host::Host::try_from((&item, &client.variables)).map_err(|error| {
-                            error!(
-                                scope,
-                                client:% = client.name,
-                                resource = item.kind();
-                                "{}",
-                                error
-                            );
-                            Terminate
-                        })?;
-
-                    client
-                        .temporary
-                        .requires
-                        .insert(resource.id(), item.requires);
-
-                    client.resources.hosts.push(resource);
-                }
-                DeResource::ResolvConf(item) => {
-                    let resource = resolv_conf::ResolvConf::try_from((&item, &client.variables))
+                    let resource: Resource = file::File::try_from((&item, &client.variables))
                         .map_err(|error| {
                             error!(
                                 scope,
@@ -308,27 +237,99 @@ impl TryFrom<(Hostname, deserialize::Client)> for Client {
                                 error
                             );
                             Terminate
-                        })?;
+                        })?
+                        .into();
+
+                    client
+                        .temporary
+                        .requires
+                        .insert(resource.id(), item.requires);
+
+                    client.resources.push(resource);
+                }
+                DeResource::Group(item) => {
+                    let resource: Resource = group::Group::try_from((&item, &client.variables))
+                        .map_err(|error| {
+                            error!(
+                                scope,
+                                client:% = client.name,
+                                resource = item.kind();
+                                "{}",
+                                error
+                            );
+                            Terminate
+                        })?
+                        .into();
+
+                    client
+                        .temporary
+                        .requires
+                        .insert(resource.id(), item.requires);
+
+                    client.resources.push(resource);
+                }
+                DeResource::Host(item) => {
+                    let resource: Resource = host::Host::try_from((&item, &client.variables))
+                        .map_err(|error| {
+                            error!(
+                                scope,
+                                client:% = client.name,
+                                resource = item.kind();
+                                "{}",
+                                error
+                            );
+                            Terminate
+                        })?
+                        .into();
+
+                    client
+                        .temporary
+                        .requires
+                        .insert(resource.id(), item.requires);
+
+                    client.resources.push(resource);
+                }
+                DeResource::ResolvConf(item) => {
+                    let resource: Resource =
+                        resolv_conf::ResolvConf::try_from((&item, &client.variables))
+                            .map_err(|error| {
+                                error!(
+                                    scope,
+                                    client:% = client.name,
+                                    resource = item.kind();
+                                    "{}",
+                                    error
+                                );
+                                Terminate
+                            })?
+                            .into();
 
                     client
                         .temporary
                         .requires
                         .insert(resource.id(), item.requires.clone());
 
-                    if client.resources.resolv_conf.replace(resource).is_some() {
+                    if client
+                        .resources
+                        .iter()
+                        .any(|resource| resource.as_resolv_conf().is_some())
+                    {
                         error!(
                             scope,
                             client:% = client.name,
                             resource = item.kind();
-                            "resource appears multiple times, cannot be more than one of this kind",
+                            "{} appears multiple times, cannot be more than one of this kind",
+                            resource.repr()
                         );
 
                         return Err(Terminate);
+                    } else {
+                        client.resources.push(resource);
                     }
                 }
                 DeResource::Symlink(item) => {
-                    let resource = symlink::Symlink::try_from((&item, &client.variables)).map_err(
-                        |error| {
+                    let resource: Resource = symlink::Symlink::try_from((&item, &client.variables))
+                        .map_err(|error| {
                             error!(
                                 scope,
                                 client:% = client.name,
@@ -337,19 +338,19 @@ impl TryFrom<(Hostname, deserialize::Client)> for Client {
                                 error
                             );
                             Terminate
-                        },
-                    )?;
+                        })?
+                        .into();
 
                     client
                         .temporary
                         .requires
                         .insert(resource.id(), item.requires);
 
-                    client.resources.symlinks.push(resource);
+                    client.resources.push(resource);
                 }
                 DeResource::User(item) => {
-                    let resource =
-                        user::User::try_from((&item, &client.variables)).map_err(|error| {
+                    let resource: Resource = user::User::try_from((&item, &client.variables))
+                        .map_err(|error| {
                             error!(
                                 scope,
                                 client:% = client.name,
@@ -358,14 +359,15 @@ impl TryFrom<(Hostname, deserialize::Client)> for Client {
                                 error
                             );
                             Terminate
-                        })?;
+                        })?
+                        .into();
 
                     client
                         .temporary
                         .requires
                         .insert(resource.id(), item.requires);
 
-                    client.resources.users.push(resource);
+                    client.resources.push(resource);
                 }
             }
         }
@@ -410,57 +412,81 @@ impl Client {
         match dependency {
             Dependency::AptPackage { name } => self
                 .resources
-                .apt_packages
                 .iter()
-                .find(|p| p.parameters.name == *name)
-                .map(Resource::AptPackage),
+                .find(|resource| {
+                    resource
+                        .as_apt_package()
+                        .is_some_and(|item| item.parameters.name == *name)
+                })
+                .cloned(),
             Dependency::AptPreference { name } => self
                 .resources
-                .apt_preferences
                 .iter()
-                .find(|p| p.parameters.name == *name)
-                .map(Resource::AptPreference),
+                .find(|resource| {
+                    resource
+                        .as_apt_preference()
+                        .is_some_and(|item| item.parameters.name == *name)
+                })
+                .cloned(),
             Dependency::Directory { path } => self
                 .resources
-                .directories
                 .iter()
-                .find(|d| d.parameters.path == *path)
-                .map(Resource::Directory),
+                .find(|resource| {
+                    resource
+                        .as_directory()
+                        .is_some_and(|item| item.parameters.path == *path)
+                })
+                .cloned(),
             Dependency::File { path } => self
                 .resources
-                .files
                 .iter()
-                .find(|f| f.parameters.path == *path)
-                .map(Resource::File),
+                .find(|resource| {
+                    resource
+                        .as_file()
+                        .is_some_and(|item| item.parameters.path == *path)
+                })
+                .cloned(),
             Dependency::Group { name } => self
                 .resources
-                .groups
                 .iter()
-                .find(|g| g.parameters.name == *name)
-                .map(Resource::Group),
+                .find(|resource| {
+                    resource
+                        .as_group()
+                        .is_some_and(|item| item.parameters.name == *name)
+                })
+                .cloned(),
             Dependency::Host { ip_address } => self
                 .resources
-                .hosts
                 .iter()
-                .find(|h| h.parameters.ip_address == *ip_address)
-                .map(Resource::Host),
+                .find(|resource| {
+                    resource
+                        .as_host()
+                        .is_some_and(|item| item.parameters.ip_address == *ip_address)
+                })
+                .cloned(),
             Dependency::ResolvConf => self
                 .resources
-                .resolv_conf
-                .as_ref()
-                .map(Resource::ResolvConf),
+                .iter()
+                .find(|resource| resource.as_resolv_conf().is_some())
+                .cloned(),
             Dependency::Symlink { path } => self
                 .resources
-                .symlinks
                 .iter()
-                .find(|s| s.parameters.path == *path)
-                .map(Resource::Symlink),
+                .find(|resource| {
+                    resource
+                        .as_symlink()
+                        .is_some_and(|item| item.parameters.path == *path)
+                })
+                .cloned(),
             Dependency::User { name } => self
                 .resources
-                .users
                 .iter()
-                .find(|u| u.parameters.name == *name)
-                .map(Resource::User),
+                .find(|resource| {
+                    resource
+                        .as_user()
+                        .is_some_and(|item| item.parameters.name == *name)
+                })
+                .cloned(),
         }
     }
 
@@ -491,285 +517,7 @@ impl Client {
             // Process `apt::package` resources according to the rules described above.
             for item in &group.apt_packages {
                 // Replace variables in parameters.
-                let package =
-                    apt::package::Package::try_from((item, &self.variables)).map_err(|error| {
-                        error!(
-                            scope,
-                            client:% = self.name,
-                            group:% = group_name,
-                            resource = item.kind();
-                            "{}",
-                            error
-                        );
-                        Terminate
-                    })?;
-
-                self.temporary
-                    .requires
-                    .insert(package.id(), item.requires.clone());
-
-                // Check if a similar resource is already present ...
-                if let Some(duplicate) = self
-                    .resources
-                    .apt_packages
-                    .iter()
-                    .find(|p| p.parameters.name == package.parameters.name)
-                {
-                    // ... and if it was sourced from another group in which case
-                    // processing fails. Otherwise the group resource is skipped
-                    // because the saved resource originates from the client
-                    // and takes precedence.
-                    if let Some(origin) = self.temporary.origins.get(&duplicate.id()) {
-                        error!(
-                            scope,
-                            client:% = self.name,
-                            group:% = group_name,
-                            resource = package.kind(),
-                            name:% = package.parameters.name;
-                            "duplicate resource defined in group `{}`",
-                            origin,
-                        );
-
-                        return Err(Terminate);
-                    } else {
-                        continue;
-                    }
-                } else {
-                    // If no similar resource is present, save this one into
-                    // the catalog and also record that this resource stems from
-                    // a group.
-                    self.temporary
-                        .origins
-                        .insert(package.id(), group_name.clone());
-                    self.resources.apt_packages.push(package);
-                }
-            }
-
-            // Process directory resources according to the rules described above.
-            for item in &group.directories {
-                // Replace variables in parameters.
-                let directory =
-                    directory::Directory::try_from((item, &self.variables)).map_err(|error| {
-                        error!(
-                            scope,
-                            client:% = self.name,
-                            group:% = group_name,
-                            resource = item.kind();
-                            "{}",
-                            error
-                        );
-                        Terminate
-                    })?;
-
-                self.temporary
-                    .requires
-                    .insert(directory.id(), item.requires.clone());
-
-                // Check if a similar resource is already present ...
-                if let Some(duplicate) = self
-                    .resources
-                    .directories
-                    .iter()
-                    .find(|d| d.parameters.path == directory.parameters.path)
-                {
-                    // ... and if it was sourced from another group in which case
-                    // processing fails. Otherwise the group resource is skipped
-                    // because the saved resource originates from the client
-                    // and takes precedence.
-                    if let Some(origin) = self.temporary.origins.get(&duplicate.id()) {
-                        error!(
-                            scope,
-                            client:% = self.name,
-                            group:% = group_name,
-                            resource = directory.kind(),
-                            path:% = directory.parameters.path.display();
-                            "duplicate resource defined in group `{}`",
-                            origin,
-                        );
-
-                        return Err(Terminate);
-                    } else {
-                        continue;
-                    }
-                } else {
-                    // If no similar resource is present, save this one into
-                    // the catalog and also record that this resource stems from
-                    // a group.
-                    self.temporary
-                        .origins
-                        .insert(directory.id(), group_name.clone());
-                    self.resources.directories.push(directory);
-                }
-            }
-
-            // Process file resources according to the rules described above.
-            for item in &group.files {
-                // Replace variables in parameters.
-                let file = file::File::try_from((item, &self.variables)).map_err(|error| {
-                    error!(
-                        scope,
-                        client:% = self.name,
-                        group:% = group_name,
-                        resource = item.kind();
-                        "{}",
-                        error
-                    );
-                    Terminate
-                })?;
-
-                self.temporary
-                    .requires
-                    .insert(file.id(), item.requires.clone());
-
-                // Check if a similar resource is already present ...
-                if let Some(duplicate) = self
-                    .resources
-                    .files
-                    .iter()
-                    .find(|f| f.parameters.path == file.parameters.path)
-                {
-                    // ... and if it was sourced from another group in which case
-                    // processing fails. Otherwise the group resource is skipped
-                    // because the saved resource originates from the client
-                    // and takes precedence.
-                    if let Some(origin) = self.temporary.origins.get(&duplicate.id()) {
-                        error!(
-                            scope,
-                            client:% = self.name,
-                            group:% = group_name,
-                            resource = file.kind(),
-                            path:% = file.parameters.path.display();
-                            "duplicate resource defined in group `{}`",
-                            origin,
-                        );
-
-                        return Err(Terminate);
-                    } else {
-                        continue;
-                    }
-                } else {
-                    // If no similar resource is present, save this one into
-                    // the catalog and also record that this resource stems from
-                    // a group.
-                    self.temporary.origins.insert(file.id(), group_name.clone());
-                    self.resources.files.push(file);
-                }
-            }
-
-            // Process group resources according to the rules described above.
-            for item in &group.groups {
-                // Replace variables in parameters.
-                let _group = group::Group::try_from((item, &self.variables)).map_err(|error| {
-                    error!(
-                        scope,
-                        client:% = self.name,
-                        group:% = group_name,
-                        resource = item.kind();
-                        "{}",
-                        error
-                    );
-                    Terminate
-                })?;
-
-                self.temporary
-                    .requires
-                    .insert(_group.id(), item.requires.clone());
-
-                // Check if a similar resource is already present ...
-                if let Some(duplicate) = self
-                    .resources
-                    .groups
-                    .iter()
-                    .find(|g| g.parameters.name == _group.parameters.name)
-                {
-                    // ... and if it was sourced from another group in which case
-                    // processing fails. Otherwise the group resource is skipped
-                    // because the saved resource originates from the client
-                    // and takes precedence.
-                    if let Some(origin) = self.temporary.origins.get(&duplicate.id()) {
-                        error!(
-                            scope,
-                            client:% = self.name,
-                            group:% = group_name,
-                            resource = _group.kind(),
-                            name:% = _group.parameters.name;
-                            "duplicate resource defined in group `{}`",
-                            origin,
-                        );
-
-                        return Err(Terminate);
-                    } else {
-                        continue;
-                    }
-                } else {
-                    // If no similar resource is present, save this one into
-                    // the catalog and also record that this resource stems from
-                    // a group.
-                    self.temporary
-                        .origins
-                        .insert(_group.id(), group_name.clone());
-                    self.resources.groups.push(_group);
-                }
-            }
-
-            // Process host resources according to the rules described above.
-            for item in &group.hosts {
-                // Replace variables in parameters.
-                let host = host::Host::try_from((item, &self.variables)).map_err(|error| {
-                    error!(
-                        scope,
-                        client:% = self.name,
-                        group:% = group_name,
-                        resource = item.kind();
-                        "{}",
-                        error
-                    );
-                    Terminate
-                })?;
-
-                self.temporary
-                    .requires
-                    .insert(host.id(), item.requires.clone());
-
-                // Check if a similar resource is already present ...
-                if let Some(duplicate) = self
-                    .resources
-                    .hosts
-                    .iter()
-                    .find(|h| h.parameters.ip_address == host.parameters.ip_address)
-                {
-                    // ... and if it was sourced from another group in which case
-                    // processing fails. Otherwise the group resource is skipped
-                    // because the saved resource originates from the client
-                    // and takes precedence.
-                    if let Some(origin) = self.temporary.origins.get(&duplicate.id()) {
-                        error!(
-                            scope,
-                            client:% = self.name,
-                            group:% = group_name,
-                            resource = host.kind(),
-                            ip_address:% = host.parameters.ip_address;
-                            "duplicate resource defined in group `{}`",
-                            origin,
-                        );
-
-                        return Err(Terminate);
-                    } else {
-                        continue;
-                    }
-                } else {
-                    // If no similar resource is present, save this one into
-                    // the catalog and also record that this resource stems from
-                    // a group.
-                    self.temporary.origins.insert(host.id(), group_name.clone());
-                    self.resources.hosts.push(host);
-                }
-            }
-
-            // Process resolv.conf resources according to the rules described above.
-            for item in &group.resolv_conf {
-                // Replace variables in parameters.
-                let resolv_conf = resolv_conf::ResolvConf::try_from((item, &self.variables))
+                let resource: Resource = apt::package::Package::try_from((item, &self.variables))
                     .map_err(|error| {
                         error!(
                             scope,
@@ -780,27 +528,29 @@ impl Client {
                             error
                         );
                         Terminate
-                    })?;
+                    })?
+                    .into();
 
                 self.temporary
                     .requires
-                    .insert(resolv_conf.id(), item.requires.clone());
+                    .insert(resource.id(), item.requires.clone());
 
                 // Check if a similar resource is already present ...
-                if let Some(duplicate) = &self.resources.resolv_conf {
+                if let Some(duplicate) = self.resources.iter().find(|other| **other == resource) {
                     // ... and if it was sourced from another group in which case
                     // processing fails. Otherwise the group resource is skipped
                     // because the saved resource originates from the client
                     // and takes precedence.
                     if let Some(origin) = self.temporary.origins.get(&duplicate.id()) {
                         error!(
-                            scope,
-                            client:% = self.name,
-                            group:% = group_name,
-                            resource = resolv_conf.kind();
-                            "duplicate resource defined in group `{}`",
-                            origin,
-                        );
+                                                    scope,
+                                                    client:% = self.name,
+                                                    group:% = group_name,
+                                                    resource = resource.kind();
+                        //                            name:% = package.parameters.name;
+                                                    "duplicate resource defined in group `{}`",
+                                                    origin,
+                                                );
 
                         return Err(Terminate);
                     } else {
@@ -812,16 +562,16 @@ impl Client {
                     // a group.
                     self.temporary
                         .origins
-                        .insert(resolv_conf.id(), group_name.clone());
-                    self.resources.resolv_conf = Some(resolv_conf);
+                        .insert(resource.id(), group_name.clone());
+                    self.resources.push(resource);
                 }
             }
 
-            // Process symlink resources according to the rules described above.
-            for item in &group.symlinks {
+            // Process directory resources according to the rules described above.
+            for item in &group.directories {
                 // Replace variables in parameters.
-                let symlink =
-                    symlink::Symlink::try_from((item, &self.variables)).map_err(|error| {
+                let resource: Resource = directory::Directory::try_from((item, &self.variables))
+                    .map_err(|error| {
                         error!(
                             scope,
                             client:% = self.name,
@@ -831,19 +581,227 @@ impl Client {
                             error
                         );
                         Terminate
-                    })?;
+                    })?
+                    .into();
 
                 self.temporary
                     .requires
-                    .insert(symlink.id(), item.requires.clone());
+                    .insert(resource.id(), item.requires.clone());
 
                 // Check if a similar resource is already present ...
-                if let Some(duplicate) = self
-                    .resources
-                    .symlinks
-                    .iter()
-                    .find(|s| s.parameters.path == symlink.parameters.path)
-                {
+                if let Some(duplicate) = self.resources.iter().find(|other| **other == resource) {
+                    // ... and if it was sourced from another group in which case
+                    // processing fails. Otherwise the group resource is skipped
+                    // because the saved resource originates from the client
+                    // and takes precedence.
+                    if let Some(origin) = self.temporary.origins.get(&duplicate.id()) {
+                        error!(
+                                                    scope,
+                                                    client:% = self.name,
+                                                    group:% = group_name,
+                                                    resource = resource.kind();
+                        //                            path:% = directory.parameters.path.display();
+                                                    "duplicate resource defined in group `{}`",
+                                                    origin,
+                                                );
+
+                        return Err(Terminate);
+                    } else {
+                        continue;
+                    }
+                } else {
+                    // If no similar resource is present, save this one into
+                    // the catalog and also record that this resource stems from
+                    // a group.
+                    self.temporary
+                        .origins
+                        .insert(resource.id(), group_name.clone());
+                    self.resources.push(resource);
+                }
+            }
+
+            // Process file resources according to the rules described above.
+            for item in &group.files {
+                // Replace variables in parameters.
+                let resource: Resource = file::File::try_from((item, &self.variables))
+                    .map_err(|error| {
+                        error!(
+                            scope,
+                            client:% = self.name,
+                            group:% = group_name,
+                            resource = item.kind();
+                            "{}",
+                            error
+                        );
+                        Terminate
+                    })?
+                    .into();
+
+                self.temporary
+                    .requires
+                    .insert(resource.id(), item.requires.clone());
+
+                // Check if a similar resource is already present ...
+                if let Some(duplicate) = self.resources.iter().find(|other| **other == resource) {
+                    // ... and if it was sourced from another group in which case
+                    // processing fails. Otherwise the group resource is skipped
+                    // because the saved resource originates from the client
+                    // and takes precedence.
+                    if let Some(origin) = self.temporary.origins.get(&duplicate.id()) {
+                        error!(
+                                                    scope,
+                                                    client:% = self.name,
+                                                    group:% = group_name,
+                                                    resource = resource.kind();
+                        //                            path:% = file.parameters.path.display();
+                                                    "duplicate resource defined in group `{}`",
+                                                    origin,
+                                                );
+
+                        return Err(Terminate);
+                    } else {
+                        continue;
+                    }
+                } else {
+                    // If no similar resource is present, save this one into
+                    // the catalog and also record that this resource stems from
+                    // a group.
+                    self.temporary
+                        .origins
+                        .insert(resource.id(), group_name.clone());
+                    self.resources.push(resource);
+                }
+            }
+
+            // Process group resources according to the rules described above.
+            for item in &group.groups {
+                // Replace variables in parameters.
+                let resource: Resource = group::Group::try_from((item, &self.variables))
+                    .map_err(|error| {
+                        error!(
+                            scope,
+                            client:% = self.name,
+                            group:% = group_name,
+                            resource = item.kind();
+                            "{}",
+                            error
+                        );
+                        Terminate
+                    })?
+                    .into();
+
+                self.temporary
+                    .requires
+                    .insert(resource.id(), item.requires.clone());
+
+                // Check if a similar resource is already present ...
+                if let Some(duplicate) = self.resources.iter().find(|other| **other == resource) {
+                    // ... and if it was sourced from another group in which case
+                    // processing fails. Otherwise the group resource is skipped
+                    // because the saved resource originates from the client
+                    // and takes precedence.
+                    if let Some(origin) = self.temporary.origins.get(&duplicate.id()) {
+                        error!(
+                                                    scope,
+                                                    client:% = self.name,
+                                                    group:% = group_name,
+                                                    resource = resource.kind();
+                        //                            name:% = _group.parameters.name;
+                                                    "duplicate resource defined in group `{}`",
+                                                    origin,
+                                                );
+
+                        return Err(Terminate);
+                    } else {
+                        continue;
+                    }
+                } else {
+                    // If no similar resource is present, save this one into
+                    // the catalog and also record that this resource stems from
+                    // a group.
+                    self.temporary
+                        .origins
+                        .insert(resource.id(), group_name.clone());
+                    self.resources.push(resource);
+                }
+            }
+
+            // Process host resources according to the rules described above.
+            for item in &group.hosts {
+                // Replace variables in parameters.
+                let resource: Resource = host::Host::try_from((item, &self.variables))
+                    .map_err(|error| {
+                        error!(
+                            scope,
+                            client:% = self.name,
+                            group:% = group_name,
+                            resource = item.kind();
+                            "{}",
+                            error
+                        );
+                        Terminate
+                    })?
+                    .into();
+
+                self.temporary
+                    .requires
+                    .insert(resource.id(), item.requires.clone());
+
+                // Check if a similar resource is already present ...
+                if let Some(duplicate) = self.resources.iter().find(|other| **other == resource) {
+                    // ... and if it was sourced from another group in which case
+                    // processing fails. Otherwise the group resource is skipped
+                    // because the saved resource originates from the client
+                    // and takes precedence.
+                    if let Some(origin) = self.temporary.origins.get(&duplicate.id()) {
+                        error!(
+                                                    scope,
+                                                    client:% = self.name,
+                                                    group:% = group_name,
+                                                    resource = resource.kind();
+                        //                            ip_address:% = host.parameters.ip_address;
+                                                    "duplicate resource defined in group `{}`",
+                                                    origin,
+                                                );
+
+                        return Err(Terminate);
+                    } else {
+                        continue;
+                    }
+                } else {
+                    // If no similar resource is present, save this one into
+                    // the catalog and also record that this resource stems from
+                    // a group.
+                    self.temporary
+                        .origins
+                        .insert(resource.id(), group_name.clone());
+                    self.resources.push(resource);
+                }
+            }
+
+            // Process resolv.conf resources according to the rules described above.
+            for item in &group.resolv_conf {
+                // Replace variables in parameters.
+                let resource: Resource = resolv_conf::ResolvConf::try_from((item, &self.variables))
+                    .map_err(|error| {
+                        error!(
+                            scope,
+                            client:% = self.name,
+                            group:% = group_name,
+                            resource = item.kind();
+                            "{}",
+                            error
+                        );
+                        Terminate
+                    })?
+                    .into();
+
+                self.temporary
+                    .requires
+                    .insert(resource.id(), item.requires.clone());
+
+                // Check if a similar resource is already present ...
+                if let Some(duplicate) = self.resources.iter().find(|other| **other == resource) {
                     // ... and if it was sourced from another group in which case
                     // processing fails. Otherwise the group resource is skipped
                     // because the saved resource originates from the client
@@ -853,8 +811,7 @@ impl Client {
                             scope,
                             client:% = self.name,
                             group:% = group_name,
-                            resource = symlink.kind(),
-                            path:% = symlink.parameters.path.display();
+                            resource = resource.kind();
                             "duplicate resource defined in group `{}`",
                             origin,
                         );
@@ -869,51 +826,48 @@ impl Client {
                     // a group.
                     self.temporary
                         .origins
-                        .insert(symlink.id(), group_name.clone());
-                    self.resources.symlinks.push(symlink);
+                        .insert(resource.id(), group_name.clone());
+                    self.resources.push(resource);
                 }
             }
 
-            // Process user resources according to the rules described above.
-            for item in &group.users {
+            // Process symlink resources according to the rules described above.
+            for item in &group.symlinks {
                 // Replace variables in parameters.
-                let user = user::User::try_from((item, &self.variables)).map_err(|error| {
-                    error!(
-                        scope,
-                        client:% = self.name,
-                        group:% = group_name,
-                        resource = item.kind();
-                        "{}",
-                        error
-                    );
-                    Terminate
-                })?;
+                let resource: Resource = symlink::Symlink::try_from((item, &self.variables))
+                    .map_err(|error| {
+                        error!(
+                            scope,
+                            client:% = self.name,
+                            group:% = group_name,
+                            resource = item.kind();
+                            "{}",
+                            error
+                        );
+                        Terminate
+                    })?
+                    .into();
 
                 self.temporary
                     .requires
-                    .insert(user.id(), item.requires.clone());
+                    .insert(resource.id(), item.requires.clone());
 
                 // Check if a similar resource is already present ...
-                if let Some(duplicate) = self
-                    .resources
-                    .users
-                    .iter()
-                    .find(|u| u.parameters.name == user.parameters.name)
-                {
+                if let Some(duplicate) = self.resources.iter().find(|other| **other == resource) {
                     // ... and if it was sourced from another group in which case
                     // processing fails. Otherwise the group resource is skipped
                     // because the saved resource originates from the client
                     // and takes precedence.
                     if let Some(origin) = self.temporary.origins.get(&duplicate.id()) {
                         error!(
-                            scope,
-                            client:% = self.name,
-                            group:% = group_name,
-                            resource = user.kind(),
-                            name:% = user.parameters.name;
-                            "duplicate resource defined in group `{}`",
-                            origin,
-                        );
+                                                    scope,
+                                                    client:% = self.name,
+                                                    group:% = group_name,
+                                                    resource = resource.kind();
+                        //                            path:% = symlink.parameters.path.display();
+                                                    "duplicate resource defined in group `{}`",
+                                                    origin,
+                                                );
 
                         return Err(Terminate);
                     } else {
@@ -923,8 +877,63 @@ impl Client {
                     // If no similar resource is present, save this one into
                     // the catalog and also record that this resource stems from
                     // a group.
-                    self.temporary.origins.insert(user.id(), group_name.clone());
-                    self.resources.users.push(user);
+                    self.temporary
+                        .origins
+                        .insert(resource.id(), group_name.clone());
+                    self.resources.push(resource);
+                }
+            }
+
+            // Process user resources according to the rules described above.
+            for item in &group.users {
+                // Replace variables in parameters.
+                let resource: Resource = user::User::try_from((item, &self.variables))
+                    .map_err(|error| {
+                        error!(
+                            scope,
+                            client:% = self.name,
+                            group:% = group_name,
+                            resource = item.kind();
+                            "{}",
+                            error
+                        );
+                        Terminate
+                    })?
+                    .into();
+
+                self.temporary
+                    .requires
+                    .insert(resource.id(), item.requires.clone());
+
+                // Check if a similar resource is already present ...
+                if let Some(duplicate) = self.resources.iter().find(|other| **other == resource) {
+                    // ... and if it was sourced from another group in which case
+                    // processing fails. Otherwise the group resource is skipped
+                    // because the saved resource originates from the client
+                    // and takes precedence.
+                    if let Some(origin) = self.temporary.origins.get(&duplicate.id()) {
+                        error!(
+                                                    scope,
+                                                    client:% = self.name,
+                                                    group:% = group_name,
+                                                    resource = resource.kind();
+                        //                            name:% = user.parameters.name;
+                                                    "duplicate resource defined in group `{}`",
+                                                    origin,
+                                                );
+
+                        return Err(Terminate);
+                    } else {
+                        continue;
+                    }
+                } else {
+                    // If no similar resource is present, save this one into
+                    // the catalog and also record that this resource stems from
+                    // a group.
+                    self.temporary
+                        .origins
+                        .insert(resource.id(), group_name.clone());
+                    self.resources.push(resource);
                 }
             }
         }
@@ -987,11 +996,13 @@ impl Client {
 
             // Save the metadata of ancestral directories and symlinks
             // that this file depends on.
-            for ancestor in self.resources.directories.iter().filter(|d| {
-                file.parameters
-                    .path
-                    .ancestors()
-                    .any(|a| a == *d.parameters.path)
+            for ancestor in self.resources.iter().filter(|item| {
+                item.as_directory().is_some_and(|d| {
+                    file.parameters
+                        .path
+                        .ancestors()
+                        .any(|a| a == *d.parameters.path)
+                })
             }) {
                 let metadata = ancestor.metadata().clone();
 
@@ -1004,11 +1015,13 @@ impl Client {
                 file.relationships.requires.push(metadata);
             }
 
-            for ancestor in self.resources.symlinks.iter().filter(|s| {
-                file.parameters
-                    .path
-                    .ancestors()
-                    .any(|a| a == *s.parameters.path)
+            for ancestor in self.resources.iter().filter(|item| {
+                item.as_symlink().is_some_and(|s| {
+                    file.parameters
+                        .path
+                        .ancestors()
+                        .any(|a| a == *s.parameters.path)
+                })
             }) {
                 let metadata = ancestor.metadata().clone();
 
@@ -1147,50 +1160,56 @@ impl Client {
             // Save the paths of child nodes. This becomes relevant when
             // the `purge` parameter is `true` and the directory must
             // remove unmanaged child nodes it may contain.
-            for child in self.resources.directories.iter().filter(|d| {
-                d.parameters
-                    .path
-                    .parent()
-                    .is_some_and(|path| path == *directory.parameters.path)
+            for child in self.resources.iter().filter(|item| {
+                item.as_directory().is_some_and(|d| {
+                    d.parameters
+                        .path
+                        .parent()
+                        .is_some_and(|path| path == *directory.parameters.path)
+                })
             }) {
                 directory.relationships.children.push(child.into());
             }
 
-            for child in self.resources.files.iter().filter(|f| {
-                f.parameters
-                    .path
-                    .parent()
-                    .is_some_and(|path| path == *directory.parameters.path)
+            for child in self.resources.iter().filter(|item| {
+                item.as_file().is_some_and(|f| {
+                    f.parameters
+                        .path
+                        .parent()
+                        .is_some_and(|path| path == *directory.parameters.path)
+                })
             }) {
                 directory.relationships.children.push(child.into());
             }
 
-            for child in self.resources.symlinks.iter().filter(|s| {
-                s.parameters
-                    .path
-                    .parent()
-                    .is_some_and(|path| path == *directory.parameters.path)
+            for child in self.resources.iter().filter(|item| {
+                item.as_symlink().is_some_and(|s| {
+                    s.parameters
+                        .path
+                        .parent()
+                        .is_some_and(|path| path == *directory.parameters.path)
+                })
             }) {
                 directory.relationships.children.push(child.into());
             }
 
-            for child in self.resources.apt_preferences.iter().filter(|p| {
-                p.parameters
-                    .target
-                    .parent()
-                    .is_some_and(|path| path == *directory.parameters.path)
+            for child in self.resources.iter().filter(|item| {
+                item.as_apt_preference().is_some_and(|p| {
+                    p.parameters
+                        .target
+                        .parent()
+                        .is_some_and(|path| path == *directory.parameters.path)
+                })
             }) {
                 directory.relationships.children.push(child.into());
             }
 
             // Save the metadata of user resources whose `home` directory
             // matches this directory's `path`.
-            for user in self
-                .resources
-                .users
-                .iter()
-                .filter(|u| u.parameters.home == directory.parameters.path)
-            {
+            for user in self.resources.iter().filter(|item| {
+                item.as_user()
+                    .is_some_and(|u| u.parameters.home == directory.parameters.path)
+            }) {
                 let metadata = directory.metadata();
                 let other = user.metadata().clone();
 
@@ -1205,13 +1224,15 @@ impl Client {
 
             // Save the metadata of ancestral directories and symlinks
             // that this directory depends on.
-            for ancestor in self.resources.directories.iter().filter(|d| {
-                directory
-                    .parameters
-                    .path
-                    .ancestors()
-                    .skip(1)
-                    .any(|a| a == *d.parameters.path)
+            for ancestor in self.resources.iter().filter(|item| {
+                item.as_directory().is_some_and(|d| {
+                    directory
+                        .parameters
+                        .path
+                        .ancestors()
+                        .skip(1)
+                        .any(|a| a == *d.parameters.path)
+                })
             }) {
                 let metadata = directory.metadata();
                 let other = ancestor.metadata().clone();
@@ -1225,12 +1246,14 @@ impl Client {
                 directory.relationships.requires.push(other);
             }
 
-            for ancestor in self.resources.symlinks.iter().filter(|s| {
-                directory
-                    .parameters
-                    .path
-                    .ancestors()
-                    .any(|a| a == *s.parameters.path)
+            for ancestor in self.resources.iter().filter(|item| {
+                item.as_symlink().is_some_and(|s| {
+                    directory
+                        .parameters
+                        .path
+                        .ancestors()
+                        .any(|a| a == *s.parameters.path)
+                })
             }) {
                 let metadata = directory.metadata();
                 let other = ancestor.metadata().clone();
@@ -1370,12 +1393,14 @@ impl Client {
 
             // Save metadata of ancestral directories that the symlink
             // depends on.
-            for ancestor in self.resources.directories.iter().filter(|d| {
-                symlink
-                    .parameters
-                    .path
-                    .ancestors()
-                    .any(|a| a == *d.parameters.path)
+            for ancestor in self.resources.iter().filter(|item| {
+                item.as_directory().is_some_and(|d| {
+                    symlink
+                        .parameters
+                        .path
+                        .ancestors()
+                        .any(|a| a == *d.parameters.path)
+                })
             }) {
                 let metadata = symlink.metadata();
                 let other = ancestor.metadata().clone();
@@ -1391,13 +1416,15 @@ impl Client {
 
             // Save metadata of ancestral symlinks that this symlink
             // depends on.
-            for ancestor in self.resources.symlinks.iter().filter(|s| {
-                symlink
-                    .parameters
-                    .path
-                    .ancestors()
-                    .skip(1)
-                    .any(|a| a == *s.parameters.path)
+            for ancestor in self.resources.iter().filter(|item| {
+                item.as_symlink().is_some_and(|s| {
+                    symlink
+                        .parameters
+                        .path
+                        .ancestors()
+                        .skip(1)
+                        .any(|a| a == *s.parameters.path)
+                })
             }) {
                 let metadata = symlink.metadata();
                 let other = ancestor.metadata().clone();
@@ -1414,15 +1441,19 @@ impl Client {
             // Save metadata of the target that this symlink points to.
             if let Some(other) = self
                 .resources
-                .directories
                 .iter()
-                .find(|d| d.parameters.path == symlink.parameters.target)
+                .find(|item| {
+                    item.as_directory()
+                        .is_some_and(|d| d.parameters.path == symlink.parameters.target)
+                })
                 .map(|d| d.metadata().clone())
                 .or(self
                     .resources
-                    .files
                     .iter()
-                    .find(|f| f.parameters.path == symlink.parameters.target)
+                    .find(|item| {
+                        item.as_file()
+                            .is_some_and(|f| f.parameters.path == symlink.parameters.target)
+                    })
                     .map(|f| f.metadata().clone()))
             {
                 let metadata = symlink.metadata();
@@ -1547,8 +1578,8 @@ impl Client {
             // content  or source parameter. This combination is not supported.
             if let Some(file) = self
                 .resources
-                .files
                 .iter()
+                .filter_map(|item| item.as_file())
                 .find(|f| *f.parameters.path == host.parameters.target)
             {
                 if file.parameters.content.is_some() || file.parameters.source.is_some() {
@@ -1577,12 +1608,10 @@ impl Client {
                 }
             }
 
-            if let Some(symlink) = self
-                .resources
-                .symlinks
-                .iter()
-                .find(|s| *s.parameters.path == host.parameters.target)
-            {
+            if let Some(symlink) = self.resources.iter().find(|item| {
+                item.as_symlink()
+                    .is_some_and(|s| *s.parameters.path == host.parameters.target)
+            }) {
                 let metadata = host.metadata();
                 let other = symlink.metadata().clone();
 
@@ -1828,12 +1857,10 @@ impl Client {
             // in the list of user group names.
             // Supplementary groups must be processed before users.
             for name in &user.parameters.groups {
-                if let Some(group) = self
-                    .resources
-                    .groups
-                    .iter()
-                    .find(|group| group.parameters.name == *name)
-                {
+                if let Some(group) = self.resources.iter().find(|item| {
+                    item.as_group()
+                        .is_some_and(|group| group.parameters.name == *name)
+                }) {
                     let metadata = user.metadata();
                     let other = group.metadata().clone();
 
@@ -1940,8 +1967,8 @@ impl Client {
             // content or source parameter. This combination is not supported.
             if let Some(file) = self
                 .resources
-                .files
                 .iter()
+                .filter_map(|item| item.as_file())
                 .find(|f| *f.parameters.path == resolv_conf.parameters.target)
             {
                 if file.parameters.content.is_some() || file.parameters.source.is_some() {
@@ -1969,12 +1996,10 @@ impl Client {
                 }
             }
 
-            if let Some(symlink) = self
-                .resources
-                .symlinks
-                .iter()
-                .find(|s| *s.parameters.path == resolv_conf.parameters.target)
-            {
+            if let Some(symlink) = self.resources.iter().find(|item| {
+                item.as_symlink()
+                    .is_some_and(|s| *s.parameters.path == resolv_conf.parameters.target)
+            }) {
                 let metadata = resolv_conf.metadata();
                 let other = symlink.metadata().clone();
 
@@ -2210,12 +2235,14 @@ impl Client {
 
             // Save metadata of ancestral directories that the target file
             // depends on.
-            for ancestor in self.resources.directories.iter().filter(|d| {
-                preference
-                    .parameters
-                    .target
-                    .ancestors()
-                    .any(|a| a == *d.parameters.path)
+            for ancestor in self.resources.iter().filter(|item| {
+                item.as_directory().is_some_and(|d| {
+                    preference
+                        .parameters
+                        .target
+                        .ancestors()
+                        .any(|a| a == *d.parameters.path)
+                })
             }) {
                 let other = ancestor.metadata().clone();
 
@@ -2228,12 +2255,14 @@ impl Client {
                 preference.relationships.requires.push(other);
             }
 
-            for ancestor in self.resources.symlinks.iter().filter(|s| {
-                preference
-                    .parameters
-                    .target
-                    .ancestors()
-                    .any(|a| a == *s.parameters.path)
+            for ancestor in self.resources.iter().filter(|item| {
+                item.as_symlink().is_some_and(|s| {
+                    preference
+                        .parameters
+                        .target
+                        .ancestors()
+                        .any(|a| a == *s.parameters.path)
+                })
             }) {
                 let metadata = ancestor.metadata().clone();
 

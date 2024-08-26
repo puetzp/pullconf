@@ -19,6 +19,14 @@ pub struct Package {
     pub relationships: Relationships,
 }
 
+impl PartialEq for Package {
+    fn eq(&self, other: &Self) -> bool {
+        self.parameters.name == other.parameters.name
+    }
+}
+
+impl Eq for Package {}
+
 impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Package {
     type Error = String;
 
