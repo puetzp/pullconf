@@ -37,6 +37,71 @@ pub enum Resource {
     User(user::de::Parameters),
 }
 
+impl Resource {
+    pub fn as_apt_package(&self) -> Option<&apt::package::de::Parameters> {
+        match self {
+            Self::AptPackage(parameters) => Some(parameters),
+            _ => None,
+        }
+    }
+
+    pub fn as_apt_preference(&self) -> Option<&apt::preference::de::Parameters> {
+        match self {
+            Self::AptPreference(parameters) => Some(parameters),
+            _ => None,
+        }
+    }
+
+    pub fn as_directory(&self) -> Option<&directory::de::Parameters> {
+        match self {
+            Self::Directory(parameters) => Some(parameters),
+            _ => None,
+        }
+    }
+
+    pub fn as_file(&self) -> Option<&file::de::Parameters> {
+        match self {
+            Self::File(parameters) => Some(parameters),
+            _ => None,
+        }
+    }
+
+    pub fn as_group(&self) -> Option<&group::de::Parameters> {
+        match self {
+            Self::Group(parameters) => Some(parameters),
+            _ => None,
+        }
+    }
+
+    pub fn as_host(&self) -> Option<&host::de::Parameters> {
+        match self {
+            Self::Host(parameters) => Some(parameters),
+            _ => None,
+        }
+    }
+
+    pub fn as_resolv_conf(&self) -> Option<&resolv_conf::de::Parameters> {
+        match self {
+            Self::ResolvConf(parameters) => Some(parameters),
+            _ => None,
+        }
+    }
+
+    pub fn as_symlink(&self) -> Option<&symlink::de::Parameters> {
+        match self {
+            Self::Symlink(parameters) => Some(parameters),
+            _ => None,
+        }
+    }
+
+    pub fn as_user(&self) -> Option<&user::de::Parameters> {
+        match self {
+            Self::User(parameters) => Some(parameters),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(untagged)]
 pub enum VariableOrValue {

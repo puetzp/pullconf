@@ -515,7 +515,11 @@ impl Client {
             *count += 1;
 
             // Process `apt::package` resources according to the rules described above.
-            for item in &group.apt_packages {
+            for item in group
+                .resources
+                .iter()
+                .filter_map(|item| item.as_apt_package())
+            {
                 // Replace variables in parameters.
                 let resource: Resource = apt::package::Package::try_from((item, &self.variables))
                     .map_err(|error| {
@@ -568,7 +572,11 @@ impl Client {
             }
 
             // Process directory resources according to the rules described above.
-            for item in &group.directories {
+            for item in group
+                .resources
+                .iter()
+                .filter_map(|item| item.as_directory())
+            {
                 // Replace variables in parameters.
                 let resource: Resource = directory::Directory::try_from((item, &self.variables))
                     .map_err(|error| {
@@ -621,7 +629,7 @@ impl Client {
             }
 
             // Process file resources according to the rules described above.
-            for item in &group.files {
+            for item in group.resources.iter().filter_map(|item| item.as_file()) {
                 // Replace variables in parameters.
                 let resource: Resource = file::File::try_from((item, &self.variables))
                     .map_err(|error| {
@@ -674,7 +682,7 @@ impl Client {
             }
 
             // Process group resources according to the rules described above.
-            for item in &group.groups {
+            for item in group.resources.iter().filter_map(|item| item.as_group()) {
                 // Replace variables in parameters.
                 let resource: Resource = group::Group::try_from((item, &self.variables))
                     .map_err(|error| {
@@ -727,7 +735,7 @@ impl Client {
             }
 
             // Process host resources according to the rules described above.
-            for item in &group.hosts {
+            for item in group.resources.iter().filter_map(|item| item.as_host()) {
                 // Replace variables in parameters.
                 let resource: Resource = host::Host::try_from((item, &self.variables))
                     .map_err(|error| {
@@ -780,7 +788,11 @@ impl Client {
             }
 
             // Process resolv.conf resources according to the rules described above.
-            for item in &group.resolv_conf {
+            for item in group
+                .resources
+                .iter()
+                .filter_map(|item| item.as_resolv_conf())
+            {
                 // Replace variables in parameters.
                 let resource: Resource = resolv_conf::ResolvConf::try_from((item, &self.variables))
                     .map_err(|error| {
@@ -832,7 +844,7 @@ impl Client {
             }
 
             // Process symlink resources according to the rules described above.
-            for item in &group.symlinks {
+            for item in group.resources.iter().filter_map(|item| item.as_symlink()) {
                 // Replace variables in parameters.
                 let resource: Resource = symlink::Symlink::try_from((item, &self.variables))
                     .map_err(|error| {
@@ -885,7 +897,7 @@ impl Client {
             }
 
             // Process user resources according to the rules described above.
-            for item in &group.users {
+            for item in group.resources.iter().filter_map(|item| item.as_user()) {
                 // Replace variables in parameters.
                 let resource: Resource = user::User::try_from((item, &self.variables))
                     .map_err(|error| {
