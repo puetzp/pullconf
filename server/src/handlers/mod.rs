@@ -1,10 +1,6 @@
 pub mod error;
 
-use crate::{
-    handlers::error::Error,
-    types::{resources::Resource, ApiKey},
-    SharedAppState,
-};
+use crate::{handlers::error::Error, types::ApiKey, SharedAppState};
 use common::{Hostname, Links};
 use log::debug;
 use rand::{distributions::Alphanumeric, Rng};

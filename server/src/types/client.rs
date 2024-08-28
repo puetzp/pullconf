@@ -6,11 +6,20 @@ use crate::types::{
     },
     ApiKey, Group,
 };
-use common::{error::Terminate, Hostname};
+use common::{
+    error::Terminate,
+    resources::{
+        apt::{package::Name as PackageName, preference::Name as PreferenceName},
+        group::Name as GroupName,
+        user::Name as UserName,
+    },
+    Hostname,
+};
 use log::error;
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{HashMap, HashSet, VecDeque},
     hash::{Hash, Hasher},
+    net::IpAddr,
     path::PathBuf,
 };
 use uuid::Uuid;
@@ -46,6 +55,11 @@ pub struct ValidationHelpers {
     /// parent node to the `path` of another`, since only directories
     /// and symlinks (pointing to a directory) can be parents to a file.
     pub file_paths: HashSet<PathBuf>,
+    pub ip_addresses: HashSet<IpAddr>,
+    pub group_names: HashSet<GroupName>,
+    pub user_names: HashSet<UserName>,
+    pub package_names: HashSet<PackageName>,
+    pub preference_names: HashSet<PreferenceName>,
 }
 
 impl ValidationHelpers {
@@ -67,7 +81,7 @@ pub struct Client {
     pub assigned_groups: Vec<Hostname>,
     pub variables: HashMap<String, toml::Value>,
     pub temporary: ValidationHelpers,
-    pub resources: Vec<Resource>,
+    pub resources: VecDeque<Resource>,
 }
 
 impl Hash for Client {
@@ -123,7 +137,7 @@ impl
             assigned_groups: intermediate.assigned_groups,
             variables: intermediate.variables,
             temporary: ValidationHelpers::default(),
-            resources: vec![],
+            resources: VecDeque::new(),
         };
 
         for item in intermediate.resources {
@@ -145,7 +159,7 @@ impl
             // Save dependencies as they appear in the deserialized resource.
             client.temporary.requires.insert(resource.id(), requires);
 
-            client.resources.push(resource);
+            client.resources.push_back(resource);
         }
 
         // Extend the client's resource catalog with resources from groups
@@ -159,15 +173,7 @@ impl
             .map(|file| file.parameters.path.to_path_buf())
             .collect();
 
-        client.validate_files()?;
-        client.validate_directories()?;
-        client.validate_symlinks()?;
-        client.validate_hosts()?;
-        client.validate_groups()?;
-        client.validate_users()?;
-        client.validate_resolv_conf()?;
-        client.validate_apt_packages()?;
-        client.validate_apt_preferences()?;
+        client.validate()?;
 
         client.temporary.clear();
 
@@ -361,7 +367,7 @@ impl Client {
                     self.temporary
                         .origins
                         .insert(resource.id(), group_name.clone());
-                    self.resources.push(resource);
+                    self.resources.push_back(resource);
                 }
             }
         }
@@ -369,679 +375,663 @@ impl Client {
         Ok(())
     }
 
-    fn validate_files(&mut self) -> Result<(), Terminate> {
+    /// Validate resources from the resource catalog in relationship to
+    /// each other. Some resources depend on the configuration of others.
+    /// Resources also form relationships with each other to indicate
+    /// the order that they need to be applied by the client. These
+    /// relationships are also validated and added to the resource.
+    /// This function also ensures that relationships do not introduce a
+    /// dependency loop which would cause the client to loop indefinitely.
+    fn validate(&mut self) -> Result<(), Terminate> {
+        // Keep track of resources that have been processed.
+        let mut validated = HashSet::new();
+
+        // The resource that is currently processed is removed from the
+        // resource catalog. This enables the validation process to
+        // borrow the resource catalog immutably while the resource is
+        // processed, which is needed in order to validate the resource
+        // in the context of other resources.
+        // When validation succeeds, the resource is added to the back
+        // of the queue.
+        while let Some(resource) = self.resources.pop_front() {
+            // Break the loop once all resources have been processed.
+            if !validated.insert(resource.id()) {
+                self.resources.push_back(resource);
+                break;
+            }
+
+            match resource {
+                Resource::AptPackage(mut item) => self.validate_apt_package(&mut item)?,
+                Resource::AptPreference(mut item) => self.validate_apt_preference(&mut item)?,
+                Resource::Directory(mut item) => self.validate_directory(&mut item)?,
+                Resource::File(mut item) => self.validate_file(&mut item)?,
+                Resource::Group(mut item) => self.validate_group(&mut item)?,
+                Resource::Host(mut item) => self.validate_host(&mut item)?,
+                Resource::ResolvConf(mut item) => self.validate_resolv_conf(&mut item)?,
+                Resource::Symlink(mut item) => self.validate_symlink(&mut item)?,
+                Resource::User(mut item) => self.validate_user(&mut item)?,
+            }
+        }
+
+        Ok(())
+    }
+
+    fn validate_file(&mut self, file: &mut file::File) -> Result<(), Terminate> {
         let scope = "validation";
 
-        // To iterate and modify file resources the collection must
-        // be cloned.
-        // Each resource is modified on the basis of other (file)
-        // resources, e.g. to validate dependencies.
-        // As such we need both a mutable object as well as immutable
-        // collections of resources to check against.
-        // Since ownerships rules need to be satisfied as well, a clone
-        // is inevitable.
-        let mut _files = self.resources.files.clone();
-        _files.sort_by(|a, b| a.parameters.path.cmp(&b.parameters.path));
+        let path = file.parameters.path.display().to_string();
 
-        for file in _files.iter_mut() {
-            let path = file.parameters.path.display().to_string();
+        // Check for uniqueness of the path parameter.
+        if !self
+            .temporary
+            .paths
+            .insert(file.parameters.path.to_path_buf())
+        {
+            error!(
+                scope,
+                client:% = self.name,
+                resource = file.kind(),
+                path;
+                "path `{}` appears multiple times, must be unique among resources of type `file`, `symlink` and `directory`",
+                path
+            );
 
-            // Check for uniqueness of the path parameter.
-            if !self
-                .temporary
-                .paths
-                .insert(file.parameters.path.to_path_buf())
-            {
+            return Err(Terminate);
+        }
+
+        // Files (their paths) cannot be parents to each other.
+        // Check if any file conflicts with this file in that regard.
+        if let Some(parent) = &file.parameters.path.parent() {
+            if self.temporary.file_paths.contains(*parent) {
                 error!(
                     scope,
                     client:% = self.name,
                     resource = file.kind(),
                     path;
-                    "path `{}` appears multiple times, must be unique among resources of type `file`, `symlink` and `directory`",
-                    path
+                    "another file `{}` is found to be a parent of {}, but files cannot be parents to other files",
+                    file.repr(),
+                    parent.display()
                 );
 
                 return Err(Terminate);
             }
+        }
 
-            // Files (their paths) cannot be parents to each other.
-            // Check if any file conflicts with this file in that regard.
-            if let Some(parent) = &file.parameters.path.parent() {
-                if self.temporary.file_paths.contains(*parent) {
-                    error!(
-                        scope,
-                        client:% = self.name,
-                        resource = file.kind(),
-                        path;
-                        "another file `{}` is found to be a parent of {}, but files cannot be parents to other files",
-                        file.repr(),
-                        parent.display()
-                    );
+        // Save the metadata of ancestral directories and symlinks
+        // that this file depends on.
+        for ancestor in self.resources.iter().filter(|item| {
+            item.as_directory().is_some_and(|d| {
+                file.parameters
+                    .path
+                    .ancestors()
+                    .any(|a| a == *d.parameters.path)
+            })
+        }) {
+            let metadata = ancestor.metadata().clone();
 
-                    return Err(Terminate);
-                }
-            }
+            self.temporary
+                .dependencies
+                .entry(file.id())
+                .or_default()
+                .insert(metadata.id);
 
-            // Save the metadata of ancestral directories and symlinks
-            // that this file depends on.
-            for ancestor in self.resources.iter().filter(|item| {
-                item.as_directory().is_some_and(|d| {
-                    file.parameters
-                        .path
-                        .ancestors()
-                        .any(|a| a == *d.parameters.path)
-                })
-            }) {
-                let metadata = ancestor.metadata().clone();
+            file.relationships.requires.push(metadata);
+        }
 
-                self.temporary
-                    .dependencies
-                    .entry(file.id())
-                    .or_default()
-                    .insert(metadata.id);
+        for ancestor in self.resources.iter().filter(|item| {
+            item.as_symlink().is_some_and(|s| {
+                file.parameters
+                    .path
+                    .ancestors()
+                    .any(|a| a == *s.parameters.path)
+            })
+        }) {
+            let metadata = ancestor.metadata().clone();
 
-                file.relationships.requires.push(metadata);
-            }
+            self.temporary
+                .dependencies
+                .entry(file.id())
+                .or_default()
+                .insert(metadata.id);
 
-            for ancestor in self.resources.iter().filter(|item| {
-                item.as_symlink().is_some_and(|s| {
-                    file.parameters
-                        .path
-                        .ancestors()
-                        .any(|a| a == *s.parameters.path)
-                })
-            }) {
-                let metadata = ancestor.metadata().clone();
+            file.relationships.requires.push(metadata);
+        }
 
-                self.temporary
-                    .dependencies
-                    .entry(file.id())
-                    .or_default()
-                    .insert(metadata.id);
+        // Save the metadata of explicit dependencies that this
+        // file should depend on.
+        for dependency in self
+            .temporary
+            .requires
+            .get(&file.id())
+            .map(|c| c.as_slice())
+            .unwrap_or_default()
+        {
+            match self.resolve_dependency(dependency) {
+                Some(resource) => {
+                    if file.may_depend_on(&resource) {
+                        let metadata = resource.metadata().clone();
 
-                file.relationships.requires.push(metadata);
-            }
-
-            // Save the metadata of explicit dependencies that this
-            // file should depend on.
-            for dependency in self
-                .temporary
-                .requires
-                .get(&file.id())
-                .map(|c| c.as_slice())
-                .unwrap_or_default()
-            {
-                match self.resolve_dependency(dependency) {
-                    Some(resource) => {
-                        if file.may_depend_on(&resource) {
-                            let metadata = resource.metadata().clone();
-
-                            if self.dependency_introduces_loop(resource.id(), file.id()) {
-                                error!(
-                                    scope,
-                                    client:% = self.name,
-                                    resource = file.kind(),
-                                    path;
-                                    "{} cannot depend on {} as it would introduce a dependency loop",
-                                    file.repr(),
-                                    resource.repr()
-                                );
-
-                                return Err(Terminate);
-                            } else if self
-                                .temporary
-                                .dependencies
-                                .entry(file.id())
-                                .or_default()
-                                .insert(metadata.id)
-                            {
-                                file.relationships.requires.push(metadata);
-                            }
-                        } else {
+                        if self.dependency_introduces_loop(resource.id(), file.id()) {
                             error!(
                                 scope,
                                 client:% = self.name,
                                 resource = file.kind(),
                                 path;
-                                "{} cannot depend on {}",
+                                "{} cannot depend on {} as it would introduce a dependency loop",
                                 file.repr(),
                                 resource.repr()
                             );
 
                             return Err(Terminate);
+                        } else if self
+                            .temporary
+                            .dependencies
+                            .entry(file.id())
+                            .or_default()
+                            .insert(metadata.id)
+                        {
+                            file.relationships.requires.push(metadata);
                         }
-                    }
-                    None => {
+                    } else {
                         error!(
                             scope,
                             client:% = self.name,
                             resource = file.kind(),
                             path;
-                            "{} depends on {} which cannot be found",
+                            "{} cannot depend on {}",
                             file.repr(),
-                            dependency.repr()
+                            resource.repr()
                         );
 
                         return Err(Terminate);
                     }
                 }
+                None => {
+                    error!(
+                        scope,
+                        client:% = self.name,
+                        resource = file.kind(),
+                        path;
+                        "{} depends on {} which cannot be found",
+                        file.repr(),
+                        dependency.repr()
+                    );
+
+                    return Err(Terminate);
+                }
             }
         }
-
-        self.resources.files = _files;
 
         Ok(())
     }
 
-    fn validate_directories(&mut self) -> Result<(), Terminate> {
+    fn validate_directory(
+        &mut self,
+        directory: &mut directory::Directory,
+    ) -> Result<(), Terminate> {
         let scope = "validation";
 
-        // To iterate and modify directory resources the collection
-        // must be cloned.
-        // Each resource is modified on the basis of other (directory)
-        // resources, e.g. to validate dependencies.
-        // As such we need both a mutable object as well as immutable
-        // collections of resources to check against.
-        // Since ownerships rules need to be satisfied as well, a clone
-        // is inevitable.
-        let mut _directories = self.resources.directories.clone();
-        _directories.sort_by(|a, b| a.parameters.path.cmp(&b.parameters.path));
+        let path = directory.parameters.path.display().to_string();
 
-        for directory in _directories.iter_mut() {
-            let path = directory.parameters.path.display().to_string();
+        // Check for uniqueness of the path parameter.
+        if !self
+            .temporary
+            .paths
+            .insert(directory.parameters.path.to_path_buf())
+        {
+            error!(
+                scope,
+                client:% = self.name,
+                resource = directory.kind(),
+                path;
+                "path `{}` appears multiple times, must be unique among resources of type `file`, `symlink` and `directory`",
+                path
+            );
 
-            // Check for uniqueness of the path parameter.
-            if !self
-                .temporary
-                .paths
-                .insert(directory.parameters.path.to_path_buf())
-            {
+            return Err(Terminate);
+        }
+
+        // Files (their paths) cannot be parents to directories.
+        // Check if any file conflicts with this directory in that regard.
+        if let Some(parent) = &directory.parameters.path.parent() {
+            if self.temporary.file_paths.contains(*parent) {
                 error!(
                     scope,
                     client:% = self.name,
                     resource = directory.kind(),
                     path;
-                    "path `{}` appears multiple times, must be unique among resources of type `file`, `symlink` and `directory`",
-                    path
+                    "file `{}` is found to be a parent of this directory, but files cannot be parents to directories",
+                    parent.display()
                 );
 
                 return Err(Terminate);
             }
+        }
 
-            // Files (their paths) cannot be parents to directories.
-            // Check if any file conflicts with this directory in that regard.
-            if let Some(parent) = &directory.parameters.path.parent() {
-                if self.temporary.file_paths.contains(*parent) {
-                    error!(
-                        scope,
-                        client:% = self.name,
-                        resource = directory.kind(),
-                        path;
-                        "file `{}` is found to be a parent of this directory, but files cannot be parents to directories",
-                        parent.display()
-                    );
+        // Save the paths of child nodes. This becomes relevant when
+        // the `purge` parameter is `true` and the directory must
+        // remove unmanaged child nodes it may contain.
+        for child in self
+            .resources
+            .iter()
+            .filter_map(|item| item.as_directory())
+            .filter(|d| {
+                d.parameters
+                    .path
+                    .parent()
+                    .is_some_and(|path| path == *directory.parameters.path)
+            })
+        {
+            directory.relationships.children.push(child.into());
+        }
 
-                    return Err(Terminate);
-                }
-            }
+        for child in self
+            .resources
+            .iter()
+            .filter_map(|item| item.as_file())
+            .filter(|f| {
+                f.parameters
+                    .path
+                    .parent()
+                    .is_some_and(|path| path == *directory.parameters.path)
+            })
+        {
+            directory.relationships.children.push(child.into());
+        }
 
-            // Save the paths of child nodes. This becomes relevant when
-            // the `purge` parameter is `true` and the directory must
-            // remove unmanaged child nodes it may contain.
-            for child in self.resources.iter().filter(|item| {
-                item.as_directory().is_some_and(|d| {
-                    d.parameters
-                        .path
-                        .parent()
-                        .is_some_and(|path| path == *directory.parameters.path)
-                })
-            }) {
-                directory.relationships.children.push(child.into());
-            }
+        for child in self
+            .resources
+            .iter()
+            .filter_map(|item| item.as_symlink())
+            .filter(|s| {
+                s.parameters
+                    .path
+                    .parent()
+                    .is_some_and(|path| path == *directory.parameters.path)
+            })
+        {
+            directory.relationships.children.push(child.into());
+        }
 
-            for child in self.resources.iter().filter(|item| {
-                item.as_file().is_some_and(|f| {
-                    f.parameters
-                        .path
-                        .parent()
-                        .is_some_and(|path| path == *directory.parameters.path)
-                })
-            }) {
-                directory.relationships.children.push(child.into());
-            }
+        for child in self
+            .resources
+            .iter()
+            .filter_map(|item| item.as_apt_preference())
+            .filter(|p| {
+                p.parameters
+                    .target
+                    .parent()
+                    .is_some_and(|path| path == *directory.parameters.path)
+            })
+        {
+            directory.relationships.children.push(child.into());
+        }
 
-            for child in self.resources.iter().filter(|item| {
-                item.as_symlink().is_some_and(|s| {
-                    s.parameters
-                        .path
-                        .parent()
-                        .is_some_and(|path| path == *directory.parameters.path)
-                })
-            }) {
-                directory.relationships.children.push(child.into());
-            }
+        // Save the metadata of user resources whose `home` directory
+        // matches this directory's `path`.
+        for user in self.resources.iter().filter(|item| {
+            item.as_user()
+                .is_some_and(|u| u.parameters.home == directory.parameters.path)
+        }) {
+            let metadata = directory.metadata();
+            let other = user.metadata().clone();
 
-            for child in self.resources.iter().filter(|item| {
-                item.as_apt_preference().is_some_and(|p| {
-                    p.parameters
-                        .target
-                        .parent()
-                        .is_some_and(|path| path == *directory.parameters.path)
-                })
-            }) {
-                directory.relationships.children.push(child.into());
-            }
+            self.temporary
+                .dependencies
+                .entry(metadata.id)
+                .or_default()
+                .insert(other.id);
 
-            // Save the metadata of user resources whose `home` directory
-            // matches this directory's `path`.
-            for user in self.resources.iter().filter(|item| {
-                item.as_user()
-                    .is_some_and(|u| u.parameters.home == directory.parameters.path)
-            }) {
-                let metadata = directory.metadata();
-                let other = user.metadata().clone();
+            directory.relationships.requires.push(other);
+        }
 
-                self.temporary
-                    .dependencies
-                    .entry(metadata.id)
-                    .or_default()
-                    .insert(other.id);
+        // Save the metadata of ancestral directories and symlinks
+        // that this directory depends on.
+        for ancestor in self.resources.iter().filter(|item| {
+            item.as_directory().is_some_and(|d| {
+                directory
+                    .parameters
+                    .path
+                    .ancestors()
+                    .skip(1)
+                    .any(|a| a == *d.parameters.path)
+            })
+        }) {
+            let metadata = directory.metadata();
+            let other = ancestor.metadata().clone();
 
-                directory.relationships.requires.push(other);
-            }
+            self.temporary
+                .dependencies
+                .entry(metadata.id)
+                .or_default()
+                .insert(other.id);
 
-            // Save the metadata of ancestral directories and symlinks
-            // that this directory depends on.
-            for ancestor in self.resources.iter().filter(|item| {
-                item.as_directory().is_some_and(|d| {
-                    directory
-                        .parameters
-                        .path
-                        .ancestors()
-                        .skip(1)
-                        .any(|a| a == *d.parameters.path)
-                })
-            }) {
-                let metadata = directory.metadata();
-                let other = ancestor.metadata().clone();
+            directory.relationships.requires.push(other);
+        }
 
-                self.temporary
-                    .dependencies
-                    .entry(metadata.id)
-                    .or_default()
-                    .insert(other.id);
+        for ancestor in self.resources.iter().filter(|item| {
+            item.as_symlink().is_some_and(|s| {
+                directory
+                    .parameters
+                    .path
+                    .ancestors()
+                    .any(|a| a == *s.parameters.path)
+            })
+        }) {
+            let metadata = directory.metadata();
+            let other = ancestor.metadata().clone();
 
-                directory.relationships.requires.push(other);
-            }
+            self.temporary
+                .dependencies
+                .entry(metadata.id)
+                .or_default()
+                .insert(other.id);
 
-            for ancestor in self.resources.iter().filter(|item| {
-                item.as_symlink().is_some_and(|s| {
-                    directory
-                        .parameters
-                        .path
-                        .ancestors()
-                        .any(|a| a == *s.parameters.path)
-                })
-            }) {
-                let metadata = directory.metadata();
-                let other = ancestor.metadata().clone();
+            directory.relationships.requires.push(other);
+        }
 
-                self.temporary
-                    .dependencies
-                    .entry(metadata.id)
-                    .or_default()
-                    .insert(other.id);
+        // Save the metadata of explicit dependencies that this
+        // directory should depend on.
+        for dependency in self
+            .temporary
+            .requires
+            .get(&directory.id())
+            .map(|c| c.as_slice())
+            .unwrap_or_default()
+        {
+            match self.resolve_dependency(dependency) {
+                Some(resource) => {
+                    if directory.may_depend_on(&resource) {
+                        let metadata = directory.metadata();
+                        let other = resource.metadata().clone();
 
-                directory.relationships.requires.push(other);
-            }
-
-            // Save the metadata of explicit dependencies that this
-            // directory should depend on.
-            for dependency in self
-                .temporary
-                .requires
-                .get(&directory.id())
-                .map(|c| c.as_slice())
-                .unwrap_or_default()
-            {
-                match self.resolve_dependency(dependency) {
-                    Some(resource) => {
-                        if directory.may_depend_on(&resource) {
-                            let metadata = directory.metadata();
-                            let other = resource.metadata().clone();
-
-                            if self.dependency_introduces_loop(other.id, metadata.id) {
-                                error!(
-                                    scope,
-                                    client:% = self.name,
-                                    resource = directory.kind(),
-                                    path;
-                                    "{} cannot depend on {} as it would introduce a dependency loop",
-                                    directory.repr(),
-                                    resource.repr()
-                                );
-
-                                return Err(Terminate);
-                            } else if self
-                                .temporary
-                                .dependencies
-                                .entry(metadata.id)
-                                .or_default()
-                                .insert(other.id)
-                            {
-                                directory.relationships.requires.push(metadata.clone());
-                            }
-                        } else {
+                        if self.dependency_introduces_loop(other.id, metadata.id) {
                             error!(
                                 scope,
                                 client:% = self.name,
                                 resource = directory.kind(),
                                 path;
-                                "{} cannot depend on {}",
+                                "{} cannot depend on {} as it would introduce a dependency loop",
                                 directory.repr(),
                                 resource.repr()
                             );
 
                             return Err(Terminate);
+                        } else if self
+                            .temporary
+                            .dependencies
+                            .entry(metadata.id)
+                            .or_default()
+                            .insert(other.id)
+                        {
+                            directory.relationships.requires.push(metadata.clone());
                         }
-                    }
-                    None => {
+                    } else {
                         error!(
                             scope,
                             client:% = self.name,
                             resource = directory.kind(),
                             path;
-                            "{} depends on {} which cannot be found",
+                            "{} cannot depend on {}",
                             directory.repr(),
-                            dependency.repr()
+                            resource.repr()
                         );
 
                         return Err(Terminate);
                     }
                 }
+                None => {
+                    error!(
+                        scope,
+                        client:% = self.name,
+                        resource = directory.kind(),
+                        path;
+                        "{} depends on {} which cannot be found",
+                        directory.repr(),
+                        dependency.repr()
+                    );
+
+                    return Err(Terminate);
+                }
             }
         }
-
-        self.resources.directories = _directories;
 
         Ok(())
     }
 
-    fn validate_symlinks(&mut self) -> Result<(), Terminate> {
+    fn validate_symlink(&mut self, symlink: &mut symlink::Symlink) -> Result<(), Terminate> {
         let scope = "validation";
 
-        // To iterate and modify symlink resources the collection
-        // must be cloned.
-        // Each resource is modified on the basis of other (symlink)
-        // resources, e.g. to validate dependencies.
-        // As such we need both a mutable object as well as immutable
-        // collections of resources to check against.
-        // Since ownerships rules need to be satisfied as well, a clone
-        // is inevitable.
-        let mut _symlinks = self.resources.symlinks.clone();
-        _symlinks.sort_by(|a, b| a.parameters.path.cmp(&b.parameters.path));
+        let path = symlink.parameters.path.display().to_string();
 
-        for symlink in _symlinks.iter_mut() {
-            let path = symlink.parameters.path.display().to_string();
+        // Check for uniqueness of the path parameter.
+        if !self
+            .temporary
+            .paths
+            .insert(symlink.parameters.path.to_path_buf())
+        {
+            error!(
+                scope,
+                client:% = self.name,
+                resource = symlink.kind(),
+                path;
+                "path `{}` appears multiple times, must be unique among resources of type `file`, `symlink` and `directory`",
+                path
+            );
 
-            // Check for uniqueness of the path parameter.
-            if !self
-                .temporary
-                .paths
-                .insert(symlink.parameters.path.to_path_buf())
-            {
+            return Err(Terminate);
+        }
+
+        // Files (their paths) cannot be parents to symlinks.
+        // Check if any file conflicts with this symlink in that regard.
+        if let Some(parent) = &symlink.parameters.path.parent() {
+            if self.temporary.file_paths.contains(*parent) {
                 error!(
                     scope,
                     client:% = self.name,
                     resource = symlink.kind(),
                     path;
-                    "path `{}` appears multiple times, must be unique among resources of type `file`, `symlink` and `directory`",
-                    path
+                    "file `{}` is found to be a parent of this symlink, but files cannot be parents to symlinks",
+                    parent.display()
                 );
 
                 return Err(Terminate);
             }
+        }
 
-            // Files (their paths) cannot be parents to symlinks.
-            // Check if any file conflicts with this symlink in that regard.
-            if let Some(parent) = &symlink.parameters.path.parent() {
-                if self.temporary.file_paths.contains(*parent) {
-                    error!(
-                        scope,
-                        client:% = self.name,
-                        resource = symlink.kind(),
-                        path;
-                        "file `{}` is found to be a parent of this symlink, but files cannot be parents to symlinks",
-                        parent.display()
-                    );
+        // Save metadata of ancestral directories that the symlink
+        // depends on.
+        for ancestor in self.resources.iter().filter(|item| {
+            item.as_directory().is_some_and(|d| {
+                symlink
+                    .parameters
+                    .path
+                    .ancestors()
+                    .any(|a| a == *d.parameters.path)
+            })
+        }) {
+            let metadata = symlink.metadata();
+            let other = ancestor.metadata().clone();
 
-                    return Err(Terminate);
-                }
-            }
+            self.temporary
+                .dependencies
+                .entry(metadata.id)
+                .or_default()
+                .insert(other.id);
 
-            // Save metadata of ancestral directories that the symlink
-            // depends on.
-            for ancestor in self.resources.iter().filter(|item| {
-                item.as_directory().is_some_and(|d| {
-                    symlink
-                        .parameters
-                        .path
-                        .ancestors()
-                        .any(|a| a == *d.parameters.path)
-                })
-            }) {
-                let metadata = symlink.metadata();
-                let other = ancestor.metadata().clone();
+            symlink.relationships.requires.push(other);
+        }
 
-                self.temporary
-                    .dependencies
-                    .entry(metadata.id)
-                    .or_default()
-                    .insert(other.id);
+        // Save metadata of ancestral symlinks that this symlink
+        // depends on.
+        for ancestor in self.resources.iter().filter(|item| {
+            item.as_symlink().is_some_and(|s| {
+                symlink
+                    .parameters
+                    .path
+                    .ancestors()
+                    .skip(1)
+                    .any(|a| a == *s.parameters.path)
+            })
+        }) {
+            let metadata = symlink.metadata();
+            let other = ancestor.metadata().clone();
 
-                symlink.relationships.requires.push(other);
-            }
+            self.temporary
+                .dependencies
+                .entry(metadata.id)
+                .or_default()
+                .insert(other.id);
 
-            // Save metadata of ancestral symlinks that this symlink
-            // depends on.
-            for ancestor in self.resources.iter().filter(|item| {
-                item.as_symlink().is_some_and(|s| {
-                    symlink
-                        .parameters
-                        .path
-                        .ancestors()
-                        .skip(1)
-                        .any(|a| a == *s.parameters.path)
-                })
-            }) {
-                let metadata = symlink.metadata();
-                let other = ancestor.metadata().clone();
+            symlink.relationships.requires.push(other);
+        }
 
-                self.temporary
-                    .dependencies
-                    .entry(metadata.id)
-                    .or_default()
-                    .insert(other.id);
-
-                symlink.relationships.requires.push(other);
-            }
-
-            // Save metadata of the target that this symlink points to.
-            if let Some(other) = self
+        // Save metadata of the target that this symlink points to.
+        if let Some(other) = self
+            .resources
+            .iter()
+            .find(|item| {
+                item.as_directory()
+                    .is_some_and(|d| d.parameters.path == symlink.parameters.target)
+            })
+            .map(|d| d.metadata().clone())
+            .or(self
                 .resources
                 .iter()
                 .find(|item| {
-                    item.as_directory()
-                        .is_some_and(|d| d.parameters.path == symlink.parameters.target)
+                    item.as_file()
+                        .is_some_and(|f| f.parameters.path == symlink.parameters.target)
                 })
-                .map(|d| d.metadata().clone())
-                .or(self
-                    .resources
-                    .iter()
-                    .find(|item| {
-                        item.as_file()
-                            .is_some_and(|f| f.parameters.path == symlink.parameters.target)
-                    })
-                    .map(|f| f.metadata().clone()))
-            {
-                let metadata = symlink.metadata();
+                .map(|f| f.metadata().clone()))
+        {
+            let metadata = symlink.metadata();
 
-                self.temporary
-                    .dependencies
-                    .entry(metadata.id)
-                    .or_default()
-                    .insert(other.id);
+            self.temporary
+                .dependencies
+                .entry(metadata.id)
+                .or_default()
+                .insert(other.id);
 
-                symlink.relationships.requires.push(other);
-            }
+            symlink.relationships.requires.push(other);
+        }
 
-            // Save the metadata of explicit dependencies that this
-            // symlink should depend on.
-            for dependency in self
-                .temporary
-                .requires
-                .get(&symlink.id())
-                .map(|c| c.as_slice())
-                .unwrap_or_default()
-            {
-                match self.resolve_dependency(dependency) {
-                    Some(resource) => {
-                        if symlink.may_depend_on(&resource) {
-                            let metadata = symlink.metadata();
-                            let other = resource.metadata().clone();
+        // Save the metadata of explicit dependencies that this
+        // symlink should depend on.
+        for dependency in self
+            .temporary
+            .requires
+            .get(&symlink.id())
+            .map(|c| c.as_slice())
+            .unwrap_or_default()
+        {
+            match self.resolve_dependency(dependency) {
+                Some(resource) => {
+                    if symlink.may_depend_on(&resource) {
+                        let metadata = symlink.metadata();
+                        let other = resource.metadata().clone();
 
-                            if self.dependency_introduces_loop(other.id, metadata.id) {
-                                error!(
-                                    scope,
-                                    client:% = self.name,
-                                    resource = symlink.kind(),
-                                    path;
-                                    "{} cannot depend on {} as it would introduce a dependency loop",
-                                    symlink.repr(),
-                                    resource.repr()
-                                );
-
-                                return Err(Terminate);
-                            } else if self
-                                .temporary
-                                .dependencies
-                                .entry(metadata.id)
-                                .or_default()
-                                .insert(other.id)
-                            {
-                                symlink.relationships.requires.push(metadata.clone());
-                            }
-                        } else {
+                        if self.dependency_introduces_loop(other.id, metadata.id) {
                             error!(
                                 scope,
                                 client:% = self.name,
                                 resource = symlink.kind(),
                                 path;
-                                "{} cannot depend on {}",
+                                "{} cannot depend on {} as it would introduce a dependency loop",
                                 symlink.repr(),
                                 resource.repr()
                             );
 
                             return Err(Terminate);
+                        } else if self
+                            .temporary
+                            .dependencies
+                            .entry(metadata.id)
+                            .or_default()
+                            .insert(other.id)
+                        {
+                            symlink.relationships.requires.push(metadata.clone());
                         }
-                    }
-                    None => {
+                    } else {
                         error!(
                             scope,
                             client:% = self.name,
                             resource = symlink.kind(),
                             path;
-                            "{} depends on {} which cannot be found",
+                            "{} cannot depend on {}",
                             symlink.repr(),
-                            dependency.repr()
+                            resource.repr()
                         );
 
                         return Err(Terminate);
                     }
                 }
+                None => {
+                    error!(
+                        scope,
+                        client:% = self.name,
+                        resource = symlink.kind(),
+                        path;
+                        "{} depends on {} which cannot be found",
+                        symlink.repr(),
+                        dependency.repr()
+                    );
+
+                    return Err(Terminate);
+                }
             }
         }
-
-        self.resources.symlinks = _symlinks;
 
         Ok(())
     }
 
-    fn validate_hosts(&mut self) -> Result<(), Terminate> {
+    fn validate_host(&mut self, host: &mut host::Host) -> Result<(), Terminate> {
         let scope = "validation";
 
-        // Save host IP addresses to check for their uniqueness.
-        let mut ip_addresses = HashSet::new();
+        let ip_address = host.parameters.ip_address.to_string();
 
-        // To iterate and modify host resources the collection must
-        // be cloned.
-        // Each resource is modified on the basis of other (host)
-        // resources, e.g. to validate dependencies.
-        // As such we need both a mutable object as well as immutable
-        // collections of resources to check against.
-        // Since ownerships rules need to be satisfied as well, a clone
-        // is inevitable.
-        let mut _hosts = self.resources.hosts.clone();
+        // Check for uniqueness of the IP address parameter.
+        if !self
+            .temporary
+            .ip_addresses
+            .insert(host.parameters.ip_address)
+        {
+            error!(
+                scope,
+                client:% = self.name,
+                resource = host.kind(),
+                ip_address;
+                "IP address `{}` appears multiple times, must be unique among host entries",
+                ip_address
+            );
 
-        for host in _hosts.iter_mut() {
-            let ip_address = host.parameters.ip_address.to_string();
+            return Err(Terminate);
+        }
 
-            // Check for uniqueness of the IP address parameter.
-            if !ip_addresses.insert(host.parameters.ip_address) {
+        // Save the metadata of the target file or symlink for the host
+        // entry.
+        // Also check if the target is a file resource that sets its
+        // content  or source parameter. This combination is not supported.
+        if let Some(file) = self
+            .resources
+            .iter()
+            .filter_map(|item| item.as_file())
+            .find(|f| *f.parameters.path == host.parameters.target)
+        {
+            if file.parameters.content.is_some() || file.parameters.source.is_some() {
                 error!(
                     scope,
                     client:% = self.name,
                     resource = host.kind(),
                     ip_address;
-                    "IP address `{}` appears multiple times, must be unique among host entries",
-                    ip_address
+                    "there cannot be both a {} resource and a {} whose `content` or `source` parameters are set",
+                    host.repr(),
+                    file.repr()
                 );
 
                 return Err(Terminate);
-            }
-
-            // Save the metadata of the target file or symlink for the host
-            // entry.
-            // Also check if the target is a file resource that sets its
-            // content  or source parameter. This combination is not supported.
-            if let Some(file) = self
-                .resources
-                .iter()
-                .filter_map(|item| item.as_file())
-                .find(|f| *f.parameters.path == host.parameters.target)
-            {
-                if file.parameters.content.is_some() || file.parameters.source.is_some() {
-                    error!(
-                        scope,
-                        client:% = self.name,
-                        resource = host.kind(),
-                        ip_address;
-                        "there cannot be both a {} resource and a {} whose `content` or `source` parameters are set",
-                        host.repr(),
-                        file.repr()
-                    );
-
-                    return Err(Terminate);
-                } else {
-                    let metadata = host.metadata();
-                    let other = file.metadata().clone();
-
-                    self.temporary
-                        .dependencies
-                        .entry(metadata.id)
-                        .or_default()
-                        .insert(other.id);
-
-                    host.relationships.requires.push(other);
-                }
-            }
-
-            if let Some(symlink) = self.resources.iter().find(|item| {
-                item.as_symlink()
-                    .is_some_and(|s| *s.parameters.path == host.parameters.target)
-            }) {
+            } else {
                 let metadata = host.metadata();
-                let other = symlink.metadata().clone();
+                let other = file.metadata().clone();
 
                 self.temporary
                     .dependencies
@@ -1051,385 +1041,347 @@ impl Client {
 
                 host.relationships.requires.push(other);
             }
+        }
 
-            // Save the metadata of explicit dependencies that this
-            // host should depend on.
-            for dependency in self
-                .temporary
-                .requires
-                .get(&host.id())
-                .map(|c| c.as_slice())
-                .unwrap_or_default()
-            {
-                match self.resolve_dependency(dependency) {
-                    Some(resource) => {
-                        if host.may_depend_on(&resource) {
-                            let metadata = host.metadata();
-                            let other = resource.metadata().clone();
+        if let Some(symlink) = self.resources.iter().find(|item| {
+            item.as_symlink()
+                .is_some_and(|s| *s.parameters.path == host.parameters.target)
+        }) {
+            let metadata = host.metadata();
+            let other = symlink.metadata().clone();
 
-                            if self.dependency_introduces_loop(other.id, metadata.id) {
-                                error!(
-                                    scope,
-                                    client:% = self.name,
-                                    resource = host.kind(),
-                                    ip_address;
-                                    "{} cannot depend on {} as it would introduce a dependency loop",
-                                    host.repr(),
-                                    resource.repr()
-                                );
+            self.temporary
+                .dependencies
+                .entry(metadata.id)
+                .or_default()
+                .insert(other.id);
 
-                                return Err(Terminate);
-                            } else if self
-                                .temporary
-                                .dependencies
-                                .entry(metadata.id)
-                                .or_default()
-                                .insert(other.id)
-                            {
-                                host.relationships.requires.push(metadata.clone());
-                            }
-                        } else {
+            host.relationships.requires.push(other);
+        }
+
+        // Save the metadata of explicit dependencies that this
+        // host should depend on.
+        for dependency in self
+            .temporary
+            .requires
+            .get(&host.id())
+            .map(|c| c.as_slice())
+            .unwrap_or_default()
+        {
+            match self.resolve_dependency(dependency) {
+                Some(resource) => {
+                    if host.may_depend_on(&resource) {
+                        let metadata = host.metadata();
+                        let other = resource.metadata().clone();
+
+                        if self.dependency_introduces_loop(other.id, metadata.id) {
                             error!(
                                 scope,
                                 client:% = self.name,
                                 resource = host.kind(),
                                 ip_address;
-                                "{} cannot depend on {}",
+                                "{} cannot depend on {} as it would introduce a dependency loop",
                                 host.repr(),
                                 resource.repr()
                             );
 
                             return Err(Terminate);
+                        } else if self
+                            .temporary
+                            .dependencies
+                            .entry(metadata.id)
+                            .or_default()
+                            .insert(other.id)
+                        {
+                            host.relationships.requires.push(metadata.clone());
                         }
-                    }
-                    None => {
+                    } else {
                         error!(
                             scope,
                             client:% = self.name,
                             resource = host.kind(),
                             ip_address;
-                            "{} depends on {} which cannot be found",
+                            "{} cannot depend on {}",
                             host.repr(),
-                            dependency.repr()
+                            resource.repr()
                         );
 
                         return Err(Terminate);
                     }
                 }
+                None => {
+                    error!(
+                        scope,
+                        client:% = self.name,
+                        resource = host.kind(),
+                        ip_address;
+                        "{} depends on {} which cannot be found",
+                        host.repr(),
+                        dependency.repr()
+                    );
+
+                    return Err(Terminate);
+                }
             }
         }
-
-        self.resources.hosts = _hosts;
 
         Ok(())
     }
 
-    fn validate_groups(&mut self) -> Result<(), Terminate> {
+    fn validate_group(&mut self, group: &mut group::Group) -> Result<(), Terminate> {
         let scope = "validation";
 
-        // Save group names to check for their uniqueness.
-        let mut names = HashSet::new();
+        let name = group.parameters.name.to_string();
 
-        // To iterate and modify group resources the collection must
-        // be cloned.
-        // Each resource is modified on the basis of other (group)
-        // resources, e.g. to validate dependencies.
-        // As such we need both a mutable object as well as immutable
-        // collections of resources to check against.
-        // Since ownerships rules need to be satisfied as well, a clone
-        // is inevitable.
-        let mut _groups = self.resources.groups.clone();
+        // Check for uniqueness of the name parameter.
+        if !self
+            .temporary
+            .group_names
+            .insert(group.parameters.name.clone())
+        {
+            error!(
+                scope,
+                client:% = self.name,
+                resource = group.kind(),
+                name;
+                "group name `{}` appears multiple times, group names must be unique",
+                name
+            );
 
-        for group in _groups.iter_mut() {
-            let name = group.parameters.name.to_string();
+            return Err(Terminate);
+        }
 
-            // Check for uniqueness of the name parameter.
-            if !names.insert(group.parameters.name.clone()) {
-                error!(
-                    scope,
-                    client:% = self.name,
-                    resource = group.kind(),
-                    name;
-                    "group name `{}` appears multiple times, group names must be unique",
-                    name
-                );
+        // Add users as dependency to a group if the group is a
+        // user's primary group.
+        // Primary groups must be handled after users as user creation
+        // usually involves creating the primary group as well.
+        for user in self.resources.iter().filter_map(|item| item.as_user()) {
+            if user.parameters.group == group.parameters.name {
+                let metadata = group.metadata();
+                let other = user.metadata().clone();
 
-                return Err(Terminate);
+                self.temporary
+                    .dependencies
+                    .entry(metadata.id)
+                    .or_default()
+                    .insert(other.id);
+
+                group.relationships.requires.push(other);
             }
+        }
 
-            // Add users as dependency to a group if the group is a
-            // user's primary group.
-            // Primary groups must be handled after users as user creation
-            // usually involves creating the primary group as well.
-            for user in &self.resources.users {
-                if user.parameters.group == group.parameters.name {
-                    let metadata = group.metadata();
-                    let other = user.metadata().clone();
+        // Save the metadata of explicit dependencies that this
+        // group should depend on.
+        for dependency in self
+            .temporary
+            .requires
+            .get(&group.id())
+            .map(|c| c.as_slice())
+            .unwrap_or_default()
+        {
+            match self.resolve_dependency(dependency) {
+                Some(resource) => {
+                    if group.may_depend_on(&resource) {
+                        let metadata = group.metadata();
+                        let other = resource.metadata().clone();
 
-                    self.temporary
-                        .dependencies
-                        .entry(metadata.id)
-                        .or_default()
-                        .insert(other.id);
-
-                    group.relationships.requires.push(other);
-                }
-            }
-
-            // Save the metadata of explicit dependencies that this
-            // group should depend on.
-            for dependency in self
-                .temporary
-                .requires
-                .get(&group.id())
-                .map(|c| c.as_slice())
-                .unwrap_or_default()
-            {
-                match self.resolve_dependency(dependency) {
-                    Some(resource) => {
-                        if group.may_depend_on(&resource) {
-                            let metadata = group.metadata();
-                            let other = resource.metadata().clone();
-
-                            if self.dependency_introduces_loop(other.id, metadata.id) {
-                                error!(
-                                    scope,
-                                    client:% = self.name,
-                                    resource = group.kind(),
-                                    name;
-                                    "{} cannot depend on {} as it would introduce a dependency loop",
-                                    group.repr(),
-                                    resource.repr()
-                                );
-
-                                return Err(Terminate);
-                            } else if self
-                                .temporary
-                                .dependencies
-                                .entry(metadata.id)
-                                .or_default()
-                                .insert(other.id)
-                            {
-                                group.relationships.requires.push(metadata.clone());
-                            }
-                        } else {
+                        if self.dependency_introduces_loop(other.id, metadata.id) {
                             error!(
                                 scope,
                                 client:% = self.name,
                                 resource = group.kind(),
                                 name;
-                                "{} cannot depend on {}",
+                                "{} cannot depend on {} as it would introduce a dependency loop",
                                 group.repr(),
                                 resource.repr()
                             );
 
                             return Err(Terminate);
+                        } else if self
+                            .temporary
+                            .dependencies
+                            .entry(metadata.id)
+                            .or_default()
+                            .insert(other.id)
+                        {
+                            group.relationships.requires.push(metadata.clone());
                         }
-                    }
-                    None => {
+                    } else {
                         error!(
                             scope,
                             client:% = self.name,
                             resource = group.kind(),
                             name;
-                            "{} depends on {} which cannot be found",
+                            "{} cannot depend on {}",
                             group.repr(),
-                            dependency.repr()
+                            resource.repr()
                         );
 
                         return Err(Terminate);
                     }
                 }
+                None => {
+                    error!(
+                        scope,
+                        client:% = self.name,
+                        resource = group.kind(),
+                        name;
+                        "{} depends on {} which cannot be found",
+                        group.repr(),
+                        dependency.repr()
+                    );
+
+                    return Err(Terminate);
+                }
             }
         }
-
-        self.resources.groups = _groups;
 
         Ok(())
     }
 
-    fn validate_users(&mut self) -> Result<(), Terminate> {
+    fn validate_user(&mut self, user: &mut user::User) -> Result<(), Terminate> {
         let scope = "validation";
 
-        // Save user names to check for their uniqueness.
-        let mut names = HashSet::new();
+        let name = user.parameters.name.to_string();
 
-        // To iterate and modify user resources the collection must
-        // be cloned.
-        // Each resource is modified on the basis of other (user)
-        // resources, e.g. to validate dependencies.
-        // As such we need both a mutable object as well as immutable
-        // collections of resources to check against.
-        // Since ownerships rules need to be satisfied as well, a clone
-        // is inevitable.
-        let mut _users = self.resources.users.clone();
+        // Check for uniqueness of the name parameter.
+        if !self
+            .temporary
+            .user_names
+            .insert(user.parameters.name.clone())
+        {
+            error!(
+                scope,
+                client:% = self.name,
+                resource = user.kind(),
+                name;
+                "user name `{}` appears multiple times, user names must be unique",
+                name
+            );
 
-        for user in _users.iter_mut() {
-            let name = user.parameters.name.to_string();
+            return Err(Terminate);
+        }
 
-            // Check for uniqueness of the name parameter.
-            if !names.insert(user.parameters.name.clone()) {
-                error!(
-                    scope,
-                    client:% = self.name,
-                    resource = user.kind(),
-                    name;
-                    "user name `{}` appears multiple times, user names must be unique",
-                    name
-                );
+        // Add group resources as dependencies if their name appears
+        // in the list of user group names.
+        // Supplementary groups must be processed before users.
+        for name in &user.parameters.groups {
+            if let Some(group) = self.resources.iter().find(|item| {
+                item.as_group()
+                    .is_some_and(|group| group.parameters.name == *name)
+            }) {
+                let metadata = user.metadata();
+                let other = group.metadata().clone();
 
-                return Err(Terminate);
+                self.temporary
+                    .dependencies
+                    .entry(metadata.id)
+                    .or_default()
+                    .insert(other.id);
+
+                user.relationships.requires.push(other);
             }
+        }
 
-            // Add group resources as dependencies if their name appears
-            // in the list of user group names.
-            // Supplementary groups must be processed before users.
-            for name in &user.parameters.groups {
-                if let Some(group) = self.resources.iter().find(|item| {
-                    item.as_group()
-                        .is_some_and(|group| group.parameters.name == *name)
-                }) {
-                    let metadata = user.metadata();
-                    let other = group.metadata().clone();
+        // Save the metadata of explicit dependencies that this
+        // user should depend on.
+        for dependency in self
+            .temporary
+            .requires
+            .get(&user.id())
+            .map(|c| c.as_slice())
+            .unwrap_or_default()
+        {
+            match self.resolve_dependency(dependency) {
+                Some(resource) => {
+                    if user.may_depend_on(&resource) {
+                        let metadata = user.metadata();
+                        let other = resource.metadata().clone();
 
-                    self.temporary
-                        .dependencies
-                        .entry(metadata.id)
-                        .or_default()
-                        .insert(other.id);
-
-                    user.relationships.requires.push(other);
-                }
-            }
-
-            // Save the metadata of explicit dependencies that this
-            // user should depend on.
-            for dependency in self
-                .temporary
-                .requires
-                .get(&user.id())
-                .map(|c| c.as_slice())
-                .unwrap_or_default()
-            {
-                match self.resolve_dependency(dependency) {
-                    Some(resource) => {
-                        if user.may_depend_on(&resource) {
-                            let metadata = user.metadata();
-                            let other = resource.metadata().clone();
-
-                            if self.dependency_introduces_loop(other.id, metadata.id) {
-                                error!(
-                                    scope,
-                                    client:% = self.name,
-                                    resource = user.kind(),
-                                    name;
-                                    "{} cannot depend on {} as it would introduce a dependency loop",
-                                    user.repr(),
-                                    resource.repr()
-                                );
-
-                                return Err(Terminate);
-                            } else if self
-                                .temporary
-                                .dependencies
-                                .entry(metadata.id)
-                                .or_default()
-                                .insert(other.id)
-                            {
-                                user.relationships.requires.push(metadata.clone());
-                            }
-                        } else {
+                        if self.dependency_introduces_loop(other.id, metadata.id) {
                             error!(
                                 scope,
                                 client:% = self.name,
                                 resource = user.kind(),
                                 name;
-                                "{} cannot depend on {}",
+                                "{} cannot depend on {} as it would introduce a dependency loop",
                                 user.repr(),
                                 resource.repr()
                             );
 
                             return Err(Terminate);
+                        } else if self
+                            .temporary
+                            .dependencies
+                            .entry(metadata.id)
+                            .or_default()
+                            .insert(other.id)
+                        {
+                            user.relationships.requires.push(metadata.clone());
                         }
-                    }
-                    None => {
+                    } else {
                         error!(
                             scope,
                             client:% = self.name,
                             resource = user.kind(),
                             name;
-                            "{} depends on {} which cannot be found",
+                            "{} cannot depend on {}",
                             user.repr(),
-                            dependency.repr()
+                            resource.repr()
                         );
 
                         return Err(Terminate);
                     }
                 }
+                None => {
+                    error!(
+                        scope,
+                        client:% = self.name,
+                        resource = user.kind(),
+                        name;
+                        "{} depends on {} which cannot be found",
+                        user.repr(),
+                        dependency.repr()
+                    );
+
+                    return Err(Terminate);
+                }
             }
         }
-
-        self.resources.users = _users;
 
         Ok(())
     }
 
-    fn validate_resolv_conf(&mut self) -> Result<(), Terminate> {
+    fn validate_resolv_conf(
+        &mut self,
+        resolv_conf: &mut resolv_conf::ResolvConf,
+    ) -> Result<(), Terminate> {
         let scope = "validation";
 
-        // To modify the resolv.conf resource it must be cloned.
-        // Each resource is modified on the basis of other resources,
-        // e.g. to validate dependencies.
-        // As such we need both a mutable object as well as an immutable
-        // resource catalog to check against.
-        // Since ownerships rules need to be satisfied as well, a clone
-        // is inevitable.
-        let mut _resolv_conf = self.resources.resolv_conf.clone();
+        // Save the metadata of the target file or symlink corresponding to the
+        // /etc/resolv.conf file.
+        // Also check if the target is a file resource that sets its
+        // content or source parameter. This combination is not supported.
+        if let Some(file) = self
+            .resources
+            .iter()
+            .filter_map(|item| item.as_file())
+            .find(|f| *f.parameters.path == resolv_conf.parameters.target)
+        {
+            if file.parameters.content.is_some() || file.parameters.source.is_some() {
+                error!(
+                    scope,
+                    client:% = self.name,
+                    resource = resolv_conf.kind();
+                    "there cannot be both a {} resource and a {} whose `content` or `source` parameters are set",
+                    resolv_conf.repr(),
+                    file.repr()
+                );
 
-        self.resources.resolv_conf = None;
-
-        if let Some(mut resolv_conf) = _resolv_conf {
-            // Save the metadata of the target file or symlink corresponding to the
-            // /etc/resolv.conf file.
-            // Also check if the target is a file resource that sets its
-            // content or source parameter. This combination is not supported.
-            if let Some(file) = self
-                .resources
-                .iter()
-                .filter_map(|item| item.as_file())
-                .find(|f| *f.parameters.path == resolv_conf.parameters.target)
-            {
-                if file.parameters.content.is_some() || file.parameters.source.is_some() {
-                    error!(
-                        scope,
-                        client:% = self.name,
-                        resource = resolv_conf.kind();
-                        "there cannot be both a {} resource and a {} whose `content` or `source` parameters are set",
-                        resolv_conf.repr(),
-                        file.repr()
-                    );
-
-                    return Err(Terminate);
-                } else {
-                    let metadata = resolv_conf.metadata();
-                    let other = file.metadata().clone();
-
-                    self.temporary
-                        .dependencies
-                        .entry(metadata.id)
-                        .or_default()
-                        .insert(other.id);
-
-                    resolv_conf.relationships.requires.push(other);
-                }
-            }
-
-            if let Some(symlink) = self.resources.iter().find(|item| {
-                item.as_symlink()
-                    .is_some_and(|s| *s.parameters.path == resolv_conf.parameters.target)
-            }) {
+                return Err(Terminate);
+            } else {
                 let metadata = resolv_conf.metadata();
-                let other = symlink.metadata().clone();
+                let other = file.metadata().clone();
 
                 self.temporary
                     .dependencies
@@ -1439,342 +1391,336 @@ impl Client {
 
                 resolv_conf.relationships.requires.push(other);
             }
+        }
 
-            // Save the metadata of explicit dependencies that this
-            // resource should depend on.
-            for dependency in self
-                .temporary
-                .requires
-                .get(&resolv_conf.id())
-                .map(|c| c.as_slice())
-                .unwrap_or_default()
-            {
-                match self.resolve_dependency(dependency) {
-                    Some(resource) => {
-                        if resolv_conf.may_depend_on(&resource) {
-                            let metadata = resolv_conf.metadata();
-                            let other = resource.metadata().clone();
+        if let Some(symlink) = self.resources.iter().find(|item| {
+            item.as_symlink()
+                .is_some_and(|s| *s.parameters.path == resolv_conf.parameters.target)
+        }) {
+            let metadata = resolv_conf.metadata();
+            let other = symlink.metadata().clone();
 
-                            if self.dependency_introduces_loop(other.id, metadata.id) {
-                                error!(
-                                    scope,
-                                    client:% = self.name,
-                                    resource = resolv_conf.kind();
-                                    "{} cannot depend on {} as it would introduce a dependency loop",
-                                    resolv_conf.repr(),
-                                    resource.repr()
-                                );
+            self.temporary
+                .dependencies
+                .entry(metadata.id)
+                .or_default()
+                .insert(other.id);
 
-                                return Err(Terminate);
-                            } else if self
-                                .temporary
-                                .dependencies
-                                .entry(metadata.id)
-                                .or_default()
-                                .insert(other.id)
-                            {
-                                resolv_conf.relationships.requires.push(metadata.clone());
-                            }
-                        } else {
+            resolv_conf.relationships.requires.push(other);
+        }
+
+        // Save the metadata of explicit dependencies that this
+        // resource should depend on.
+        for dependency in self
+            .temporary
+            .requires
+            .get(&resolv_conf.id())
+            .map(|c| c.as_slice())
+            .unwrap_or_default()
+        {
+            match self.resolve_dependency(dependency) {
+                Some(resource) => {
+                    if resolv_conf.may_depend_on(&resource) {
+                        let metadata = resolv_conf.metadata();
+                        let other = resource.metadata().clone();
+
+                        if self.dependency_introduces_loop(other.id, metadata.id) {
                             error!(
                                 scope,
                                 client:% = self.name,
                                 resource = resolv_conf.kind();
-                                "{} cannot depend on {}",
+                                "{} cannot depend on {} as it would introduce a dependency loop",
                                 resolv_conf.repr(),
                                 resource.repr()
                             );
 
                             return Err(Terminate);
+                        } else if self
+                            .temporary
+                            .dependencies
+                            .entry(metadata.id)
+                            .or_default()
+                            .insert(other.id)
+                        {
+                            resolv_conf.relationships.requires.push(metadata.clone());
                         }
-                    }
-                    None => {
+                    } else {
                         error!(
                             scope,
                             client:% = self.name,
                             resource = resolv_conf.kind();
-                            "{} depends on {} which cannot be found",
+                            "{} cannot depend on {}",
                             resolv_conf.repr(),
-                            dependency.repr()
+                            resource.repr()
                         );
 
                         return Err(Terminate);
                     }
                 }
-            }
+                None => {
+                    error!(
+                        scope,
+                        client:% = self.name,
+                        resource = resolv_conf.kind();
+                        "{} depends on {} which cannot be found",
+                        resolv_conf.repr(),
+                        dependency.repr()
+                    );
 
-            self.resources.resolv_conf = Some(resolv_conf);
+                    return Err(Terminate);
+                }
+            }
         }
 
         Ok(())
     }
 
-    fn validate_apt_packages(&mut self) -> Result<(), Terminate> {
+    fn validate_apt_package(
+        &mut self,
+        package: &mut apt::package::Package,
+    ) -> Result<(), Terminate> {
         let scope = "validation";
 
-        // Save package names to check for their uniqueness.
-        let mut names = HashSet::new();
+        let name = package.parameters.name.to_string();
 
-        // To iterate and modify `apt::package` resources the collection
-        // must be cloned.
-        // Each resource is modified on the basis of other (`apt::package`)
-        // resources, e.g. to validate dependencies.
-        // As such we need both a mutable object as well as immutable
-        // collections of resources to check against.
-        // Since ownerships rules need to be satisfied as well, a clone
-        // is inevitable.
-        let mut _apt_packages = self.resources.apt_packages.clone();
+        // Check for uniqueness of the name parameter.
+        if !self
+            .temporary
+            .package_names
+            .insert(package.parameters.name.clone())
+        {
+            error!(
+                scope,
+                client:% = self.name,
+                resource = package.kind(),
+                name;
+                "package name `{}` appears multiple times, package names must be unique",
+                name
+            );
 
-        for package in _apt_packages.iter_mut() {
-            let name = package.parameters.name.to_string();
+            return Err(Terminate);
+        }
 
-            // Check for uniqueness of the name parameter.
-            if !names.insert(package.parameters.name.clone()) {
-                error!(
-                    scope,
-                    client:% = self.name,
-                    resource = package.kind(),
-                    name;
-                    "package name `{}` appears multiple times, package names must be unique",
-                    name
-                );
+        // Save the metadata of explicit dependencies that this
+        // `apt::package` should depend on.
+        for dependency in self
+            .temporary
+            .requires
+            .get(&package.id())
+            .map(|c| c.as_slice())
+            .unwrap_or_default()
+        {
+            match self.resolve_dependency(dependency) {
+                Some(resource) => {
+                    if package.may_depend_on(&resource) {
+                        let metadata = package.metadata();
+                        let other = resource.metadata().clone();
 
-                return Err(Terminate);
-            }
-
-            // Save the metadata of explicit dependencies that this
-            // `apt::package` should depend on.
-            for dependency in self
-                .temporary
-                .requires
-                .get(&package.id())
-                .map(|c| c.as_slice())
-                .unwrap_or_default()
-            {
-                match self.resolve_dependency(dependency) {
-                    Some(resource) => {
-                        if package.may_depend_on(&resource) {
-                            let metadata = package.metadata();
-                            let other = resource.metadata().clone();
-
-                            if self.dependency_introduces_loop(other.id, metadata.id) {
-                                error!(
-                                    scope,
-                                    client:% = self.name,
-                                    resource = package.kind(),
-                                    name;
-                                    "{} cannot depend on {} as it would introduce a dependency loop",
-                                    package.repr(),
-                                    resource.repr()
-                                );
-
-                                return Err(Terminate);
-                            } else if self
-                                .temporary
-                                .dependencies
-                                .entry(metadata.id)
-                                .or_default()
-                                .insert(other.id)
-                            {
-                                package.relationships.requires.push(metadata.clone());
-                            }
-                        } else {
+                        if self.dependency_introduces_loop(other.id, metadata.id) {
                             error!(
                                 scope,
                                 client:% = self.name,
                                 resource = package.kind(),
                                 name;
-                                "{} cannot depend on {}",
+                                "{} cannot depend on {} as it would introduce a dependency loop",
                                 package.repr(),
                                 resource.repr()
                             );
 
                             return Err(Terminate);
+                        } else if self
+                            .temporary
+                            .dependencies
+                            .entry(metadata.id)
+                            .or_default()
+                            .insert(other.id)
+                        {
+                            package.relationships.requires.push(metadata.clone());
                         }
-                    }
-                    None => {
+                    } else {
                         error!(
                             scope,
                             client:% = self.name,
                             resource = package.kind(),
                             name;
-                            "{} depends on {} which cannot be found",
+                            "{} cannot depend on {}",
                             package.repr(),
-                            dependency.repr()
+                            resource.repr()
                         );
 
                         return Err(Terminate);
                     }
                 }
+                None => {
+                    error!(
+                        scope,
+                        client:% = self.name,
+                        resource = package.kind(),
+                        name;
+                        "{} depends on {} which cannot be found",
+                        package.repr(),
+                        dependency.repr()
+                    );
+
+                    return Err(Terminate);
+                }
             }
         }
-
-        self.resources.apt_packages = _apt_packages;
 
         Ok(())
     }
 
-    fn validate_apt_preferences(&mut self) -> Result<(), Terminate> {
+    fn validate_apt_preference(
+        &mut self,
+        preference: &mut apt::preference::Preference,
+    ) -> Result<(), Terminate> {
         let scope = "validation";
 
-        // Save preference names to check for their uniqueness.
-        let mut names = HashSet::new();
+        let name = preference.parameters.name.to_string();
 
-        // To iterate and modify `apt::preferences` resources the collection
-        // must be cloned.
-        // Each resource is modified on the basis of other (`apt::preference`)
-        // resources, e.g. to validate dependencies.
-        // As such we need both a mutable object as well as immutable
-        // collections of resources to check against.
-        // Since ownerships rules need to be satisfied as well, a clone
-        // is inevitable.
-        let mut _apt_preferences = self.resources.apt_preferences.clone();
+        // Check for uniqueness of the name parameter.
+        if !self
+            .temporary
+            .preference_names
+            .insert(preference.parameters.name.clone())
+        {
+            error!(
+                scope,
+                client:% = self.name,
+                resource = preference.kind(),
+                name;
+                "preference name `{}` appears multiple times, preference names must be unique",
+                name
+            );
 
-        for preference in _apt_preferences.iter_mut() {
-            let name = preference.parameters.name.to_string();
+            return Err(Terminate);
+        }
 
-            // Check for uniqueness of the name parameter.
-            if !names.insert(preference.parameters.name.clone()) {
-                error!(
-                    scope,
-                    client:% = self.name,
-                    resource = preference.kind(),
-                    name;
-                    "preference name `{}` appears multiple times, preference names must be unique",
-                    name
-                );
+        if !self
+            .temporary
+            .paths
+            .insert(preference.parameters.target.clone())
+        {
+            error!(
+                scope,
+                client:% = self.name,
+                resource = preference.kind(),
+                name;
+                "{} conflicts with another resource that manages the target path `{}`",
+                preference.repr(),
+                preference.parameters.target.display()
+            );
 
-                return Err(Terminate);
-            }
+            return Err(Terminate);
+        }
 
-            if !self
-                .temporary
-                .paths
-                .insert(preference.parameters.target.clone())
-            {
-                error!(
-                    scope,
-                    client:% = self.name,
-                    resource = preference.kind(),
-                    name;
-                    "{} conflicts with another resource that manages the target path `{}`",
-                    preference.repr(),
-                    preference.parameters.target.display()
-                );
+        // Save metadata of ancestral directories that the target file
+        // depends on.
+        for ancestor in self.resources.iter().filter(|item| {
+            item.as_directory().is_some_and(|d| {
+                preference
+                    .parameters
+                    .target
+                    .ancestors()
+                    .any(|a| a == *d.parameters.path)
+            })
+        }) {
+            let other = ancestor.metadata().clone();
 
-                return Err(Terminate);
-            }
+            self.temporary
+                .dependencies
+                .entry(preference.id())
+                .or_default()
+                .insert(other.id);
 
-            // Save metadata of ancestral directories that the target file
-            // depends on.
-            for ancestor in self.resources.iter().filter(|item| {
-                item.as_directory().is_some_and(|d| {
-                    preference
-                        .parameters
-                        .target
-                        .ancestors()
-                        .any(|a| a == *d.parameters.path)
-                })
-            }) {
-                let other = ancestor.metadata().clone();
+            preference.relationships.requires.push(other);
+        }
 
-                self.temporary
-                    .dependencies
-                    .entry(preference.id())
-                    .or_default()
-                    .insert(other.id);
+        for ancestor in self.resources.iter().filter(|item| {
+            item.as_symlink().is_some_and(|s| {
+                preference
+                    .parameters
+                    .target
+                    .ancestors()
+                    .any(|a| a == *s.parameters.path)
+            })
+        }) {
+            let metadata = ancestor.metadata().clone();
 
-                preference.relationships.requires.push(other);
-            }
+            self.temporary
+                .dependencies
+                .entry(preference.id())
+                .or_default()
+                .insert(metadata.id);
 
-            for ancestor in self.resources.iter().filter(|item| {
-                item.as_symlink().is_some_and(|s| {
-                    preference
-                        .parameters
-                        .target
-                        .ancestors()
-                        .any(|a| a == *s.parameters.path)
-                })
-            }) {
-                let metadata = ancestor.metadata().clone();
+            preference.relationships.requires.push(metadata);
+        }
 
-                self.temporary
-                    .dependencies
-                    .entry(preference.id())
-                    .or_default()
-                    .insert(metadata.id);
+        // Save the metadata of explicit dependencies that this
+        // resource should depend on.
+        for dependency in self
+            .temporary
+            .requires
+            .get(&preference.id())
+            .map(|c| c.as_slice())
+            .unwrap_or_default()
+        {
+            match self.resolve_dependency(dependency) {
+                Some(resource) => {
+                    if preference.may_depend_on(&resource) {
+                        let metadata = preference.metadata();
+                        let other = resource.metadata().clone();
 
-                preference.relationships.requires.push(metadata);
-            }
-
-            // Save the metadata of explicit dependencies that this
-            // resource should depend on.
-            for dependency in self
-                .temporary
-                .requires
-                .get(&preference.id())
-                .map(|c| c.as_slice())
-                .unwrap_or_default()
-            {
-                match self.resolve_dependency(dependency) {
-                    Some(resource) => {
-                        if preference.may_depend_on(&resource) {
-                            let metadata = preference.metadata();
-                            let other = resource.metadata().clone();
-
-                            if self.dependency_introduces_loop(other.id, metadata.id) {
-                                error!(
-                                    scope,
-                                    client:% = self.name,
-                                    resource = preference.kind(),
-                                    name;
-                                    "{} cannot depend on {} as it would introduce a dependency loop",
-                                    preference.repr(),
-                                    resource.repr()
-                                );
-
-                                return Err(Terminate);
-                            } else if self
-                                .temporary
-                                .dependencies
-                                .entry(metadata.id)
-                                .or_default()
-                                .insert(other.id)
-                            {
-                                preference.relationships.requires.push(metadata.clone());
-                            }
-                        } else {
+                        if self.dependency_introduces_loop(other.id, metadata.id) {
                             error!(
                                 scope,
                                 client:% = self.name,
                                 resource = preference.kind(),
                                 name;
-                                "{} cannot depend on {}",
+                                "{} cannot depend on {} as it would introduce a dependency loop",
                                 preference.repr(),
                                 resource.repr()
                             );
 
                             return Err(Terminate);
+                        } else if self
+                            .temporary
+                            .dependencies
+                            .entry(metadata.id)
+                            .or_default()
+                            .insert(other.id)
+                        {
+                            preference.relationships.requires.push(metadata.clone());
                         }
-                    }
-                    None => {
+                    } else {
                         error!(
                             scope,
                             client:% = self.name,
                             resource = preference.kind(),
                             name;
-                            "{} depends on {} which cannot be found",
+                            "{} cannot depend on {}",
                             preference.repr(),
-                            dependency.repr()
+                            resource.repr()
                         );
 
                         return Err(Terminate);
                     }
                 }
+                None => {
+                    error!(
+                        scope,
+                        client:% = self.name,
+                        resource = preference.kind(),
+                        name;
+                        "{} depends on {} which cannot be found",
+                        preference.repr(),
+                        dependency.repr()
+                    );
+
+                    return Err(Terminate);
+                }
             }
         }
-
-        self.resources.apt_preferences = _apt_preferences;
 
         Ok(())
     }
