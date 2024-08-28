@@ -118,6 +118,8 @@ impl
         for item in intermediate.resources {
             let requires = item.requires().to_vec();
 
+            // Convert resource from the deserialized to the final form,
+            // substituting variables in the process.
             let resource = Resource::try_from((&item, &client.variables)).map_err(|error| {
                 error!(
                     scope,
@@ -129,6 +131,7 @@ impl
                 Terminate
             })?;
 
+            // Save dependencies as they appear in the deserialized resource.
             client.temporary.requires.insert(resource.id(), requires);
 
             client.resources.push(resource);
@@ -304,303 +307,25 @@ impl Client {
 
             *count += 1;
 
-            // Process `apt::package` resources according to the rules described above.
-            for item in group
-                .resources
-                .iter()
-                .filter_map(|item| item.as_apt_package())
-            {
-                // Replace variables in parameters.
-                let resource: Resource = apt::package::Package::try_from((item, &self.variables))
-                    .map_err(|error| {
-                        error!(
-                            scope,
-                            client:% = self.name,
-                            group:% = group_name,
-                            resource = item.kind();
-                            "{}",
-                            error
-                        );
-                        Terminate
-                    })?
-                    .into();
+            for item in &group.resources {
+                let requires = item.requires().to_vec();
 
-                self.temporary
-                    .requires
-                    .insert(resource.id(), item.requires.clone());
+                // Convert resource from the deserialized to the final form,
+                // substituting variables in the process.
+                let resource = Resource::try_from((item, &self.variables)).map_err(|error| {
+                    error!(
+                        scope,
+                        client:% = self.name,
+                        group:% = group_name,
+                        resource = item.kind();
+                        "{}",
+                        error
+                    );
+                    Terminate
+                })?;
 
-                // Check if a similar resource is already present ...
-                if let Some(duplicate) = self.resources.iter().find(|other| **other == resource) {
-                    // ... and if it was sourced from another group in which case
-                    // processing fails. Otherwise the group resource is skipped
-                    // because the saved resource originates from the client
-                    // and takes precedence.
-                    if let Some(origin) = self.temporary.origins.get(&duplicate.id()) {
-                        error!(
-                                                    scope,
-                                                    client:% = self.name,
-                                                    group:% = group_name,
-                                                    resource = resource.kind();
-                        //                            name:% = package.parameters.name;
-                                                    "duplicate resource defined in group `{}`",
-                                                    origin,
-                                                );
-
-                        return Err(Terminate);
-                    } else {
-                        continue;
-                    }
-                } else {
-                    // If no similar resource is present, save this one into
-                    // the catalog and also record that this resource stems from
-                    // a group.
-                    self.temporary
-                        .origins
-                        .insert(resource.id(), group_name.clone());
-                    self.resources.push(resource);
-                }
-            }
-
-            // Process directory resources according to the rules described above.
-            for item in group
-                .resources
-                .iter()
-                .filter_map(|item| item.as_directory())
-            {
-                // Replace variables in parameters.
-                let resource: Resource = directory::Directory::try_from((item, &self.variables))
-                    .map_err(|error| {
-                        error!(
-                            scope,
-                            client:% = self.name,
-                            group:% = group_name,
-                            resource = item.kind();
-                            "{}",
-                            error
-                        );
-                        Terminate
-                    })?
-                    .into();
-
-                self.temporary
-                    .requires
-                    .insert(resource.id(), item.requires.clone());
-
-                // Check if a similar resource is already present ...
-                if let Some(duplicate) = self.resources.iter().find(|other| **other == resource) {
-                    // ... and if it was sourced from another group in which case
-                    // processing fails. Otherwise the group resource is skipped
-                    // because the saved resource originates from the client
-                    // and takes precedence.
-                    if let Some(origin) = self.temporary.origins.get(&duplicate.id()) {
-                        error!(
-                                                    scope,
-                                                    client:% = self.name,
-                                                    group:% = group_name,
-                                                    resource = resource.kind();
-                        //                            path:% = directory.parameters.path.display();
-                                                    "duplicate resource defined in group `{}`",
-                                                    origin,
-                                                );
-
-                        return Err(Terminate);
-                    } else {
-                        continue;
-                    }
-                } else {
-                    // If no similar resource is present, save this one into
-                    // the catalog and also record that this resource stems from
-                    // a group.
-                    self.temporary
-                        .origins
-                        .insert(resource.id(), group_name.clone());
-                    self.resources.push(resource);
-                }
-            }
-
-            // Process file resources according to the rules described above.
-            for item in group.resources.iter().filter_map(|item| item.as_file()) {
-                // Replace variables in parameters.
-                let resource: Resource = file::File::try_from((item, &self.variables))
-                    .map_err(|error| {
-                        error!(
-                            scope,
-                            client:% = self.name,
-                            group:% = group_name,
-                            resource = item.kind();
-                            "{}",
-                            error
-                        );
-                        Terminate
-                    })?
-                    .into();
-
-                self.temporary
-                    .requires
-                    .insert(resource.id(), item.requires.clone());
-
-                // Check if a similar resource is already present ...
-                if let Some(duplicate) = self.resources.iter().find(|other| **other == resource) {
-                    // ... and if it was sourced from another group in which case
-                    // processing fails. Otherwise the group resource is skipped
-                    // because the saved resource originates from the client
-                    // and takes precedence.
-                    if let Some(origin) = self.temporary.origins.get(&duplicate.id()) {
-                        error!(
-                                                    scope,
-                                                    client:% = self.name,
-                                                    group:% = group_name,
-                                                    resource = resource.kind();
-                        //                            path:% = file.parameters.path.display();
-                                                    "duplicate resource defined in group `{}`",
-                                                    origin,
-                                                );
-
-                        return Err(Terminate);
-                    } else {
-                        continue;
-                    }
-                } else {
-                    // If no similar resource is present, save this one into
-                    // the catalog and also record that this resource stems from
-                    // a group.
-                    self.temporary
-                        .origins
-                        .insert(resource.id(), group_name.clone());
-                    self.resources.push(resource);
-                }
-            }
-
-            // Process group resources according to the rules described above.
-            for item in group.resources.iter().filter_map(|item| item.as_group()) {
-                // Replace variables in parameters.
-                let resource: Resource = group::Group::try_from((item, &self.variables))
-                    .map_err(|error| {
-                        error!(
-                            scope,
-                            client:% = self.name,
-                            group:% = group_name,
-                            resource = item.kind();
-                            "{}",
-                            error
-                        );
-                        Terminate
-                    })?
-                    .into();
-
-                self.temporary
-                    .requires
-                    .insert(resource.id(), item.requires.clone());
-
-                // Check if a similar resource is already present ...
-                if let Some(duplicate) = self.resources.iter().find(|other| **other == resource) {
-                    // ... and if it was sourced from another group in which case
-                    // processing fails. Otherwise the group resource is skipped
-                    // because the saved resource originates from the client
-                    // and takes precedence.
-                    if let Some(origin) = self.temporary.origins.get(&duplicate.id()) {
-                        error!(
-                                                    scope,
-                                                    client:% = self.name,
-                                                    group:% = group_name,
-                                                    resource = resource.kind();
-                        //                            name:% = _group.parameters.name;
-                                                    "duplicate resource defined in group `{}`",
-                                                    origin,
-                                                );
-
-                        return Err(Terminate);
-                    } else {
-                        continue;
-                    }
-                } else {
-                    // If no similar resource is present, save this one into
-                    // the catalog and also record that this resource stems from
-                    // a group.
-                    self.temporary
-                        .origins
-                        .insert(resource.id(), group_name.clone());
-                    self.resources.push(resource);
-                }
-            }
-
-            // Process host resources according to the rules described above.
-            for item in group.resources.iter().filter_map(|item| item.as_host()) {
-                // Replace variables in parameters.
-                let resource: Resource = host::Host::try_from((item, &self.variables))
-                    .map_err(|error| {
-                        error!(
-                            scope,
-                            client:% = self.name,
-                            group:% = group_name,
-                            resource = item.kind();
-                            "{}",
-                            error
-                        );
-                        Terminate
-                    })?
-                    .into();
-
-                self.temporary
-                    .requires
-                    .insert(resource.id(), item.requires.clone());
-
-                // Check if a similar resource is already present ...
-                if let Some(duplicate) = self.resources.iter().find(|other| **other == resource) {
-                    // ... and if it was sourced from another group in which case
-                    // processing fails. Otherwise the group resource is skipped
-                    // because the saved resource originates from the client
-                    // and takes precedence.
-                    if let Some(origin) = self.temporary.origins.get(&duplicate.id()) {
-                        error!(
-                                                    scope,
-                                                    client:% = self.name,
-                                                    group:% = group_name,
-                                                    resource = resource.kind();
-                        //                            ip_address:% = host.parameters.ip_address;
-                                                    "duplicate resource defined in group `{}`",
-                                                    origin,
-                                                );
-
-                        return Err(Terminate);
-                    } else {
-                        continue;
-                    }
-                } else {
-                    // If no similar resource is present, save this one into
-                    // the catalog and also record that this resource stems from
-                    // a group.
-                    self.temporary
-                        .origins
-                        .insert(resource.id(), group_name.clone());
-                    self.resources.push(resource);
-                }
-            }
-
-            // Process resolv.conf resources according to the rules described above.
-            for item in group
-                .resources
-                .iter()
-                .filter_map(|item| item.as_resolv_conf())
-            {
-                // Replace variables in parameters.
-                let resource: Resource = resolv_conf::ResolvConf::try_from((item, &self.variables))
-                    .map_err(|error| {
-                        error!(
-                            scope,
-                            client:% = self.name,
-                            group:% = group_name,
-                            resource = item.kind();
-                            "{}",
-                            error
-                        );
-                        Terminate
-                    })?
-                    .into();
-
-                self.temporary
-                    .requires
-                    .insert(resource.id(), item.requires.clone());
+                // Save dependencies as they appear in the deserialized resource.
+                self.temporary.requires.insert(resource.id(), requires);
 
                 // Check if a similar resource is already present ...
                 if let Some(duplicate) = self.resources.iter().find(|other| **other == resource) {
@@ -614,115 +339,10 @@ impl Client {
                             client:% = self.name,
                             group:% = group_name,
                             resource = resource.kind();
+                            //                            name:% = package.parameters.name;
                             "duplicate resource defined in group `{}`",
                             origin,
                         );
-
-                        return Err(Terminate);
-                    } else {
-                        continue;
-                    }
-                } else {
-                    // If no similar resource is present, save this one into
-                    // the catalog and also record that this resource stems from
-                    // a group.
-                    self.temporary
-                        .origins
-                        .insert(resource.id(), group_name.clone());
-                    self.resources.push(resource);
-                }
-            }
-
-            // Process symlink resources according to the rules described above.
-            for item in group.resources.iter().filter_map(|item| item.as_symlink()) {
-                // Replace variables in parameters.
-                let resource: Resource = symlink::Symlink::try_from((item, &self.variables))
-                    .map_err(|error| {
-                        error!(
-                            scope,
-                            client:% = self.name,
-                            group:% = group_name,
-                            resource = item.kind();
-                            "{}",
-                            error
-                        );
-                        Terminate
-                    })?
-                    .into();
-
-                self.temporary
-                    .requires
-                    .insert(resource.id(), item.requires.clone());
-
-                // Check if a similar resource is already present ...
-                if let Some(duplicate) = self.resources.iter().find(|other| **other == resource) {
-                    // ... and if it was sourced from another group in which case
-                    // processing fails. Otherwise the group resource is skipped
-                    // because the saved resource originates from the client
-                    // and takes precedence.
-                    if let Some(origin) = self.temporary.origins.get(&duplicate.id()) {
-                        error!(
-                                                    scope,
-                                                    client:% = self.name,
-                                                    group:% = group_name,
-                                                    resource = resource.kind();
-                        //                            path:% = symlink.parameters.path.display();
-                                                    "duplicate resource defined in group `{}`",
-                                                    origin,
-                                                );
-
-                        return Err(Terminate);
-                    } else {
-                        continue;
-                    }
-                } else {
-                    // If no similar resource is present, save this one into
-                    // the catalog and also record that this resource stems from
-                    // a group.
-                    self.temporary
-                        .origins
-                        .insert(resource.id(), group_name.clone());
-                    self.resources.push(resource);
-                }
-            }
-
-            // Process user resources according to the rules described above.
-            for item in group.resources.iter().filter_map(|item| item.as_user()) {
-                // Replace variables in parameters.
-                let resource: Resource = user::User::try_from((item, &self.variables))
-                    .map_err(|error| {
-                        error!(
-                            scope,
-                            client:% = self.name,
-                            group:% = group_name,
-                            resource = item.kind();
-                            "{}",
-                            error
-                        );
-                        Terminate
-                    })?
-                    .into();
-
-                self.temporary
-                    .requires
-                    .insert(resource.id(), item.requires.clone());
-
-                // Check if a similar resource is already present ...
-                if let Some(duplicate) = self.resources.iter().find(|other| **other == resource) {
-                    // ... and if it was sourced from another group in which case
-                    // processing fails. Otherwise the group resource is skipped
-                    // because the saved resource originates from the client
-                    // and takes precedence.
-                    if let Some(origin) = self.temporary.origins.get(&duplicate.id()) {
-                        error!(
-                                                    scope,
-                                                    client:% = self.name,
-                                                    group:% = group_name,
-                                                    resource = resource.kind();
-                        //                            name:% = user.parameters.name;
-                                                    "duplicate resource defined in group `{}`",
-                                                    origin,
-                                                );
 
                         return Err(Terminate);
                     } else {
