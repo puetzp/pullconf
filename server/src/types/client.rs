@@ -9,7 +9,7 @@ use crate::types::{
 use common::{
     error::Terminate,
     resources::{
-        apt::{package::Name as PackageName, preference::Name as PreferenceName},
+        apt::{package::Name as AptPackageName, preference::Name as AptPreferenceName},
         group::Name as GroupName,
         user::Name as UserName,
     },
@@ -55,11 +55,11 @@ pub struct ValidationHelpers {
     /// parent node to the `path` of another`, since only directories
     /// and symlinks (pointing to a directory) can be parents to a file.
     pub file_paths: HashSet<PathBuf>,
-    pub ip_addresses: HashSet<IpAddr>,
+    pub host_ip_addresses: HashSet<IpAddr>,
     pub group_names: HashSet<GroupName>,
     pub user_names: HashSet<UserName>,
-    pub package_names: HashSet<PackageName>,
-    pub preference_names: HashSet<PreferenceName>,
+    pub apt_package_names: HashSet<AptPackageName>,
+    pub apt_preference_names: HashSet<AptPreferenceName>,
 }
 
 impl ValidationHelpers {
@@ -992,7 +992,7 @@ impl Client {
         // Check for uniqueness of the IP address parameter.
         if !self
             .temporary
-            .ip_addresses
+            .host_ip_addresses
             .insert(host.parameters.ip_address)
         {
             error!(
@@ -1503,7 +1503,7 @@ impl Client {
         // Check for uniqueness of the name parameter.
         if !self
             .temporary
-            .package_names
+            .apt_package_names
             .insert(package.parameters.name.clone())
         {
             error!(
@@ -1598,7 +1598,7 @@ impl Client {
         // Check for uniqueness of the name parameter.
         if !self
             .temporary
-            .preference_names
+            .apt_preference_names
             .insert(preference.parameters.name.clone())
         {
             error!(
