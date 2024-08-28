@@ -35,6 +35,17 @@ pub struct ValidationHelpers {
     /// the actual resource metadata of a given dependency is added
     /// to the resource relationship data.
     pub requires: HashMap<Uuid, Vec<Dependency>>,
+    /// Some resources manage filesystem nodes of different types.
+    /// This collection helps to ensure during validation that a node
+    /// at a given path is not managed by multiple resources of the same
+    /// or different kinds,
+    pub paths: HashSet<PathBuf>,
+    /// This collection stores paths of `file` resources, ensuring that
+    /// different resources of this type do not conflict. A conflict
+    /// exists when the `path` of one `file` resource happens to be the
+    /// parent node to the `path` of another`, since only directories
+    /// and symlinks (pointing to a directory) can be parents to a file.
+    pub file_paths: HashSet<PathBuf>,
 }
 
 impl ValidationHelpers {
@@ -141,27 +152,22 @@ impl
         // that the client is a member of, substituting variables in the process.
         client.extend_from_groups(groups)?;
 
-        // Validate the relationships between the resources from the client's
-        // resource catalog.
-        // Add dependencies between resources where applicable.
-        let mut paths = HashSet::new();
-
-        let file_paths = client
+        client.temporary.file_paths = client
             .resources
             .iter()
             .filter_map(|resource| resource.as_file())
             .map(|file| file.parameters.path.to_path_buf())
-            .collect::<HashSet<PathBuf>>();
+            .collect();
 
-        client.validate_files(&mut paths, &file_paths)?;
-        client.validate_directories(&mut paths, &file_paths)?;
-        client.validate_symlinks(&mut paths, &file_paths)?;
+        client.validate_files()?;
+        client.validate_directories()?;
+        client.validate_symlinks()?;
         client.validate_hosts()?;
         client.validate_groups()?;
         client.validate_users()?;
         client.validate_resolv_conf()?;
         client.validate_apt_packages()?;
-        client.validate_apt_preferences(&mut paths)?;
+        client.validate_apt_preferences()?;
 
         client.temporary.clear();
 
@@ -363,11 +369,7 @@ impl Client {
         Ok(())
     }
 
-    fn validate_files(
-        &mut self,
-        paths: &mut HashSet<PathBuf>,
-        file_paths: &HashSet<PathBuf>,
-    ) -> Result<(), Terminate> {
+    fn validate_files(&mut self) -> Result<(), Terminate> {
         let scope = "validation";
 
         // To iterate and modify file resources the collection must
@@ -385,7 +387,11 @@ impl Client {
             let path = file.parameters.path.display().to_string();
 
             // Check for uniqueness of the path parameter.
-            if !paths.insert(file.parameters.path.to_path_buf()) {
+            if !self
+                .temporary
+                .paths
+                .insert(file.parameters.path.to_path_buf())
+            {
                 error!(
                     scope,
                     client:% = self.name,
@@ -401,7 +407,7 @@ impl Client {
             // Files (their paths) cannot be parents to each other.
             // Check if any file conflicts with this file in that regard.
             if let Some(parent) = &file.parameters.path.parent() {
-                if file_paths.contains(*parent) {
+                if self.temporary.file_paths.contains(*parent) {
                     error!(
                         scope,
                         client:% = self.name,
@@ -527,11 +533,7 @@ impl Client {
         Ok(())
     }
 
-    fn validate_directories(
-        &mut self,
-        paths: &mut HashSet<PathBuf>,
-        file_paths: &HashSet<PathBuf>,
-    ) -> Result<(), Terminate> {
+    fn validate_directories(&mut self) -> Result<(), Terminate> {
         let scope = "validation";
 
         // To iterate and modify directory resources the collection
@@ -549,7 +551,11 @@ impl Client {
             let path = directory.parameters.path.display().to_string();
 
             // Check for uniqueness of the path parameter.
-            if !paths.insert(directory.parameters.path.to_path_buf()) {
+            if !self
+                .temporary
+                .paths
+                .insert(directory.parameters.path.to_path_buf())
+            {
                 error!(
                     scope,
                     client:% = self.name,
@@ -565,7 +571,7 @@ impl Client {
             // Files (their paths) cannot be parents to directories.
             // Check if any file conflicts with this directory in that regard.
             if let Some(parent) = &directory.parameters.path.parent() {
-                if file_paths.contains(*parent) {
+                if self.temproary.file_paths.contains(*parent) {
                     error!(
                         scope,
                         client:% = self.name,
@@ -761,11 +767,7 @@ impl Client {
         Ok(())
     }
 
-    fn validate_symlinks(
-        &mut self,
-        paths: &mut HashSet<PathBuf>,
-        file_paths: &HashSet<PathBuf>,
-    ) -> Result<(), Terminate> {
+    fn validate_symlinks(&mut self) -> Result<(), Terminate> {
         let scope = "validation";
 
         // To iterate and modify symlink resources the collection
@@ -783,7 +785,11 @@ impl Client {
             let path = symlink.parameters.path.display().to_string();
 
             // Check for uniqueness of the path parameter.
-            if !paths.insert(symlink.parameters.path.to_path_buf()) {
+            if !self
+                .temporary
+                .paths
+                .insert(symlink.parameters.path.to_path_buf())
+            {
                 error!(
                     scope,
                     client:% = self.name,
@@ -799,7 +805,7 @@ impl Client {
             // Files (their paths) cannot be parents to symlinks.
             // Check if any file conflicts with this symlink in that regard.
             if let Some(parent) = &symlink.parameters.path.parent() {
-                if file_paths.contains(*parent) {
+                if self.temporary.file_paths.contains(*parent) {
                     error!(
                         scope,
                         client:% = self.name,
@@ -1608,7 +1614,7 @@ impl Client {
         Ok(())
     }
 
-    fn validate_apt_preferences(&mut self, paths: &mut HashSet<PathBuf>) -> Result<(), Terminate> {
+    fn validate_apt_preferences(&mut self) -> Result<(), Terminate> {
         let scope = "validation";
 
         // Save preference names to check for their uniqueness.
@@ -1641,7 +1647,11 @@ impl Client {
                 return Err(Terminate);
             }
 
-            if !paths.insert(preference.parameters.target.clone()) {
+            if !self
+                .temporary
+                .paths
+                .insert(preference.parameters.target.clone())
+            {
                 error!(
                     scope,
                     client:% = self.name,
