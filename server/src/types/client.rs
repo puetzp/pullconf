@@ -383,6 +383,8 @@ impl Client {
     /// This function also ensures that relationships do not introduce a
     /// dependency loop which would cause the client to loop indefinitely.
     fn validate(&mut self) -> Result<(), Terminate> {
+        let scope = "validation";
+
         // Keep track of resources that have been processed.
         let mut validated = HashSet::new();
 
@@ -393,7 +395,7 @@ impl Client {
         // in the context of other resources.
         // When validation succeeds, the resource is added to the back
         // of the queue.
-        while let Some(resource) = self.resources.pop_front() {
+        while let Some(mut resource) = self.resources.pop_front() {
             // Break the loop once all resources have been processed.
             if !validated.insert(resource.id()) {
                 self.resources.push_back(resource);
@@ -401,15 +403,78 @@ impl Client {
             }
 
             match resource {
-                Resource::AptPackage(mut item) => self.validate_apt_package(&mut item)?,
-                Resource::AptPreference(mut item) => self.validate_apt_preference(&mut item)?,
-                Resource::Directory(mut item) => self.validate_directory(&mut item)?,
-                Resource::File(mut item) => self.validate_file(&mut item)?,
-                Resource::Group(mut item) => self.validate_group(&mut item)?,
-                Resource::Host(mut item) => self.validate_host(&mut item)?,
-                Resource::ResolvConf(mut item) => self.validate_resolv_conf(&mut item)?,
-                Resource::Symlink(mut item) => self.validate_symlink(&mut item)?,
-                Resource::User(mut item) => self.validate_user(&mut item)?,
+                Resource::AptPackage(ref mut item) => self.validate_apt_package(item)?,
+                Resource::AptPreference(ref mut item) => self.validate_apt_preference(item)?,
+                Resource::Directory(ref mut item) => self.validate_directory(item)?,
+                Resource::File(ref mut item) => self.validate_file(item)?,
+                Resource::Group(ref mut item) => self.validate_group(item)?,
+                Resource::Host(ref mut item) => self.validate_host(item)?,
+                Resource::ResolvConf(ref mut item) => self.validate_resolv_conf(item)?,
+                Resource::Symlink(ref mut item) => self.validate_symlink(item)?,
+                Resource::User(ref mut item) => self.validate_user(item)?,
+            }
+
+            // Save the metadata of explicit dependencies (other resources)
+            // that this resource should depend on.
+            for dependency in self
+                .temporary
+                .requires
+                .get(&resource.id())
+                .map(|c| c.as_slice())
+                .unwrap_or_default()
+            {
+                match self.resolve_dependency(dependency) {
+                    Some(other_resource) => {
+                        if resource.may_depend_on(&other_resource) {
+                            let metadata = resource.metadata();
+                            let other_metadata = other_resource.metadata().clone();
+
+                            if self.dependency_introduces_loop(other_metadata.id, metadata.id) {
+                                error!(
+                                    scope,
+                                    client:% = self.name,
+                                    resource = resource.kind();
+                                    "{} cannot depend on {} as it would introduce a dependency loop",
+                                    resource.repr(),
+                                    other_resource.repr()
+                                );
+
+                                return Err(Terminate);
+                            } else if self
+                                .temporary
+                                .dependencies
+                                .entry(metadata.id)
+                                .or_default()
+                                .insert(other_metadata.id)
+                            {
+                                resource.push_requirement(other_metadata.clone());
+                            }
+                        } else {
+                            error!(
+                                scope,
+                                client:% = self.name,
+                                resource = resource.kind();
+                                "{} cannot depend on {}",
+                                resource.repr(),
+                                other_resource.repr()
+                            );
+
+                            return Err(Terminate);
+                        }
+                    }
+                    None => {
+                        error!(
+                            scope,
+                            client:% = self.name,
+                            resource = resource.kind();
+                            "{} depends on {} which cannot be found",
+                            resource.repr(),
+                            dependency.repr()
+                        );
+
+                        return Err(Terminate);
+                    }
+                }
             }
         }
 
@@ -495,71 +560,6 @@ impl Client {
                 .insert(metadata.id);
 
             file.relationships.requires.push(metadata);
-        }
-
-        // Save the metadata of explicit dependencies that this
-        // file should depend on.
-        for dependency in self
-            .temporary
-            .requires
-            .get(&file.id())
-            .map(|c| c.as_slice())
-            .unwrap_or_default()
-        {
-            match self.resolve_dependency(dependency) {
-                Some(resource) => {
-                    if file.may_depend_on(&resource) {
-                        let metadata = resource.metadata().clone();
-
-                        if self.dependency_introduces_loop(resource.id(), file.id()) {
-                            error!(
-                                scope,
-                                client:% = self.name,
-                                resource = file.kind(),
-                                path;
-                                "{} cannot depend on {} as it would introduce a dependency loop",
-                                file.repr(),
-                                resource.repr()
-                            );
-
-                            return Err(Terminate);
-                        } else if self
-                            .temporary
-                            .dependencies
-                            .entry(file.id())
-                            .or_default()
-                            .insert(metadata.id)
-                        {
-                            file.relationships.requires.push(metadata);
-                        }
-                    } else {
-                        error!(
-                            scope,
-                            client:% = self.name,
-                            resource = file.kind(),
-                            path;
-                            "{} cannot depend on {}",
-                            file.repr(),
-                            resource.repr()
-                        );
-
-                        return Err(Terminate);
-                    }
-                }
-                None => {
-                    error!(
-                        scope,
-                        client:% = self.name,
-                        resource = file.kind(),
-                        path;
-                        "{} depends on {} which cannot be found",
-                        file.repr(),
-                        dependency.repr()
-                    );
-
-                    return Err(Terminate);
-                }
-            }
         }
 
         Ok(())
@@ -730,72 +730,6 @@ impl Client {
             directory.relationships.requires.push(other);
         }
 
-        // Save the metadata of explicit dependencies that this
-        // directory should depend on.
-        for dependency in self
-            .temporary
-            .requires
-            .get(&directory.id())
-            .map(|c| c.as_slice())
-            .unwrap_or_default()
-        {
-            match self.resolve_dependency(dependency) {
-                Some(resource) => {
-                    if directory.may_depend_on(&resource) {
-                        let metadata = directory.metadata();
-                        let other = resource.metadata().clone();
-
-                        if self.dependency_introduces_loop(other.id, metadata.id) {
-                            error!(
-                                scope,
-                                client:% = self.name,
-                                resource = directory.kind(),
-                                path;
-                                "{} cannot depend on {} as it would introduce a dependency loop",
-                                directory.repr(),
-                                resource.repr()
-                            );
-
-                            return Err(Terminate);
-                        } else if self
-                            .temporary
-                            .dependencies
-                            .entry(metadata.id)
-                            .or_default()
-                            .insert(other.id)
-                        {
-                            directory.relationships.requires.push(metadata.clone());
-                        }
-                    } else {
-                        error!(
-                            scope,
-                            client:% = self.name,
-                            resource = directory.kind(),
-                            path;
-                            "{} cannot depend on {}",
-                            directory.repr(),
-                            resource.repr()
-                        );
-
-                        return Err(Terminate);
-                    }
-                }
-                None => {
-                    error!(
-                        scope,
-                        client:% = self.name,
-                        resource = directory.kind(),
-                        path;
-                        "{} depends on {} which cannot be found",
-                        directory.repr(),
-                        dependency.repr()
-                    );
-
-                    return Err(Terminate);
-                }
-            }
-        }
-
         Ok(())
     }
 
@@ -915,72 +849,6 @@ impl Client {
             symlink.relationships.requires.push(other);
         }
 
-        // Save the metadata of explicit dependencies that this
-        // symlink should depend on.
-        for dependency in self
-            .temporary
-            .requires
-            .get(&symlink.id())
-            .map(|c| c.as_slice())
-            .unwrap_or_default()
-        {
-            match self.resolve_dependency(dependency) {
-                Some(resource) => {
-                    if symlink.may_depend_on(&resource) {
-                        let metadata = symlink.metadata();
-                        let other = resource.metadata().clone();
-
-                        if self.dependency_introduces_loop(other.id, metadata.id) {
-                            error!(
-                                scope,
-                                client:% = self.name,
-                                resource = symlink.kind(),
-                                path;
-                                "{} cannot depend on {} as it would introduce a dependency loop",
-                                symlink.repr(),
-                                resource.repr()
-                            );
-
-                            return Err(Terminate);
-                        } else if self
-                            .temporary
-                            .dependencies
-                            .entry(metadata.id)
-                            .or_default()
-                            .insert(other.id)
-                        {
-                            symlink.relationships.requires.push(metadata.clone());
-                        }
-                    } else {
-                        error!(
-                            scope,
-                            client:% = self.name,
-                            resource = symlink.kind(),
-                            path;
-                            "{} cannot depend on {}",
-                            symlink.repr(),
-                            resource.repr()
-                        );
-
-                        return Err(Terminate);
-                    }
-                }
-                None => {
-                    error!(
-                        scope,
-                        client:% = self.name,
-                        resource = symlink.kind(),
-                        path;
-                        "{} depends on {} which cannot be found",
-                        symlink.repr(),
-                        dependency.repr()
-                    );
-
-                    return Err(Terminate);
-                }
-            }
-        }
-
         Ok(())
     }
 
@@ -1059,72 +927,6 @@ impl Client {
             host.relationships.requires.push(other);
         }
 
-        // Save the metadata of explicit dependencies that this
-        // host should depend on.
-        for dependency in self
-            .temporary
-            .requires
-            .get(&host.id())
-            .map(|c| c.as_slice())
-            .unwrap_or_default()
-        {
-            match self.resolve_dependency(dependency) {
-                Some(resource) => {
-                    if host.may_depend_on(&resource) {
-                        let metadata = host.metadata();
-                        let other = resource.metadata().clone();
-
-                        if self.dependency_introduces_loop(other.id, metadata.id) {
-                            error!(
-                                scope,
-                                client:% = self.name,
-                                resource = host.kind(),
-                                ip_address;
-                                "{} cannot depend on {} as it would introduce a dependency loop",
-                                host.repr(),
-                                resource.repr()
-                            );
-
-                            return Err(Terminate);
-                        } else if self
-                            .temporary
-                            .dependencies
-                            .entry(metadata.id)
-                            .or_default()
-                            .insert(other.id)
-                        {
-                            host.relationships.requires.push(metadata.clone());
-                        }
-                    } else {
-                        error!(
-                            scope,
-                            client:% = self.name,
-                            resource = host.kind(),
-                            ip_address;
-                            "{} cannot depend on {}",
-                            host.repr(),
-                            resource.repr()
-                        );
-
-                        return Err(Terminate);
-                    }
-                }
-                None => {
-                    error!(
-                        scope,
-                        client:% = self.name,
-                        resource = host.kind(),
-                        ip_address;
-                        "{} depends on {} which cannot be found",
-                        host.repr(),
-                        dependency.repr()
-                    );
-
-                    return Err(Terminate);
-                }
-            }
-        }
-
         Ok(())
     }
 
@@ -1167,72 +969,6 @@ impl Client {
                     .insert(other.id);
 
                 group.relationships.requires.push(other);
-            }
-        }
-
-        // Save the metadata of explicit dependencies that this
-        // group should depend on.
-        for dependency in self
-            .temporary
-            .requires
-            .get(&group.id())
-            .map(|c| c.as_slice())
-            .unwrap_or_default()
-        {
-            match self.resolve_dependency(dependency) {
-                Some(resource) => {
-                    if group.may_depend_on(&resource) {
-                        let metadata = group.metadata();
-                        let other = resource.metadata().clone();
-
-                        if self.dependency_introduces_loop(other.id, metadata.id) {
-                            error!(
-                                scope,
-                                client:% = self.name,
-                                resource = group.kind(),
-                                name;
-                                "{} cannot depend on {} as it would introduce a dependency loop",
-                                group.repr(),
-                                resource.repr()
-                            );
-
-                            return Err(Terminate);
-                        } else if self
-                            .temporary
-                            .dependencies
-                            .entry(metadata.id)
-                            .or_default()
-                            .insert(other.id)
-                        {
-                            group.relationships.requires.push(metadata.clone());
-                        }
-                    } else {
-                        error!(
-                            scope,
-                            client:% = self.name,
-                            resource = group.kind(),
-                            name;
-                            "{} cannot depend on {}",
-                            group.repr(),
-                            resource.repr()
-                        );
-
-                        return Err(Terminate);
-                    }
-                }
-                None => {
-                    error!(
-                        scope,
-                        client:% = self.name,
-                        resource = group.kind(),
-                        name;
-                        "{} depends on {} which cannot be found",
-                        group.repr(),
-                        dependency.repr()
-                    );
-
-                    return Err(Terminate);
-                }
             }
         }
 
@@ -1280,72 +1016,6 @@ impl Client {
                     .insert(other.id);
 
                 user.relationships.requires.push(other);
-            }
-        }
-
-        // Save the metadata of explicit dependencies that this
-        // user should depend on.
-        for dependency in self
-            .temporary
-            .requires
-            .get(&user.id())
-            .map(|c| c.as_slice())
-            .unwrap_or_default()
-        {
-            match self.resolve_dependency(dependency) {
-                Some(resource) => {
-                    if user.may_depend_on(&resource) {
-                        let metadata = user.metadata();
-                        let other = resource.metadata().clone();
-
-                        if self.dependency_introduces_loop(other.id, metadata.id) {
-                            error!(
-                                scope,
-                                client:% = self.name,
-                                resource = user.kind(),
-                                name;
-                                "{} cannot depend on {} as it would introduce a dependency loop",
-                                user.repr(),
-                                resource.repr()
-                            );
-
-                            return Err(Terminate);
-                        } else if self
-                            .temporary
-                            .dependencies
-                            .entry(metadata.id)
-                            .or_default()
-                            .insert(other.id)
-                        {
-                            user.relationships.requires.push(metadata.clone());
-                        }
-                    } else {
-                        error!(
-                            scope,
-                            client:% = self.name,
-                            resource = user.kind(),
-                            name;
-                            "{} cannot depend on {}",
-                            user.repr(),
-                            resource.repr()
-                        );
-
-                        return Err(Terminate);
-                    }
-                }
-                None => {
-                    error!(
-                        scope,
-                        client:% = self.name,
-                        resource = user.kind(),
-                        name;
-                        "{} depends on {} which cannot be found",
-                        user.repr(),
-                        dependency.repr()
-                    );
-
-                    return Err(Terminate);
-                }
             }
         }
 
@@ -1424,69 +1094,6 @@ impl Client {
                 .insert(other.id);
 
             resolv_conf.relationships.requires.push(other);
-        }
-
-        // Save the metadata of explicit dependencies that this
-        // resource should depend on.
-        for dependency in self
-            .temporary
-            .requires
-            .get(&resolv_conf.id())
-            .map(|c| c.as_slice())
-            .unwrap_or_default()
-        {
-            match self.resolve_dependency(dependency) {
-                Some(resource) => {
-                    if resolv_conf.may_depend_on(&resource) {
-                        let metadata = resolv_conf.metadata();
-                        let other = resource.metadata().clone();
-
-                        if self.dependency_introduces_loop(other.id, metadata.id) {
-                            error!(
-                                scope,
-                                client:% = self.name,
-                                resource = resolv_conf.kind();
-                                "{} cannot depend on {} as it would introduce a dependency loop",
-                                resolv_conf.repr(),
-                                resource.repr()
-                            );
-
-                            return Err(Terminate);
-                        } else if self
-                            .temporary
-                            .dependencies
-                            .entry(metadata.id)
-                            .or_default()
-                            .insert(other.id)
-                        {
-                            resolv_conf.relationships.requires.push(metadata.clone());
-                        }
-                    } else {
-                        error!(
-                            scope,
-                            client:% = self.name,
-                            resource = resolv_conf.kind();
-                            "{} cannot depend on {}",
-                            resolv_conf.repr(),
-                            resource.repr()
-                        );
-
-                        return Err(Terminate);
-                    }
-                }
-                None => {
-                    error!(
-                        scope,
-                        client:% = self.name,
-                        resource = resolv_conf.kind();
-                        "{} depends on {} which cannot be found",
-                        resolv_conf.repr(),
-                        dependency.repr()
-                    );
-
-                    return Err(Terminate);
-                }
-            }
         }
 
         Ok(())
@@ -1671,72 +1278,6 @@ impl Client {
                 .insert(metadata.id);
 
             preference.relationships.requires.push(metadata);
-        }
-
-        // Save the metadata of explicit dependencies that this
-        // resource should depend on.
-        for dependency in self
-            .temporary
-            .requires
-            .get(&preference.id())
-            .map(|c| c.as_slice())
-            .unwrap_or_default()
-        {
-            match self.resolve_dependency(dependency) {
-                Some(resource) => {
-                    if preference.may_depend_on(&resource) {
-                        let metadata = preference.metadata();
-                        let other = resource.metadata().clone();
-
-                        if self.dependency_introduces_loop(other.id, metadata.id) {
-                            error!(
-                                scope,
-                                client:% = self.name,
-                                resource = preference.kind(),
-                                name;
-                                "{} cannot depend on {} as it would introduce a dependency loop",
-                                preference.repr(),
-                                resource.repr()
-                            );
-
-                            return Err(Terminate);
-                        } else if self
-                            .temporary
-                            .dependencies
-                            .entry(metadata.id)
-                            .or_default()
-                            .insert(other.id)
-                        {
-                            preference.relationships.requires.push(metadata.clone());
-                        }
-                    } else {
-                        error!(
-                            scope,
-                            client:% = self.name,
-                            resource = preference.kind(),
-                            name;
-                            "{} cannot depend on {}",
-                            preference.repr(),
-                            resource.repr()
-                        );
-
-                        return Err(Terminate);
-                    }
-                }
-                None => {
-                    error!(
-                        scope,
-                        client:% = self.name,
-                        resource = preference.kind(),
-                        name;
-                        "{} depends on {} which cannot be found",
-                        preference.repr(),
-                        dependency.repr()
-                    );
-
-                    return Err(Terminate);
-                }
-            }
         }
 
         Ok(())

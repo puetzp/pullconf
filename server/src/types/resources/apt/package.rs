@@ -88,6 +88,10 @@ impl Package {
     pub fn may_depend_on(&self, resource: &Resource) -> bool {
         !matches!(resource, Resource::AptPackage(package) if package.parameters.name == self.parameters.name)
     }
+
+    pub fn push_requirement(&mut self, metadata: ResourceMetadata) {
+        self.relationships.requires.push(metadata)
+    }
 }
 
 pub mod de {

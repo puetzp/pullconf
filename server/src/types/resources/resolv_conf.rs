@@ -116,6 +116,10 @@ impl ResolvConf {
     pub fn may_depend_on(&self, resource: &Resource) -> bool {
         !matches!(resource, Resource::ResolvConf(_))
     }
+
+    pub fn push_requirement(&mut self, metadata: ResourceMetadata) {
+        self.relationships.requires.push(metadata)
+    }
 }
 
 pub mod de {

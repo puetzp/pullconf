@@ -92,6 +92,10 @@ impl Group {
             _ => true,
         }
     }
+
+    pub fn push_requirement(&mut self, metadata: ResourceMetadata) {
+        self.relationships.requires.push(metadata)
+    }
 }
 
 pub mod de {

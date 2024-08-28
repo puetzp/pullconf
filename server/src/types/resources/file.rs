@@ -136,6 +136,10 @@ impl File {
             _ => true,
         }
     }
+
+    pub fn push_requirement(&mut self, metadata: ResourceMetadata) {
+        self.relationships.requires.push(metadata)
+    }
 }
 
 impl From<&File> for ChildNode {

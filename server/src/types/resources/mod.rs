@@ -150,6 +150,34 @@ impl Resource {
         }
     }
 
+    pub fn may_depend_on(&self, other: &Self) -> bool {
+        match self {
+            Self::AptPackage(item) => item.may_depend_on(other),
+            Self::AptPreference(item) => item.may_depend_on(other),
+            Self::Directory(item) => item.may_depend_on(other),
+            Self::File(item) => item.may_depend_on(other),
+            Self::Group(item) => item.may_depend_on(other),
+            Self::Host(item) => item.may_depend_on(other),
+            Self::ResolvConf(item) => item.may_depend_on(other),
+            Self::Symlink(item) => item.may_depend_on(other),
+            Self::User(item) => item.may_depend_on(other),
+        }
+    }
+
+    pub fn push_requirement(&mut self, metadata: ResourceMetadata) {
+        match self {
+            Self::AptPackage(item) => item.push_requirement(metadata),
+            Self::AptPreference(item) => item.push_requirement(metadata),
+            Self::Directory(item) => item.push_requirement(metadata),
+            Self::File(item) => item.push_requirement(metadata),
+            Self::Group(item) => item.push_requirement(metadata),
+            Self::Host(item) => item.push_requirement(metadata),
+            Self::ResolvConf(item) => item.push_requirement(metadata),
+            Self::Symlink(item) => item.push_requirement(metadata),
+            Self::User(item) => item.push_requirement(metadata),
+        }
+    }
+
     pub fn as_apt_package(&self) -> Option<&AptPackage> {
         match self {
             Self::AptPackage(item) => Some(item),
