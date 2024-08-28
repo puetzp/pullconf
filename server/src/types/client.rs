@@ -1358,6 +1358,23 @@ impl Client {
     ) -> Result<(), Terminate> {
         let scope = "validation";
 
+        // Ensure that there's only one `resolv.conf` resource.
+        if self
+            .resources
+            .iter()
+            .any(|item| item.as_resolv_conf().is_some())
+        {
+            error!(
+                scope,
+                client:% = self.name,
+                resource = resolv_conf.kind();
+                "there cannot be more than one {}",
+                resolv_conf.repr()
+            );
+
+            return Err(Terminate);
+        }
+
         // Save the metadata of the target file or symlink corresponding to the
         // /etc/resolv.conf file.
         // Also check if the target is a file resource that sets its
