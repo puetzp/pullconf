@@ -19,7 +19,10 @@ pub use symlink::Symlink;
 pub use user::User;
 
 use common::ResourceMetadata;
+use deserialize::Resource as DeResource;
 use serde::Serialize;
+use std::collections::HashMap;
+use toml::Value;
 use uuid::Uuid;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
@@ -208,5 +211,33 @@ impl Resource {
             Self::User(item) => Some(item),
             _ => None,
         }
+    }
+}
+
+impl TryFrom<(&DeResource, &HashMap<String, Value>)> for Resource {
+    type Error = String;
+
+    fn try_from(
+        (resource, variables): (&DeResource, &HashMap<String, Value>),
+    ) -> Result<Self, Self::Error> {
+        let resource = match resource {
+            DeResource::AptPackage(item) => {
+                Self::AptPackage(AptPackage::try_from((item, variables))?)
+            }
+            DeResource::AptPreference(item) => {
+                Self::AptPreference(AptPreference::try_from((item, variables))?)
+            }
+            DeResource::Directory(item) => Self::Directory(Directory::try_from((item, variables))?),
+            DeResource::File(item) => Self::File(File::try_from((item, variables))?),
+            DeResource::Group(item) => Self::Group(Group::try_from((item, variables))?),
+            DeResource::Host(item) => Self::Host(Host::try_from((item, variables))?),
+            DeResource::ResolvConf(item) => {
+                Self::ResolvConf(ResolvConf::try_from((item, variables))?)
+            }
+            DeResource::Symlink(item) => Self::Symlink(Symlink::try_from((item, variables))?),
+            DeResource::User(item) => Self::User(User::try_from((item, variables))?),
+        };
+
+        Ok(resource)
     }
 }

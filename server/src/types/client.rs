@@ -101,10 +101,38 @@ impl
             &mut HashMap<Hostname, (Group, usize)>,
         ),
     ) -> Result<Self, Self::Error> {
+        let scope = "validation";
+
         // Initialize the client and validate the client's own configuration,
         // substituting variables in the process.
         // This does not take resources from groups into account.
-        let mut client = Client::try_from((name, intermediate))?;
+        let mut client = Self {
+            name,
+            api_key: intermediate.api_key,
+            assigned_groups: intermediate.assigned_groups,
+            variables: intermediate.variables,
+            temporary: ValidationHelpers::default(),
+            resources: vec![],
+        };
+
+        for item in intermediate.resources {
+            let requires = item.requires().to_vec();
+
+            let resource = Resource::try_from((&item, &client.variables)).map_err(|error| {
+                error!(
+                    scope,
+                    client:% = client.name,
+                    resource = item.kind();
+                    "{}",
+                    error
+                );
+                Terminate
+            })?;
+
+            client.temporary.requires.insert(resource.id(), requires);
+
+            client.resources.push(resource);
+        }
 
         // Extend the client's resource catalog with resources from groups
         // that the client is a member of, substituting variables in the process.
@@ -133,244 +161,6 @@ impl
         client.validate_apt_preferences(&mut paths)?;
 
         client.temporary.clear();
-
-        Ok(client)
-    }
-}
-
-impl TryFrom<(Hostname, deserialize::Client)> for Client {
-    type Error = Terminate;
-
-    /// Create the client instance.
-    /// Validate and insert each resource from the intermediate client
-    /// representation. Variables are substituted in the process.
-    fn try_from(
-        (name, intermediate): (Hostname, deserialize::Client),
-    ) -> Result<Self, Self::Error> {
-        let scope = "validation";
-
-        let mut client = Self {
-            name,
-            api_key: intermediate.api_key,
-            assigned_groups: intermediate.assigned_groups,
-            variables: intermediate.variables,
-            temporary: ValidationHelpers::default(),
-            resources: vec![],
-        };
-
-        for resource in intermediate.resources {
-            match resource {
-                DeResource::AptPackage(item) => {
-                    let resource: Resource =
-                        apt::package::Package::try_from((&item, &client.variables))
-                            .map_err(|error| {
-                                error!(
-                                    scope,
-                                    client:% = client.name,
-                                    resource = item.kind();
-                                    "{}",
-                                    error
-                                );
-                                Terminate
-                            })?
-                            .into();
-
-                    client
-                        .temporary
-                        .requires
-                        .insert(resource.id(), item.requires);
-
-                    client.resources.push(resource);
-                }
-                DeResource::AptPreference(item) => {
-                    let resource: Resource =
-                        apt::preference::Preference::try_from((&item, &client.variables))
-                            .map_err(|error| {
-                                error!(
-                                    scope,
-                                    client:% = client.name,
-                                    resource = item.kind();
-                                    "{}",
-                                    error
-                                );
-                                Terminate
-                            })?
-                            .into();
-
-                    client
-                        .temporary
-                        .requires
-                        .insert(resource.id(), item.requires);
-
-                    client.resources.push(resource);
-                }
-                DeResource::Directory(item) => {
-                    let resource: Resource =
-                        directory::Directory::try_from((&item, &client.variables))
-                            .map_err(|error| {
-                                error!(
-                                    scope,
-                                    client:% = client.name,
-                                    resource = item.kind();
-                                    "{}",
-                                    error
-                                );
-                                Terminate
-                            })?
-                            .into();
-
-                    client
-                        .temporary
-                        .requires
-                        .insert(resource.id(), item.requires);
-
-                    client.resources.push(resource);
-                }
-                DeResource::File(item) => {
-                    let resource: Resource = file::File::try_from((&item, &client.variables))
-                        .map_err(|error| {
-                            error!(
-                                scope,
-                                client:% = client.name,
-                                resource = item.kind();
-                                "{}",
-                                error
-                            );
-                            Terminate
-                        })?
-                        .into();
-
-                    client
-                        .temporary
-                        .requires
-                        .insert(resource.id(), item.requires);
-
-                    client.resources.push(resource);
-                }
-                DeResource::Group(item) => {
-                    let resource: Resource = group::Group::try_from((&item, &client.variables))
-                        .map_err(|error| {
-                            error!(
-                                scope,
-                                client:% = client.name,
-                                resource = item.kind();
-                                "{}",
-                                error
-                            );
-                            Terminate
-                        })?
-                        .into();
-
-                    client
-                        .temporary
-                        .requires
-                        .insert(resource.id(), item.requires);
-
-                    client.resources.push(resource);
-                }
-                DeResource::Host(item) => {
-                    let resource: Resource = host::Host::try_from((&item, &client.variables))
-                        .map_err(|error| {
-                            error!(
-                                scope,
-                                client:% = client.name,
-                                resource = item.kind();
-                                "{}",
-                                error
-                            );
-                            Terminate
-                        })?
-                        .into();
-
-                    client
-                        .temporary
-                        .requires
-                        .insert(resource.id(), item.requires);
-
-                    client.resources.push(resource);
-                }
-                DeResource::ResolvConf(item) => {
-                    let resource: Resource =
-                        resolv_conf::ResolvConf::try_from((&item, &client.variables))
-                            .map_err(|error| {
-                                error!(
-                                    scope,
-                                    client:% = client.name,
-                                    resource = item.kind();
-                                    "{}",
-                                    error
-                                );
-                                Terminate
-                            })?
-                            .into();
-
-                    client
-                        .temporary
-                        .requires
-                        .insert(resource.id(), item.requires.clone());
-
-                    if client
-                        .resources
-                        .iter()
-                        .any(|resource| resource.as_resolv_conf().is_some())
-                    {
-                        error!(
-                            scope,
-                            client:% = client.name,
-                            resource = item.kind();
-                            "{} appears multiple times, cannot be more than one of this kind",
-                            resource.repr()
-                        );
-
-                        return Err(Terminate);
-                    } else {
-                        client.resources.push(resource);
-                    }
-                }
-                DeResource::Symlink(item) => {
-                    let resource: Resource = symlink::Symlink::try_from((&item, &client.variables))
-                        .map_err(|error| {
-                            error!(
-                                scope,
-                                client:% = client.name,
-                                resource = item.kind();
-                                "{}",
-                                error
-                            );
-                            Terminate
-                        })?
-                        .into();
-
-                    client
-                        .temporary
-                        .requires
-                        .insert(resource.id(), item.requires);
-
-                    client.resources.push(resource);
-                }
-                DeResource::User(item) => {
-                    let resource: Resource = user::User::try_from((&item, &client.variables))
-                        .map_err(|error| {
-                            error!(
-                                scope,
-                                client:% = client.name,
-                                resource = item.kind();
-                                "{}",
-                                error
-                            );
-                            Terminate
-                        })?
-                        .into();
-
-                    client
-                        .temporary
-                        .requires
-                        .insert(resource.id(), item.requires);
-
-                    client.resources.push(resource);
-                }
-            }
-        }
 
         Ok(client)
     }

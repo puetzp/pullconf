@@ -38,6 +38,34 @@ pub enum Resource {
 }
 
 impl Resource {
+    pub fn kind(&self) -> &str {
+        match self {
+            Self::AptPackage(parameters) => parameters.kind(),
+            Self::AptPreference(parameters) => parameters.kind(),
+            Self::Directory(parameters) => parameters.kind(),
+            Self::File(parameters) => parameters.kind(),
+            Self::Group(parameters) => parameters.kind(),
+            Self::Host(parameters) => parameters.kind(),
+            Self::ResolvConf(parameters) => parameters.kind(),
+            Self::Symlink(parameters) => parameters.kind(),
+            Self::User(parameters) => parameters.kind(),
+        }
+    }
+
+    pub fn requires(&self) -> &[Dependency] {
+        match self {
+            Self::AptPackage(parameters) => parameters.requires.as_slice(),
+            Self::AptPreference(parameters) => parameters.requires.as_slice(),
+            Self::Directory(parameters) => parameters.requires.as_slice(),
+            Self::File(parameters) => parameters.requires.as_slice(),
+            Self::Group(parameters) => parameters.requires.as_slice(),
+            Self::Host(parameters) => parameters.requires.as_slice(),
+            Self::ResolvConf(parameters) => parameters.requires.as_slice(),
+            Self::Symlink(parameters) => parameters.requires.as_slice(),
+            Self::User(parameters) => parameters.requires.as_slice(),
+        }
+    }
+
     pub fn as_apt_package(&self) -> Option<&apt::package::de::Parameters> {
         match self {
             Self::AptPackage(parameters) => Some(parameters),
