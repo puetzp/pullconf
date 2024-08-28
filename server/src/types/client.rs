@@ -571,7 +571,7 @@ impl Client {
             // Files (their paths) cannot be parents to directories.
             // Check if any file conflicts with this directory in that regard.
             if let Some(parent) = &directory.parameters.path.parent() {
-                if self.temproary.file_paths.contains(*parent) {
+                if self.temporary.file_paths.contains(*parent) {
                     error!(
                         scope,
                         client:% = self.name,
