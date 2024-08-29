@@ -476,6 +476,8 @@ impl Client {
                     }
                 }
             }
+
+            self.resources.push_back(resource);
         }
 
         Ok(())
