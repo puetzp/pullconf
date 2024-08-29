@@ -7,6 +7,7 @@ pub struct Parameters {
     pub ensure: Ensure,
     pub target: PathBuf,
     pub name: Name,
+    pub explanation: Option<String>,
     pub package: String,
     pub pin: String,
     pub pin_priority: i16,

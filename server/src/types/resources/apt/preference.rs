@@ -44,6 +44,11 @@ impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Preference {
 
             let name = parameters.name.resolve("name", variables)?;
 
+            let explanation = match &parameters.explanation {
+                Some(parameter) => parameter.resolve("explanation", variables)?,
+                None => None,
+            };
+
             let package = parameters.package.resolve("package", variables)?;
 
             let pin = parameters.pin.resolve("pin", variables)?;
@@ -56,6 +61,7 @@ impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Preference {
                 ensure,
                 target,
                 name,
+                explanation,
                 package,
                 pin,
                 pin_priority,
@@ -125,6 +131,7 @@ pub mod de {
         #[serde(default)]
         pub ensure: Option<VariableOrValue>,
         pub name: VariableOrValue,
+        pub explanation: Option<VariableOrValue>,
         pub package: VariableOrValue,
         pub pin: VariableOrValue,
         #[serde(rename = "pin-priority")]

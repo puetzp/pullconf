@@ -158,10 +158,14 @@ impl Preference {
         match self.parameters.ensure {
             Ensure::Present => {
                 // Build the desired file content from the resource parameters.
-                let content = format!(
+                let mut content = format!(
                     "Package: {}\nPin: {}\nPin-Priority: {}\n",
                     self.parameters.package, self.parameters.pin, self.parameters.pin_priority
                 );
+
+                if let Some(explanation) = &self.parameters.explanation {
+                    content.insert_str(0, &format!("Explanation: {}\n", explanation));
+                }
 
                 // Create or update the file, depending on the current file
                 // state.
