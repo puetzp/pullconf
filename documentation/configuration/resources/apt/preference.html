@@ -21,7 +21,10 @@
 	</hgroup>
 	<h4>Description</h4>
 	<p>
-	  This resource manages a preference file in the directory <code>/etc/apt/preferences.d</code>. Files in this directory are taken into consideration by <code>apt</code> when it assigns priorities to different versions of packages to determine which is selected for installation. The primary parameter of this resource is <code>name</code>.
+	  This resource manages a preference file in the directory <code>/etc/apt/preferences.d</code>. Files in this directory are taken into consideration by <code>apt</code> when it assigns priorities to different versions of packages to determine which is selected for installation. Files in this directory are parsed in alphabetic ascending order.
+	</p>
+	<p>
+	  The primary parameter of this resource is <code>name</code>.
 	</p>
 	<p>
 	  For more information about apt preferences see <kbd>man apt_preferences</kbd>.
@@ -71,6 +74,13 @@
 	      <td></td>
 	    </tr>
 	    <tr>
+	      <td><code>order</code></td>
+	      <td>integer</td>
+	      <td>Control the order in which <code>apt</code> parses preferences in <code>/etc/apt/preferences.d</code> by assigning this preference an additional numerical value. The value will be prepended to the file name. Files of lower order will be parsed earlier than files of a higher order.</td>
+	      <td>no</td>
+	      <td></td>
+	    </tr>
+	    <tr>
 	      <td><code>explanation</code></td>
 	      <td>string</td>
 	      <td>The value of the <code>Explanation</code> section of a preference as described in the man pages.</td>
@@ -105,8 +115,9 @@
 	  <pre>
 	    <code style="padding-top: 0; padding-bottom: 0;">
 [[resources]]
-type = "apt::package"
+type = "apt::preference"
 name = "nginx"
+explanation = "Pin nginx at this version even if it results in a downgrade."
 package = "nginx"
 pin = "version 1.18.0*"
 pin-priority = 1000
@@ -117,9 +128,11 @@ pin-priority = 1000
 	  <pre>
 	    <code style="padding-top: 0; padding-bottom: 0;">
 [[resources]]
-type = "apt::package"
+type = "apt::preference"
 ensure = "present"
 name = "bookworm"
+order = 10
+explanation = "Assign a higher priority to packages from a distribution by the codename bookworm."
 package = "*"
 pin = "release n=bookworm"
 pin-priority = 900

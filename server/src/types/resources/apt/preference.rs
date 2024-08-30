@@ -44,6 +44,11 @@ impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Preference {
 
             let name = parameters.name.resolve("name", variables)?;
 
+            let order: Option<u8> = match &parameters.order {
+                Some(parameter) => parameter.resolve("order", variables)?,
+                None => None,
+            };
+
             let explanation = match &parameters.explanation {
                 Some(parameter) => parameter.resolve("explanation", variables)?,
                 None => None,
@@ -55,7 +60,10 @@ impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Preference {
 
             let pin_priority = parameters.pin_priority.resolve("pin-priority", variables)?;
 
-            let target = PathBuf::from(format!("/etc/apt/preferences.d/{}", name));
+            let target = match order {
+                Some(order) => PathBuf::from(format!("/etc/apt/preferences.d/{}-{}", order, name)),
+                None => PathBuf::from(format!("/etc/apt/preferences.d/{}", name)),
+            };
 
             Parameters {
                 ensure,
@@ -131,6 +139,7 @@ pub mod de {
         #[serde(default)]
         pub ensure: Option<VariableOrValue>,
         pub name: VariableOrValue,
+        pub order: Option<VariableOrValue>,
         pub explanation: Option<VariableOrValue>,
         pub package: VariableOrValue,
         pub pin: VariableOrValue,
