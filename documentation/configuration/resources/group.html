@@ -11,7 +11,7 @@
   <body>
     <div hx-get="/header.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
     <main class="container">
-      <div hx-get="/v0.1.x/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+      <div hx-get="/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
       <div>
 	<hgroup>
 	  <p>Configuration > Resources</p>
@@ -27,17 +27,17 @@
 	  Groups, as identified by the value of the <code>name</code> parameter, must be unique.
 	</p>
 	<p>
-	  A groups implicitly depends on <a href="/v0.1.x/configuration/resources/user.html">user</a> resources whose <code>group</code> parameter matches the <code>name</code> of this group, thereby making this group their primary group. This means that primary groups may be processed after user resources, because in this case the lifecycle of the group is left to the system: A typical Debian installation will create the primary group of a user automatically upon user creation and delete it when the user is deleted.
+	  A groups implicitly depends on <a href="/configuration/resources/user.html">user</a> resources whose <code>group</code> parameter matches the <code>name</code> of this group, thereby making this group their primary group. This means that primary groups may be processed after user resources, because in this case the lifecycle of the group is left to the system: A typical Debian installation will create the primary group of a user automatically upon user creation and delete it when the user is deleted.
 	</p>
 	<p>
-	  <blockquote><em>It is recommended not to manage the primary groups of <a href="/v0.1.x/configuration/resources/user.html">users</a> at all, only supplementary groups. Instead leave it to <a href="/v0.1.x/configuration/resources/user.html">user</a> resources and the operating system to create and delete primary groups when necessary.</em></blockquote>
+	  <blockquote><em>It is recommended not to manage the primary groups of <a href="/configuration/resources/user.html">users</a> at all, only supplementary groups. Instead leave it to <a href="/configuration/resources/user.html">user</a> resources and the operating system to create and delete primary groups when necessary.</em></blockquote>
 	</p>
 	<h4>Parameters</h4>
 	<p>
 	  To declare a resource within the <code>[[resources]]</code> array as a group, set the <code>type</code> meta-parameter to <code>group</code>.
 	</p>
 	<p>
-	  In addition to the meta-parameters listed in <a href="/v0.1.x/configuration/resources.html">Resources</a>, this table lists all resource-specific parameters:
+	  In addition to the meta-parameters listed in <a href="/configuration/resources.html">Resources</a>, this table lists all resource-specific parameters:
 	</p>
 	<table>
 	  <thead>

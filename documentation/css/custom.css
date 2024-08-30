@@ -45,6 +45,10 @@ aside > nav {
     top: calc(var(--pico-spacing) * 2);
 }
 
+aside {
+    margin-bottom: 1rem;
+}
+
 path {
     fill: black;
 }

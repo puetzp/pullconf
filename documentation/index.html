@@ -11,7 +11,7 @@
   <body>
     <div hx-get="/header.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
     <main class="container">
-      <div hx-get="/v0.1.x/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+      <div hx-get="/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
       <div>
 	<hgroup>
 	  <p>About</p>
@@ -21,16 +21,16 @@
 	<p>
 	  <em>Pullconf</em> is a configuration management system for Debian GNU/Linux and other Debian-based Linux servers. It is heavily influenced by <a href="https://puppet.com" target="_blank">Puppet</a> (a very popular and widely-used configuration management system). In contrast to other configuration management systems this project focuses a lot on simplicity and ease of use. Or to put it in other words: its primary goal is being <em>boring</em>. Ideally as boring as its name.
 	</p>
-	<p>Pullconf works like this: Clients (i.e. Linux servers running the <em>pullconf</em> binary) communicate with a central server (<em>pullconfd</em>) in order to retrieve a catalog of <em>resources</em> via an HTTP API. These resources are then applied on the client to achieve a desired state, e.g. create a <a href="/v0.1.x/configuration/resources/file.html">file</a> at a certain location.
+	<p>Pullconf works like this: Clients (i.e. Linux servers running the <em>pullconf</em> binary) communicate with a central server (<em>pullconfd</em>) in order to retrieve a catalog of <em>resources</em> via an HTTP API. These resources are then applied on the client to achieve a desired state, e.g. create a <a href="/configuration/resources/file.html">file</a> at a certain location.
 	</p>
 	<p>
 	  As the name already implies, Pullconf employs a <em>pull-based</em> approach to system configuration: a client actively fetches its resource catalog and applies it according to a schedule (e.g. every 5 minutes).
 	</p>
 	<p>
-	  <em>Resources</em> such as <a href="/v0.1.x/configuration/resources/file.html">file</a>, <a href="/v0.1.x/configuration/resources/directory.html">directory</a> or <a href="/v0.1.x/configuration/resources/user.html">user</a> are defined on the <em>pullconfd</em> server, in files following the <a href="https://toml.io" target="_blank">TOML</a> format.
+	  <em>Resources</em> such as <a href="/configuration/resources/file.html">file</a>, <a href="/configuration/resources/directory.html">directory</a> or <a href="/configuration/resources/user.html">user</a> are defined on the <em>pullconfd</em> server, in files following the <a href="https://toml.io" target="_blank">TOML</a> format.
 	</p>
 	<p>
-	  Scripting and the development of custom modules is <u>not</u> supported and out of scope of this project. It focuses instead on including all kinds of resources directly into the project source. It should ultimately be possible to create simple <a href="/v0.1.x/configuration/resources/file.html">files</a> but also operate a Prometheus server by defining them as resources.
+	  Scripting and the development of custom modules is <u>not</u> supported and out of scope of this project. It focuses instead on including all kinds of resources directly into the project source. It should ultimately be possible to create simple <a href="/configuration/resources/file.html">files</a> but also operate a Prometheus server by defining them as resources.
 	</p>
 	<p>
 	  This is a basic example for a client configuration file to get a sense of the way TOML is used to define resources:

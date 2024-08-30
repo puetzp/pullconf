@@ -11,7 +11,7 @@
   <body>
     <div hx-get="/header.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
     <main class="container">
-      <div hx-get="/v0.1.x/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+      <div hx-get="/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
       <div>
 	<hgroup>
 	  <p>About</p>
@@ -40,17 +40,17 @@
 	</p>
 	<h4>Resources</h4>
 	<p>
-	  Resources are the main building blocks for configuring a target system. There are generic types such as <a href="/v0.1.x/configuration/resources/file.html">file</a>, <a href="/v0.1.x/configuration/resources/directory.html">directory</a> or <a href="/v0.1.x/configuration/resources/symlink.html">symlink</a>. On the other hand there are also very specific resource types as such as <a href="/v0.1.x/configuration/resources/host.html">host</a> that serve a single purpose, in this case maintaining a line in <code>/etc/hosts</code>.
+	  Resources are the main building blocks for configuring a target system. There are generic types such as <a href="/configuration/resources/file.html">file</a>, <a href="/configuration/resources/directory.html">directory</a> or <a href="/configuration/resources/symlink.html">symlink</a>. On the other hand there are also very specific resource types as such as <a href="/configuration/resources/host.html">host</a> that serve a single purpose, in this case maintaining a line in <code>/etc/hosts</code>.
 	</p>
 	<p>
-	  Pullconf tries to infer dependencies between configured resources. For example every <a href="/v0.1.x/configuration/resources/host.html">host</a> resource depends on the target file <code>/etc/hosts</code>. If this file does not exist, the resource cannot be applied. If an administrator chose to also manage this file explicitly via the <a href="/v0.1.x/configuration/resources/file.html">file</a> resource type, the former will depend on the latter and both resources will be applied in order. Similarly a <a href="/v0.1.x/configuration/resources/directory.html">directory</a> resource may depend on other directory resources if those happen to be ancestors to this directory, e.g. <code>/my/absolute/path</code> depends on <code>/my/absolute</code> if both happen to be managed resources.
+	  Pullconf tries to infer dependencies between configured resources. For example every <a href="/configuration/resources/host.html">host</a> resource depends on the target file <code>/etc/hosts</code>. If this file does not exist, the resource cannot be applied. If an administrator chose to also manage this file explicitly via the <a href="/configuration/resources/file.html">file</a> resource type, the former will depend on the latter and both resources will be applied in order. Similarly a <a href="/configuration/resources/directory.html">directory</a> resource may depend on other directory resources if those happen to be ancestors to this directory, e.g. <code>/my/absolute/path</code> depends on <code>/my/absolute</code> if both happen to be managed resources.
 	</p>
 	<h4>Groups</h4>
 	<p>
 	  As previously explained a client's resource catalog is defined in a TOML file on the server. The TOML structure contains an optional key that can be used to assign groups to a client. Groups are also TOML files stored on the server that (just as client configuration files) include resources. Groups are the place where common resources are defined that apply to multiple clients. For example the sshd configuration of a client fleet could be defined in a group since this is usually the same on every system.
 	</p>
 	<p>
-	  When the server is (re)started it reads resources from every group that a client is a member of and evaluates them in the context of this client. Resources that are already defined in the client take precedence over those defined in a group when they are the same. For example when a <a href="/v0.1.x/configuration/resources/file.html">file</a> resource managing a file at <code>/my/elaborate/path</code> is defined in both the client and the group TOML configuration file, the former takes precedence and the latter will be ignored.
+	  When the server is (re)started it reads resources from every group that a client is a member of and evaluates them in the context of this client. Resources that are already defined in the client take precedence over those defined in a group when they are the same. For example when a <a href="/configuration/resources/file.html">file</a> resource managing a file at <code>/my/elaborate/path</code> is defined in both the client and the group TOML configuration file, the former takes precedence and the latter will be ignored.
 	</p>
 	<p>
 	  While a client's resources take precedence over those defined in groups, there is no hierarchy on the group level. As such there are a total <u>two</u> configuration levels, the client level on top and all the group level below it. This structure invites you to <u>compose</u> your client's configuration from a set of groups and leave the client configuration file for the specific stuff.

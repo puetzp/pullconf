@@ -11,7 +11,7 @@
   <body>
     <div hx-get="/header.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
     <main class="container">
-      <div hx-get="/v0.1.x/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+      <div hx-get="/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
       <div>
 	<hgroup>
 	  <p>Configuration > Resources</p>
@@ -24,23 +24,23 @@
 	</p>
 	<h4>Relationship to other resources</h4>
 	<p>
-	  The value of the <code>path</code> parameter must be unique among all directory, <a href="/v0.1.x/configuration/resources/file.html">file</a> and <a href="/v0.1.x/configuration/resources/symlink.html">symlink</a> resources.
+	  The value of the <code>path</code> parameter must be unique among all directory, <a href="/configuration/resources/file.html">file</a> and <a href="/configuration/resources/symlink.html">symlink</a> resources.
 	</p>
 	<p>
-	  A directory implicitly depends on any other directory or <a href="/v0.1.x/configuration/resources/symlink.html">symlink</a> resources whose <code>path</code> parameters are ancestors to the directory <code>path</code>. For example when the <code>path</code> parameter of this directory is set to <code>/my/very/elaborate/example</code> and there is another directory whose <code>path</code> is <code>/my/very/elaborate</code>, then the former implicitly depends on the latter.
+	  A directory implicitly depends on any other directory or <a href="/configuration/resources/symlink.html">symlink</a> resources whose <code>path</code> parameters are ancestors to the directory <code>path</code>. For example when the <code>path</code> parameter of this directory is set to <code>/my/very/elaborate/example</code> and there is another directory whose <code>path</code> is <code>/my/very/elaborate</code>, then the former implicitly depends on the latter.
 	</p>
 	<p>
-	  A directory also implicitly depends on <a href="/v0.1.x/configuration/resources/user.html">user</a> resources whose <code>home</code> parameter matches the directory's <code>path</code>. This is because the tools creating the user already create a home directory. So in most cases the home directory does not need to be managed by a directory resource. But when it is it will be applied after the user resource and operate on the existing home directory.
+	  A directory also implicitly depends on <a href="/configuration/resources/user.html">user</a> resources whose <code>home</code> parameter matches the directory's <code>path</code>. This is because the tools creating the user already create a home directory. So in most cases the home directory does not need to be managed by a directory resource. But when it is it will be applied after the user resource and operate on the existing home directory.
 	</p>
 	<p>
-	  A directory also forms a relationship with child nodes, that is <a href="/v0.1.x/configuration/resources/directory.html">directory</a>, <a href="/v0.1.x/configuration/resources/file.html">file</a> and <a href="/v0.1.x/configuration/resources/symlink.html">symlink</a> resources who this directory is a parent to. A directory resource needs to keep track of managed child nodes, because if will remove unmanaged child nodes if the <code>purge</code> parameter is set to <code>true</code>.
+	  A directory also forms a relationship with child nodes, that is <a href="/configuration/resources/directory.html">directory</a>, <a href="/configuration/resources/file.html">file</a> and <a href="/configuration/resources/symlink.html">symlink</a> resources who this directory is a parent to. A directory resource needs to keep track of managed child nodes, because if will remove unmanaged child nodes if the <code>purge</code> parameter is set to <code>true</code>.
 	</p>
 	<h4>Parameters</h4>
 	<p>
 	  To declare a resource within the <code>[[resources]]</code> array as a directory, set the <code>type</code> meta-parameter to <code>directory</code>.
 	</p>
 	<p>
-	  In addition to the meta-parameters listed in <a href="/v0.1.x/configuration/resources.html">Resources</a>, this table lists all resource-specific parameters:
+	  In addition to the meta-parameters listed in <a href="/configuration/resources.html">Resources</a>, this table lists all resource-specific parameters:
 	</p>
 	<table>
 	  <thead>
@@ -90,7 +90,7 @@
 	      <td><code>purge</code></td>
 	      <td>boolean</td>
 	      <td>
-		<p>Determines if unknown child nodes, that is <a href="/v0.1.x/configuration/resources/directory.html">directory</a>, <a href="/v0.1.x/configuration/resources/file.html">file</a> and <a href="/v0.1.x/configuration/resources/symlink.html">symlink</a> resources who are not managed by Pullconf, should be removed from the directory.</p>
+		<p>Determines if unknown child nodes, that is <a href="/configuration/resources/directory.html">directory</a>, <a href="/configuration/resources/file.html">file</a> and <a href="/configuration/resources/symlink.html">symlink</a> resources who are not managed by Pullconf, should be removed from the directory.</p>
 		<p>
 		  Note that only direct children will be removed. That means if a directory `A` contains another directory `B`, but Pullconf does not manage `B`, `B` will be recursively deleted if `A` has <code>purge</code> set to <code>true</code>.</p>
 		<p>However if both `A` and `B` are managed directory resources and `A` has <code>purge</code> set to <code>true</code>, `B` and its contents will remain intact (unless of course, `B` also has <code>purge</code> set to <code>true</code>).

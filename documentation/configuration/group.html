@@ -11,7 +11,7 @@
   <body>
     <div hx-get="/header.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
     <main class="container">
-      <div hx-get="/v0.1.x/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+      <div hx-get="/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
       <div>
 	<hgroup>
 	  <p>Configuration</p>
@@ -19,10 +19,10 @@
 	  <hr>
 	</hgroup>
 	<p>
-	  As mentioned in the section dealing with <a href="/v0.1.x/configuration/client.html">client configuration files</a>, a client can be a member of multiple groups. The client inherits the collection of resources defined in group (in addition to those defined in its own configuration file). Some more detail on the relationships between clients and groups can be found in the <a href="/v0.1.x/concepts.html">concepts</a> section.
+	  As mentioned in the section dealing with <a href="/configuration/client.html">client configuration files</a>, a client can be a member of multiple groups. The client inherits the collection of resources defined in group (in addition to those defined in its own configuration file). Some more detail on the relationships between clients and groups can be found in the <a href="/concepts.html">concepts</a> section.
 	</p>
 	<p>
-	  In general resources that apply to multiple clients are suitable to be consolidated in a group. For instance when clients share the same set of entries in the <code>/etc/hosts</code> file via the <a href="/v0.1.x/configuration/resources/host.html">host</a> resource. Groups are thus the preferred way of de-duplicating resources in Pullconf.
+	  In general resources that apply to multiple clients are suitable to be consolidated in a group. For instance when clients share the same set of entries in the <code>/etc/hosts</code> file via the <a href="/configuration/resources/host.html">host</a> resource. Groups are thus the preferred way of de-duplicating resources in Pullconf.
 	</p>
 	<p>
 	  Similar to the client configuration a group is just a file. The name of the file determines the group name.
@@ -34,12 +34,12 @@
 	  For instance if
 	  <ul>
 	    <li>a group is called <code>ssh</code> and</li>
-	    <li><code>$PULLCONF_RESOURCE_DIR</code> uses the default value of <code>/etc/pullconfd/resources</code> (see <a href="/v0.1.x/installation/server.html#environment-variables">table</a>)</li>
+	    <li><code>$PULLCONF_RESOURCE_DIR</code> uses the default value of <code>/etc/pullconfd/resources</code> (see <a href="/installation/server.html#environment-variables">table</a>)</li>
 	  </ul>
 	  then the corresponding group configuration file must be created at <code>/etc/pullconfd/resources/groups/ssh.toml</code>.
 	</p>
 	<p>
-	  Refer to the <a href="/v0.1.x/configuration/client.html">client configuration section</a> for valid group names. Group names must follow the same rules as hostnames/client names.
+	  Refer to the <a href="/configuration/client.html">client configuration section</a> for valid group names. Group names must follow the same rules as hostnames/client names.
 	</p>
 	<p>
 	  The TOML files in <code>$PULLCONF_RESOURCE_DIR/groups</code> must adhere to this format:

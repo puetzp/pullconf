@@ -11,7 +11,7 @@
   <body>
     <div hx-get="/header.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
     <main class="container">
-      <div hx-get="/v0.1.x/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+      <div hx-get="/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
       <div>
 	<hgroup>
 	  <p>Configuration > Resources</p>
@@ -28,14 +28,14 @@
 	</p>
 	<h4>Relationship to other resources</h4>
 	<p>
-	  This resource implicitly depends on <a href="/v0.1.x/configuration/resources/directory.html">directory</a> and <a href="/v0.1.x/configuration/resources/symlink.html">symlink</a> resources whose <code>path</code> parameters are ancestors to the directory <code>/etc/apt/preferences.d</code>.
+	  This resource implicitly depends on <a href="/configuration/resources/directory.html">directory</a> and <a href="/configuration/resources/symlink.html">symlink</a> resources whose <code>path</code> parameters are ancestors to the directory <code>/etc/apt/preferences.d</code>.
 	</p>
 	<h4>Parameters</h4>
 	<p>
 	  To declare an instance of this resource within the <code>[[resources]]</code> array, set the <code>type</code> meta-parameter to <code>apt::preference</code>.
 	</p>
 	<p>
-	  In addition to the meta-parameters listed in <a href="/v0.1.x/configuration/resources.html">Resources</a>, the following table lists all resource-specific parameters.
+	  In addition to the meta-parameters listed in <a href="/configuration/resources.html">Resources</a>, the following table lists all resource-specific parameters.
 	</p>
 	<p>
 	  See also <kbd>man apt_preferences</kbd> for a thorough explanation on specific parameters.

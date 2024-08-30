@@ -11,7 +11,7 @@
   <body>
     <div hx-get="/header.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
     <main class="container">
-      <div hx-get="/v0.1.x/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+      <div hx-get="/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
       <div>
 	<hgroup>
 	  <p>Installation</p>
@@ -90,7 +90,7 @@
 	    <tr>
 	      <td>PULLCONF_ASSET_DIR</td>
 	      <td>
-		<p>Directory where static file assets are stored and downloaded from clients, e.g. when they are part of a <a href="/v0.1.x/configuration/resources/file.html">file</a> resource. The contents of this directory are exposed by <em>pullconfd</em> under the <code>/assets</code> endpoint. Clients are only authorized to download files that are referenced in their configuration.</p>
+		<p>Directory where static file assets are stored and downloaded from clients, e.g. when they are part of a <a href="/configuration/resources/file.html">file</a> resource. The contents of this directory are exposed by <em>pullconfd</em> under the <code>/assets</code> endpoint. Clients are only authorized to download files that are referenced in their configuration.</p>
 		<p>
 		  The content of this directory can also be arbitrarily nested according to your needs.
 		</p>

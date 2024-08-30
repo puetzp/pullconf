@@ -11,7 +11,7 @@
   <body>
     <div hx-get="/header.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
     <main class="container">
-      <div hx-get="/v0.1.x/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+      <div hx-get="/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
       <div>
 	<hgroup>
 	  <p>Configuration</p>
@@ -28,7 +28,7 @@
 	  For instance if
 	  <ul>
 	    <li>the fully-qualified domain name of the client is <code>my.example.com</code> and</li>
-	    <li><code>$PULLCONF_RESOURCE_DIR</code> uses the default value of <code>/etc/pullconfd/resources</code> (see <a href="/v0.1.x/installation/server.html#environment-variables">table</a>)</li>
+	    <li><code>$PULLCONF_RESOURCE_DIR</code> uses the default value of <code>/etc/pullconfd/resources</code> (see <a href="/installation/server.html#environment-variables">table</a>)</li>
 	  </ul>
 	 then the corresponding client configuration file must be created at <code>/etc/pullconfd/resources/clients/my.example.com.toml</code>.
 	</p>
@@ -66,14 +66,14 @@ groups = [ "&lt;group&gt;", "&lt;group&gt;" ... ]
 	  <ul>
 	    <li>
 	      <p>
-		the <code>api-key</code> <a href="https://toml.io/en/v1.0.0#string" target="_blank">string</a> corresponds to the SHA256 hash of the environment variable <code>$PULLCONF_API_KEY</code> on the <a href="/v0.1.x/installation/client.html#environment-variables">client</a>. It can be computed like this: <kbd>$ echo -n "$PULLCONF_API_KEY" | sha256sum</kbd>
+		the <code>api-key</code> <a href="https://toml.io/en/v1.0.0#string" target="_blank">string</a> corresponds to the SHA256 hash of the environment variable <code>$PULLCONF_API_KEY</code> on the <a href="/installation/client.html#environment-variables">client</a>. It can be computed like this: <kbd>$ echo -n "$PULLCONF_API_KEY" | sha256sum</kbd>
 	      </p>
 	      <p>
 		For example the SHA256 hash of the string <code>example</code> is <code>50d858e0985ecc7f60418aaf0cc5ab587f42c2570a884095a9e8ccacd0f6545c</code>.
 	      </p>
 	    </li>
-	    <li>[Optional]: <code>groups</code> is an <a href="https://toml.io/en/v1.0.0#array" target="_blank">array</a> of the names of <a href="/v0.1.x/configuration/group.html">groups</a> that the client should be a member of and whose resources the client should inherit.</li>
-	    <li>[Optional]: <code>[variables]</code> is a <a href="https://toml.io/en/v1.0.0#table" target="_blank">table</a> containing variables that can be used inside parameters of resources. See the section on <a href="/v0.1.x/configuration/variables.html">variables</a> for a thorough explanation.
+	    <li>[Optional]: <code>groups</code> is an <a href="https://toml.io/en/v1.0.0#array" target="_blank">array</a> of the names of <a href="/configuration/group.html">groups</a> that the client should be a member of and whose resources the client should inherit.</li>
+	    <li>[Optional]: <code>[variables]</code> is a <a href="https://toml.io/en/v1.0.0#table" target="_blank">table</a> containing variables that can be used inside parameters of resources. See the section on <a href="/configuration/variables.html">variables</a> for a thorough explanation.
 	    <li>[Optional]: <code>[[resources]]</code> is a <a href="https://toml.io/en/v1.0.0#array-of-tables" target="_blank">array-of-tables</a> that defines various resources.</li>
 	  </ul>
 	</p>

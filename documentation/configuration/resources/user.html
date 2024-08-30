@@ -11,7 +11,7 @@
   <body>
     <div hx-get="/header.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
     <main class="container">
-      <div hx-get="/v0.1.x/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+      <div hx-get="/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
       <div>
 	<hgroup>
 	  <p>Configuration > Resources</p>
@@ -27,14 +27,14 @@
 	  Users, as identified by the value of the <code>name</code> parameter, must be unique.
 	</p>
 	<p>
-	  A user implicitly depends on <a href="/v0.1.x/configuration/resources/user.html">group</a> resources whose <code>name</code> parameter matches one of groups in the <code>groups</code> array. Since group membership is actually handled by the user resource, group resources must be processed after user resources.
+	  A user implicitly depends on <a href="/configuration/resources/user.html">group</a> resources whose <code>name</code> parameter matches one of groups in the <code>groups</code> array. Since group membership is actually handled by the user resource, group resources must be processed after user resources.
 	</p>
 	<h4>Parameters</h4>
 	<p>
 	  To declare a resource within the <code>[[resources]]</code> array as a user, set the <code>type</code> meta-parameter to <code>user</code>.
 	</p>
 	<p>
-	  In addition to the meta-parameters listed in <a href="/v0.1.x/configuration/resources.html">Resources</a>, this table lists all resource-specific parameters:
+	  In addition to the meta-parameters listed in <a href="/configuration/resources.html">Resources</a>, this table lists all resource-specific parameters:
 	</p>
 	<table>
 	  <thead>

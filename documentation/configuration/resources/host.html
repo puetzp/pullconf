@@ -11,7 +11,7 @@
   <body>
     <div hx-get="/header.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
     <main class="container">
-      <div hx-get="/v0.1.x/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+      <div hx-get="/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
       <div>
 	<hgroup>
 	  <p>Configuration > Resources</p>
@@ -27,14 +27,14 @@
 	  Hosts (or host entries), as identified by the value of the <code>ip_address</code> parameter, must be unique. In other words there can only be one host entry per IP address.
 	</p>
 	<p>
-	  If there is a <a href="/v0.1.x/configuration/resources/file.html">file</a> or <a href="/v0.1.x/configuration/resources/symlink.html">symlink</a> resource whose <code>path</code> parameter is <code>/etc/hosts</code>, all host resources depend on it implicitly. However it is not possible to manage the contents of the <code>/etc/hosts</code> file via a file resource and manage one or more host resources at the same time. The <code>content</code> and <code>source</code> parameters of the file resource must be omitted in this case to avoi conflicting resource definitions.
+	  If there is a <a href="/configuration/resources/file.html">file</a> or <a href="/configuration/resources/symlink.html">symlink</a> resource whose <code>path</code> parameter is <code>/etc/hosts</code>, all host resources depend on it implicitly. However it is not possible to manage the contents of the <code>/etc/hosts</code> file via a file resource and manage one or more host resources at the same time. The <code>content</code> and <code>source</code> parameters of the file resource must be omitted in this case to avoi conflicting resource definitions.
 	</p>
 	<h4>Parameters</h4>
 	<p>
 	  To declare a resource within the <code>[[resources]]</code> array as a host, set the <code>type</code> meta-parameter to <code>host</code>.
 	</p>
 	<p>
-	  In addition to the meta-parameters listed in <a href="/v0.1.x/configuration/resources.html">Resources</a>, this table lists all resource-specific parameters:
+	  In addition to the meta-parameters listed in <a href="/configuration/resources.html">Resources</a>, this table lists all resource-specific parameters:
 	</p>
 	<table>
 	  <thead>

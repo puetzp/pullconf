@@ -11,7 +11,7 @@
   <body>
     <div hx-get="/header.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
     <main class="container">
-      <div hx-get="/v0.1.x/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+      <div hx-get="/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
       <div>
 	<hgroup>
 	  <p>Installation</p>
@@ -136,7 +136,7 @@
 	  Once <em>pullconf.timer</em> triggers <em>pullconf.service</em> the updated values from <code>/env/pullconf/environment</code> will be used.
 	</p>
 	<p>
-	  However <em>pullconf.service</em> will likely fail again. That is because <em>pullconf</em> tries to authenticate to <em>pullconfd</em> with a hostname and its API key. Both are still unknown to <em>pullconfd</em> as long as no client configuration file exists on the server side. Proceed to <a href="/v0.1.x/configuration/client.html">creating a client configuration file</a> in order to enable the connection from <em>pullconf</em> to <em>pullconfd</em>.
+	  However <em>pullconf.service</em> will likely fail again. That is because <em>pullconf</em> tries to authenticate to <em>pullconfd</em> with a hostname and its API key. Both are still unknown to <em>pullconfd</em> as long as no client configuration file exists on the server side. Proceed to <a href="/configuration/client.html">creating a client configuration file</a> in order to enable the connection from <em>pullconf</em> to <em>pullconfd</em>.
 	</p>
       </div>
     </main>

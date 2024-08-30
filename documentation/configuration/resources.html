@@ -11,7 +11,7 @@
   <body>
     <div hx-get="/header.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
     <main class="container">
-      <div hx-get="/v0.1.x/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+      <div hx-get="/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
       <div>
 	<hgroup>
 	  <p>Configuration</p>
@@ -19,13 +19,13 @@
 	  <hr>
 	</hgroup>
 	<p>
-	  Resources are the main building blocks of your configuration. They define which <a href="/v0.1.x/configuration/resources/file.html">files</a>, <a href="/v0.1.x/configuration/resources/host.html">hosts</a> etc. are managed on the client.
+	  Resources are the main building blocks of your configuration. They define which <a href="/configuration/resources/file.html">files</a>, <a href="/configuration/resources/host.html">hosts</a> etc. are managed on the client.
 	</p>
 	<p>
-	  Resources are defined in an <a href="https://toml.io/en/v1.0.0#array-of-tables" target="_blank">array-of-tables</a> using the header <code>[[resources]]</code> in the <a href="/v0.1.x/configuration/client.html">client</a> and <a href="/v0.1.x/configuration/group.html">group</a> configuration files.
+	  Resources are defined in an <a href="https://toml.io/en/v1.0.0#array-of-tables" target="_blank">array-of-tables</a> using the header <code>[[resources]]</code> in the <a href="/configuration/client.html">client</a> and <a href="/configuration/group.html">group</a> configuration files.
 	</p>
 	<p>
-	  Apart from resource-specific parameters (such as <code>path</code> in a <a href="/v0.1.x/configuration/resources/file.html">file</a> resource), each resource contains meta-parameters. These meta-parameters can be applied to every kind of resource. Note that meta-parameters are exempt from <a href="/v0.1.x/configuration/variables.html">variable substitution</a>.</p>
+	  Apart from resource-specific parameters (such as <code>path</code> in a <a href="/configuration/resources/file.html">file</a> resource), each resource contains meta-parameters. These meta-parameters can be applied to every kind of resource. Note that meta-parameters are exempt from <a href="/configuration/variables.html">variable substitution</a>.</p>
 	<p>The following table describes the meta-parameters that are currently supported.
 	</p>
 	<table>
@@ -61,7 +61,7 @@
 	    <tr>
 	      <td><code>requires</code></td>
 	      <td>array</td>
-	      <td>Defines dependencies between this and other resources. See <a href="/v0.1.x/configuration/dependencies.html">Dependencies</a> for more information.</td>
+	      <td>Defines dependencies between this and other resources. See <a href="/configuration/dependencies.html">Dependencies</a> for more information.</td>
 	      <td>no</td>
 	      <td><code>[]</code></td>
 	    </tr>

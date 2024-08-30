@@ -11,7 +11,7 @@
   <body>
     <div hx-get="/header.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
     <main class="container">
-      <div hx-get="/v0.1.x/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+      <div hx-get="/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
       <div>
 	<hgroup>
 	  <p>Configuration</p>
@@ -19,10 +19,10 @@
 	  <hr>
 	</hgroup>
 	<p>
-	  Variables are defined within the <code>[variables]</code> table in <a href="/v0.1.x/configuration/client.html">client configuration files</a>. Almost every resource parameter from resources defined in a <code>[[resources]]</code> array can be substituted with a variable. Since clients inherit the resources from groups that they are a member of, variable substitution at the client level applies to resources from groups as well, once they are loaded into the client resource catalog.
+	  Variables are defined within the <code>[variables]</code> table in <a href="/configuration/client.html">client configuration files</a>. Almost every resource parameter from resources defined in a <code>[[resources]]</code> array can be substituted with a variable. Since clients inherit the resources from groups that they are a member of, variable substitution at the client level applies to resources from groups as well, once they are loaded into the client resource catalog.
 	</p>
 	<p>
-	  Each type of resource has parameters that are described in a table in the resource documentation, e.g. in <a href="/v0.1.x/configuration/resources/host.html">host</a>. Each of these parameters (except for meta-parameters) can be substituted by a variable. The "TOML type" (see table) can be seen as the final type of the value in the parameter, after variable substitution has taken place. As such the type of the variable in <code>[variables]</code> must match the expected TOML type of the parameter that is being substituted.
+	  Each type of resource has parameters that are described in a table in the resource documentation, e.g. in <a href="/configuration/resources/host.html">host</a>. Each of these parameters (except for meta-parameters) can be substituted by a variable. The "TOML type" (see table) can be seen as the final type of the value in the parameter, after variable substitution has taken place. As such the type of the variable in <code>[variables]</code> must match the expected TOML type of the parameter that is being substituted.
 	</p>
 	<p>
 	  To replace the value of a parameter with a variable, specify a string in the format <code>"$pullconf::&ltvariable-name&gt"</code>. <code>variable-name</code> must match a key in the <code>[variables]</code> table.
@@ -51,7 +51,7 @@
 	  <tbody>
 	    <tr>
 	      <td><code>hostname</code></td>
-	      <td>The hostname of the client. The hostname is determined by the name of the client configuration file. See <a href="/v0.1.x/configuration/client.html">client</a>.</td>
+	      <td>The hostname of the client. The hostname is determined by the name of the client configuration file. See <a href="/configuration/client.html">client</a>.</td>
 	      <td><code>my.example.com</code></td>
 	    </tr>
 	  </tbody>

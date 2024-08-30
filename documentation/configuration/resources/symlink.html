@@ -11,7 +11,7 @@
   <body>
     <div hx-get="/header.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
     <main class="container">
-      <div hx-get="/v0.1.x/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+      <div hx-get="/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
       <div>
 	<hgroup>
 	  <p>Configuration > Resources</p>
@@ -24,20 +24,20 @@
 	</p>
 	<h4>Relationship to other resources</h4>
 	<p>
-	  The value of the <code>path</code> parameter must be unique among all symlink, <a href="/v0.1.x/configuration/resources/file.html">file</a> and <a href="/v0.1.x/configuration/resources/directory.html">directory</a> resources.
+	  The value of the <code>path</code> parameter must be unique among all symlink, <a href="/configuration/resources/file.html">file</a> and <a href="/configuration/resources/directory.html">directory</a> resources.
 	</p>
 	<p>
-	  A symlink implicitly depends on any other symlinks or <a href="/v0.1.x/configuration/resources/directory.html">directory</a> resources whose <code>path</code> parameters are ancestors to the symlink <code>path</code>. For example when the <code>path</code> parameter of this symlink is set to <code>/my/very/elaborate/example</code> and there is a directory whose <code>path</code> is <code>/my/very/elaborate</code>, then the former implicitly depends on the latter.
+	  A symlink implicitly depends on any other symlinks or <a href="/configuration/resources/directory.html">directory</a> resources whose <code>path</code> parameters are ancestors to the symlink <code>path</code>. For example when the <code>path</code> parameter of this symlink is set to <code>/my/very/elaborate/example</code> and there is a directory whose <code>path</code> is <code>/my/very/elaborate</code>, then the former implicitly depends on the latter.
 	</p>
 	<p>
-	  If the <code>target</code> parameter of the symlink resource contains a path that matches the <code>path</code> parameters of a managed <a href="/v0.1.x/configuration/resources/file.html">file</a> or <a href="/v0.1.x/configuration/resources/directory.html">directory</a> resource, the symlink resource depends on the latter.
+	  If the <code>target</code> parameter of the symlink resource contains a path that matches the <code>path</code> parameters of a managed <a href="/configuration/resources/file.html">file</a> or <a href="/configuration/resources/directory.html">directory</a> resource, the symlink resource depends on the latter.
 	</p>
 	<h4>Parameters</h4>
 	<p>
 	  To declare a resource within the <code>[[resources]]</code> array as a symlink, set the <code>type</code> meta-parameter to <code>symlink</code>.
 	</p>
 	<p>
-	  In addition to the meta-parameters listed in <a href="/v0.1.x/configuration/resources.html">Resources</a>, this table lists all resource-specific parameters:
+	  In addition to the meta-parameters listed in <a href="/configuration/resources.html">Resources</a>, this table lists all resource-specific parameters:
 	</p>
 	<table>
 	  <thead>

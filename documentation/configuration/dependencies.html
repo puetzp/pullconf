@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8"></meta>
+    <meta name="viewport" content="width=device-width, initial-scale=1"></meta>
+    <link rel="stylesheet" href="/css/pico.min.css">
+    <link rel="stylesheet" href="/css/custom.css">
+    <script src="/js/htmx.min.js"></script>
+    <title>Pullconf - Documentation</title>
+  </head>
+  <body>
+    <div hx-get="/header.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+    <main class="container">
+      <div hx-get="/table-of-contents.html" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></div>
+      <div>
+	<hgroup>
+	  <p>Configuration</p>
+	  <h2>Dependencies</h2>
+	  <hr>
+	</hgroup>
+	<p>
+	  Dependencies between resources can be <em>implicit</em> or <em>explicit</em>.
+	</p>
+	<ul>
+	  <li><em>implicit</em> dependencies between resources are established by <em>pullconfd</em> according to certain internal rules. For instance, a <a href="/configuration/resources/directory.html">directory</a> resource depends implicitly on other directory resources if they happen to be a parent node to this directory within the filesystem. There is a section in each resource documentation page that describes the kind of implicit dependency relationships this resource establishes with other resources. Implicit dependencies are established without specific configuration by the user.</li>
+	  <li><em>explicit</em> dependencies go beyond implicit dependencies in cases where implicit dependencies do not suffice. They are configured via the <code>requires</code> meta-parameter in each resource (see also <a href="/configuration/resources.html">Resources</a>).</li>
+	</ul>
+	<p>
+	  Explicit dependencies are validated with additional care to avoid dependency loops. Explicit dependencies may also produce other errors during validation if a dependency between two resources cannot be established in a logical sense. For example a <a href="/configuration/resources/directory.html">directory</a> resource at <code>/my/example</code> cannot depend on another directory resource at <code>/my/example/further/down</code>, because the former <u>must</u> be processed before the latter.
+	</p>
+	<p>
+	  To define a dependency using the <code>requires</code> parameter, use the <em>primary parameter</em> of the respective resource as well as their <code>type</code>.
+	</p>
+	<p>
+	  Not every resource has a primary parameter (e.g. <a href="/configuration/resources/resolv.conf.html">resolv.conf</a>), because some resources can only appear once within the entire resource catalog of a client. However most resources are primarily identified by some parameter, e.g. <a href="/configuration/resources/directory.html">directory</a> is primarily identified by their <code>path</code> parameter.
+	</p>
+	<h4>Examples</h4>
+	<p>
+	  <pre>
+	    <code style="padding-top: 0; padding-bottom: 0;">
+[[resources]]
+type = "directory"
+path = "/my/elaborate/example"
+requires = [
+    { type = "file", path = "/totally/different/location" },
+    { type = "resolv.conf" },
+    { type = "host", ip-address = "127.0.0.1" },
+]
+	    </code>
+	  </pre>
+	</p>
+      </div>
+    </main>
+  </body>
+</html>
