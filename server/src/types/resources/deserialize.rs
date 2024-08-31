@@ -5,7 +5,7 @@ use common::{
         group::Name as Groupname,
         user::Name as Username,
     },
-    SafePathBuf,
+    ResourceType, SafePathBuf,
 };
 use serde::{
     de::{DeserializeOwned, Error as SerdeError, Unexpected},
@@ -40,7 +40,7 @@ pub enum Resource {
 }
 
 impl Resource {
-    pub fn kind(&self) -> &str {
+    pub fn kind(&self) -> ResourceType {
         match self {
             Self::AptPackage(parameters) => parameters.kind(),
             Self::AptPreference(parameters) => parameters.kind(),

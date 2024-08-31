@@ -65,8 +65,8 @@ impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Package {
 }
 
 impl Package {
-    pub fn kind(&self) -> &str {
-        "apt::package"
+    pub fn kind(&self) -> ResourceType {
+        self.metadata.kind
     }
 
     pub fn display(&self) -> String {
@@ -74,7 +74,7 @@ impl Package {
     }
 
     pub fn id(&self) -> Uuid {
-        self.metadata.id()
+        self.metadata.id
     }
 
     pub fn metadata(&self) -> &ResourceMetadata {
@@ -109,8 +109,8 @@ pub mod de {
     }
 
     impl Parameters {
-        pub fn kind(&self) -> &str {
-            "apt::package"
+        pub fn kind(&self) -> ResourceType {
+            ResourceType::AptPackage
         }
     }
 }

@@ -20,7 +20,7 @@ pub use resolv_conf::ResolvConf;
 pub use symlink::Symlink;
 pub use user::User;
 
-use common::ResourceMetadata;
+use common::{ResourceMetadata, ResourceType};
 use deserialize::Resource as DeResource;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -118,7 +118,7 @@ impl Resource {
         }
     }
 
-    pub fn kind(&self) -> &str {
+    pub fn kind(&self) -> ResourceType {
         match self {
             Self::AptPackage(package) => package.kind(),
             Self::AptPreference(preference) => preference.kind(),

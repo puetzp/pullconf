@@ -88,8 +88,8 @@ impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Preference {
 }
 
 impl Preference {
-    pub fn kind(&self) -> &str {
-        "apt::preference"
+    pub fn kind(&self) -> ResourceType {
+        self.metadata.kind
     }
 
     pub fn display(&self) -> String {
@@ -97,7 +97,7 @@ impl Preference {
     }
 
     pub fn id(&self) -> Uuid {
-        self.metadata.id()
+        self.metadata.id
     }
 
     pub fn metadata(&self) -> &ResourceMetadata {
@@ -150,8 +150,8 @@ pub mod de {
     }
 
     impl Parameters {
-        pub fn kind(&self) -> &str {
-            "apt::preference"
+        pub fn kind(&self) -> ResourceType {
+            ResourceType::AptPreference
         }
     }
 }

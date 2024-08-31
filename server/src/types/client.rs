@@ -151,7 +151,7 @@ impl
                 error!(
                     scope,
                     client:% = client.name,
-                    resource = item.kind();
+                    resource:% = item.kind();
                     "{}",
                     error
                 );
@@ -331,7 +331,7 @@ impl Client {
                         scope,
                         client:% = self.name,
                         group:% = group_name,
-                        resource = item.kind();
+                        resource:% = item.kind();
                         "{}",
                         error
                     );
@@ -352,7 +352,7 @@ impl Client {
                             scope,
                             client:% = self.name,
                             group:% = group_name,
-                            resource = resource.kind();
+                            resource:% = resource.kind();
                             //                            name:% = package.parameters.name;
                             "duplicate resource defined in group `{}`",
                             origin,
@@ -436,7 +436,7 @@ impl Client {
                                 error!(
                                     scope,
                                     client:% = self.name,
-                                    resource = resource.kind();
+                                    resource:% = resource.kind();
                                     "{} cannot depend on {} as it would introduce a dependency loop",
                                     resource.repr(),
                                     other_resource.repr()
@@ -456,7 +456,7 @@ impl Client {
                             error!(
                                 scope,
                                 client:% = self.name,
-                                resource = resource.kind();
+                                resource:% = resource.kind();
                                 "{} cannot depend on {}",
                                 resource.repr(),
                                 other_resource.repr()
@@ -469,7 +469,7 @@ impl Client {
                         error!(
                             scope,
                             client:% = self.name,
-                            resource = resource.kind();
+                            resource:% = resource.kind();
                             "{} depends on {} which cannot be found",
                             resource.repr(),
                             dependency.repr()
@@ -500,7 +500,7 @@ impl Client {
             error!(
                 scope,
                 client:% = self.name,
-                resource = file.kind(),
+                resource:% = file.kind(),
                 path;
                 "path `{}` appears multiple times, must be unique among resources of type `file`, `symlink` and `directory`",
                 path
@@ -516,7 +516,7 @@ impl Client {
                 error!(
                     scope,
                     client:% = self.name,
-                    resource = file.kind(),
+                    resource:% = file.kind(),
                     path;
                     "another file `{}` is found to be a parent of {}, but files cannot be parents to other files",
                     file.repr(),
@@ -584,7 +584,7 @@ impl Client {
             error!(
                 scope,
                 client:% = self.name,
-                resource = job.kind(),
+                resource:% = job.kind(),
                 name;
                 "cron job name `{}` appears multiple times, names for cron jobs must be unique",
                 name
@@ -597,7 +597,7 @@ impl Client {
             error!(
                 scope,
                 client:% = self.name,
-                resource = job.kind(),
+                resource:% = job.kind(),
                 name;
                 "{} conflicts with another resource that manages the target path `{}`",
                 job.repr(),
@@ -667,7 +667,7 @@ impl Client {
             error!(
                 scope,
                 client:% = self.name,
-                resource = directory.kind(),
+                resource:% = directory.kind(),
                 path;
                 "path `{}` appears multiple times, must be unique among resources of type `file`, `symlink` and `directory`",
                 path
@@ -683,7 +683,7 @@ impl Client {
                 error!(
                     scope,
                     client:% = self.name,
-                    resource = directory.kind(),
+                    resource:% = directory.kind(),
                     path;
                     "file `{}` is found to be a parent of this directory, but files cannot be parents to directories",
                     parent.display()
@@ -832,7 +832,7 @@ impl Client {
             error!(
                 scope,
                 client:% = self.name,
-                resource = symlink.kind(),
+                resource:% = symlink.kind(),
                 path;
                 "path `{}` appears multiple times, must be unique among resources of type `file`, `symlink` and `directory`",
                 path
@@ -848,7 +848,7 @@ impl Client {
                 error!(
                     scope,
                     client:% = self.name,
-                    resource = symlink.kind(),
+                    resource:% = symlink.kind(),
                     path;
                     "file `{}` is found to be a parent of this symlink, but files cannot be parents to symlinks",
                     parent.display()
@@ -951,7 +951,7 @@ impl Client {
             error!(
                 scope,
                 client:% = self.name,
-                resource = host.kind(),
+                resource:% = host.kind(),
                 ip_address;
                 "IP address `{}` appears multiple times, must be unique among host entries",
                 ip_address
@@ -974,7 +974,7 @@ impl Client {
                 error!(
                     scope,
                     client:% = self.name,
-                    resource = host.kind(),
+                    resource:% = host.kind(),
                     ip_address;
                     "there cannot be both a {} resource and a {} whose `content` or `source` parameters are set",
                     host.repr(),
@@ -1029,7 +1029,7 @@ impl Client {
             error!(
                 scope,
                 client:% = self.name,
-                resource = group.kind(),
+                resource:% = group.kind(),
                 name;
                 "group name `{}` appears multiple times, group names must be unique",
                 name
@@ -1074,7 +1074,7 @@ impl Client {
             error!(
                 scope,
                 client:% = self.name,
-                resource = user.kind(),
+                resource:% = user.kind(),
                 name;
                 "user name `{}` appears multiple times, user names must be unique",
                 name
@@ -1122,7 +1122,7 @@ impl Client {
             error!(
                 scope,
                 client:% = self.name,
-                resource = resolv_conf.kind();
+                resource:% = resolv_conf.kind();
                 "there cannot be more than one {}",
                 resolv_conf.repr()
             );
@@ -1144,7 +1144,7 @@ impl Client {
                 error!(
                     scope,
                     client:% = self.name,
-                    resource = resolv_conf.kind();
+                    resource:% = resolv_conf.kind();
                     "there cannot be both a {} resource and a {} whose `content` or `source` parameters are set",
                     resolv_conf.repr(),
                     file.repr()
@@ -1201,7 +1201,7 @@ impl Client {
             error!(
                 scope,
                 client:% = self.name,
-                resource = package.kind(),
+                resource:% = package.kind(),
                 name;
                 "package name `{}` appears multiple times, package names must be unique",
                 name
@@ -1230,7 +1230,7 @@ impl Client {
             error!(
                 scope,
                 client:% = self.name,
-                resource = preference.kind(),
+                resource:% = preference.kind(),
                 name;
                 "preference name `{}` appears multiple times, preference names must be unique",
                 name
@@ -1247,7 +1247,7 @@ impl Client {
             error!(
                 scope,
                 client:% = self.name,
-                resource = preference.kind(),
+                resource:% = preference.kind(),
                 name;
                 "{} conflicts with another resource that manages the target path `{}`",
                 preference.repr(),
