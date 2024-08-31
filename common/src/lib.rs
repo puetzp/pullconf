@@ -17,6 +17,8 @@ pub enum ResourceType {
     AptPackage,
     #[serde(rename = "apt::preference")]
     AptPreference,
+    #[serde(rename = "cron::job")]
+    CronJob,
     #[serde(rename = "directory")]
     Directory,
     #[serde(rename = "file")]
@@ -40,6 +42,7 @@ impl FromStr for ResourceType {
         match s {
             "apt::package" => Ok(Self::AptPackage),
             "apt::preference" => Ok(Self::AptPreference),
+            "cron::job" => Ok(Self::CronJob),
             "directory" => Ok(Self::Directory),
             "file" => Ok(Self::File),
             "group" => Ok(Self::Group),
@@ -57,6 +60,7 @@ impl fmt::Display for ResourceType {
         match self {
             Self::AptPackage => f.write_str("apt::package"),
             Self::AptPreference => f.write_str("apt::preference"),
+            Self::CronJob => f.write_str("cron::job"),
             Self::Directory => f.write_str("directory"),
             Self::File => f.write_str("file"),
             Self::Group => f.write_str("group"),

@@ -1,4 +1,5 @@
 pub mod apt;
+pub mod cron;
 pub mod deserialize;
 pub mod directory;
 pub mod file;
@@ -10,6 +11,7 @@ pub mod user;
 
 pub use apt::package::Package as AptPackage;
 pub use apt::preference::Preference as AptPreference;
+pub use cron::job::Job as CronJob;
 pub use directory::Directory;
 pub use file::File;
 pub use group::Group;
@@ -30,6 +32,7 @@ use uuid::Uuid;
 pub enum Resource {
     AptPackage(AptPackage),
     AptPreference(AptPreference),
+    CronJob(CronJob),
     Directory(Directory),
     File(File),
     Group(Group),
@@ -48,6 +51,12 @@ impl From<AptPackage> for Resource {
 impl From<AptPreference> for Resource {
     fn from(preference: AptPreference) -> Self {
         Self::AptPreference(preference)
+    }
+}
+
+impl From<CronJob> for Resource {
+    fn from(job: CronJob) -> Self {
+        Self::CronJob(job)
     }
 }
 
@@ -98,6 +107,7 @@ impl Resource {
         match self {
             Self::AptPackage(package) => package.id(),
             Self::AptPreference(preference) => preference.id(),
+            Self::CronJob(job) => job.id(),
             Self::Directory(directory) => directory.id(),
             Self::File(file) => file.id(),
             Self::Group(group) => group.id(),
@@ -112,6 +122,7 @@ impl Resource {
         match self {
             Self::AptPackage(package) => package.kind(),
             Self::AptPreference(preference) => preference.kind(),
+            Self::CronJob(job) => job.kind(),
             Self::Directory(directory) => directory.kind(),
             Self::File(file) => file.kind(),
             Self::Group(group) => group.kind(),
@@ -126,6 +137,7 @@ impl Resource {
         match self {
             Self::AptPackage(package) => package.repr(),
             Self::AptPreference(preference) => preference.repr(),
+            Self::CronJob(job) => job.repr(),
             Self::Directory(directory) => directory.repr(),
             Self::File(file) => file.repr(),
             Self::Group(group) => group.repr(),
@@ -140,6 +152,7 @@ impl Resource {
         match self {
             Self::AptPackage(package) => package.metadata(),
             Self::AptPreference(preference) => preference.metadata(),
+            Self::CronJob(job) => job.metadata(),
             Self::Directory(directory) => directory.metadata(),
             Self::File(file) => file.metadata(),
             Self::Group(group) => group.metadata(),
@@ -154,6 +167,7 @@ impl Resource {
         match self {
             Self::AptPackage(item) => item.may_depend_on(other),
             Self::AptPreference(item) => item.may_depend_on(other),
+            Self::CronJob(item) => item.may_depend_on(other),
             Self::Directory(item) => item.may_depend_on(other),
             Self::File(item) => item.may_depend_on(other),
             Self::Group(item) => item.may_depend_on(other),
@@ -168,6 +182,7 @@ impl Resource {
         match self {
             Self::AptPackage(item) => item.push_requirement(metadata),
             Self::AptPreference(item) => item.push_requirement(metadata),
+            Self::CronJob(item) => item.push_requirement(metadata),
             Self::Directory(item) => item.push_requirement(metadata),
             Self::File(item) => item.push_requirement(metadata),
             Self::Group(item) => item.push_requirement(metadata),
@@ -188,6 +203,13 @@ impl Resource {
     pub fn as_apt_preference(&self) -> Option<&AptPreference> {
         match self {
             Self::AptPreference(item) => Some(item),
+            _ => None,
+        }
+    }
+
+    pub fn as_cron_job(&self) -> Option<&CronJob> {
+        match self {
+            Self::CronJob(item) => Some(item),
             _ => None,
         }
     }
@@ -255,6 +277,7 @@ impl TryFrom<(&DeResource, &HashMap<String, Value>)> for Resource {
             DeResource::AptPreference(item) => {
                 Self::AptPreference(AptPreference::try_from((item, variables))?)
             }
+            DeResource::CronJob(item) => Self::CronJob(CronJob::try_from((item, variables))?),
             DeResource::Directory(item) => Self::Directory(Directory::try_from((item, variables))?),
             DeResource::File(item) => Self::File(File::try_from((item, variables))?),
             DeResource::Group(item) => Self::Group(Group::try_from((item, variables))?),

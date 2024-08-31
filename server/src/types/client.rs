@@ -1,6 +1,6 @@
 use crate::types::{
     resources::{
-        apt,
+        apt, cron,
         deserialize::{Dependency, Resource as DeResource},
         directory, file, group, host, resolv_conf, symlink, user, Resource,
     },
@@ -10,6 +10,7 @@ use common::{
     error::Terminate,
     resources::{
         apt::{package::Name as AptPackageName, preference::Name as AptPreferenceName},
+        cron::job::Name as CronJobName,
         group::Name as GroupName,
         user::Name as UserName,
     },
@@ -60,6 +61,7 @@ pub struct ValidationHelpers {
     pub user_names: HashSet<UserName>,
     pub apt_package_names: HashSet<AptPackageName>,
     pub apt_preference_names: HashSet<AptPreferenceName>,
+    pub cron_job_names: HashSet<CronJobName>,
 }
 
 impl ValidationHelpers {
@@ -405,6 +407,7 @@ impl Client {
             match resource {
                 Resource::AptPackage(ref mut item) => self.validate_apt_package(item)?,
                 Resource::AptPreference(ref mut item) => self.validate_apt_preference(item)?,
+                Resource::CronJob(ref mut item) => self.validate_cron_job(item)?,
                 Resource::Directory(ref mut item) => self.validate_directory(item)?,
                 Resource::File(ref mut item) => self.validate_file(item)?,
                 Resource::Group(ref mut item) => self.validate_group(item)?,
@@ -562,6 +565,86 @@ impl Client {
                 .insert(metadata.id);
 
             file.relationships.requires.push(metadata);
+        }
+
+        Ok(())
+    }
+
+    fn validate_cron_job(&mut self, job: &mut cron::job::Job) -> Result<(), Terminate> {
+        let scope = "validation";
+
+        let name = job.parameters.name.to_string();
+
+        // Check for uniqueness of the name parameter.
+        if !self
+            .temporary
+            .cron_job_names
+            .insert(job.parameters.name.clone())
+        {
+            error!(
+                scope,
+                client:% = self.name,
+                resource = job.kind(),
+                name;
+                "cron job name `{}` appears multiple times, names for cron jobs must be unique",
+                name
+            );
+
+            return Err(Terminate);
+        }
+
+        if !self.temporary.paths.insert(job.parameters.target.clone()) {
+            error!(
+                scope,
+                client:% = self.name,
+                resource = job.kind(),
+                name;
+                "{} conflicts with another resource that manages the target path `{}`",
+                job.repr(),
+                job.parameters.target.display()
+            );
+
+            return Err(Terminate);
+        }
+
+        // Save metadata of ancestral directories that the target file
+        // depends on.
+        for ancestor in self.resources.iter().filter(|item| {
+            item.as_directory().is_some_and(|d| {
+                job.parameters
+                    .target
+                    .ancestors()
+                    .any(|a| a == *d.parameters.path)
+            })
+        }) {
+            let other = ancestor.metadata().clone();
+
+            self.temporary
+                .dependencies
+                .entry(job.id())
+                .or_default()
+                .insert(other.id);
+
+            job.relationships.requires.push(other);
+        }
+
+        for ancestor in self.resources.iter().filter(|item| {
+            item.as_symlink().is_some_and(|s| {
+                job.parameters
+                    .target
+                    .ancestors()
+                    .any(|a| a == *s.parameters.path)
+            })
+        }) {
+            let metadata = ancestor.metadata().clone();
+
+            self.temporary
+                .dependencies
+                .entry(job.id())
+                .or_default()
+                .insert(metadata.id);
+
+            job.relationships.requires.push(metadata);
         }
 
         Ok(())

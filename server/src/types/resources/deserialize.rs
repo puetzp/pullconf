@@ -1,4 +1,4 @@
-use super::{apt, directory, file, group, host, resolv_conf, symlink, user};
+use super::{apt, cron, directory, file, group, host, resolv_conf, symlink, user};
 use common::{
     resources::{
         apt::{package::Name as PackageName, preference::Name as PreferenceName},
@@ -21,6 +21,8 @@ pub enum Resource {
     AptPackage(apt::package::de::Parameters),
     #[serde(rename = "apt::preference")]
     AptPreference(apt::preference::de::Parameters),
+    #[serde(rename = "cron::job")]
+    CronJob(cron::job::de::Parameters),
     #[serde(rename = "directory")]
     Directory(directory::de::Parameters),
     #[serde(rename = "file")]
@@ -42,6 +44,7 @@ impl Resource {
         match self {
             Self::AptPackage(parameters) => parameters.kind(),
             Self::AptPreference(parameters) => parameters.kind(),
+            Self::CronJob(parameters) => parameters.kind(),
             Self::Directory(parameters) => parameters.kind(),
             Self::File(parameters) => parameters.kind(),
             Self::Group(parameters) => parameters.kind(),
@@ -56,6 +59,7 @@ impl Resource {
         match self {
             Self::AptPackage(parameters) => parameters.requires.as_slice(),
             Self::AptPreference(parameters) => parameters.requires.as_slice(),
+            Self::CronJob(parameters) => parameters.requires.as_slice(),
             Self::Directory(parameters) => parameters.requires.as_slice(),
             Self::File(parameters) => parameters.requires.as_slice(),
             Self::Group(parameters) => parameters.requires.as_slice(),
@@ -76,6 +80,13 @@ impl Resource {
     pub fn as_apt_preference(&self) -> Option<&apt::preference::de::Parameters> {
         match self {
             Self::AptPreference(parameters) => Some(parameters),
+            _ => None,
+        }
+    }
+
+    pub fn as_cron_job(&self) -> Option<&cron::job::de::Parameters> {
+        match self {
+            Self::CronJob(parameters) => Some(parameters),
             _ => None,
         }
     }
