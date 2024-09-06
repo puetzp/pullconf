@@ -1,4 +1,5 @@
 pub mod apt;
+pub mod cron;
 pub mod directory;
 pub mod file;
 pub mod group;
@@ -43,6 +44,8 @@ pub enum Resource {
     AptPackage(apt::package::Package),
     #[serde(rename = "apt::preference")]
     AptPreference(apt::preference::Preference),
+    #[serde(rename = "cron::job")]
+    CronJob(cron::job::Job),
     Directory(directory::Directory),
     File(file::File),
     Group(group::Group),
@@ -60,15 +63,16 @@ impl Resource {
     /// matching stuff to infer the resource type.
     pub fn id(&self) -> Uuid {
         match self {
-            Self::AptPackage(package) => package.id(),
-            Self::AptPreference(preference) => preference.id(),
-            Self::Directory(directory) => directory.id(),
-            Self::File(file) => file.id(),
-            Self::Group(group) => group.id(),
-            Self::Host(host) => host.id(),
-            Self::ResolvConf(resolv_conf) => resolv_conf.id(),
-            Self::Symlink(symlink) => symlink.id(),
-            Self::User(user) => user.id(),
+            Self::AptPackage(resource) => resource.id(),
+            Self::AptPreference(resource) => resource.id(),
+            Self::CronJob(resource) => resource.id(),
+            Self::Directory(resource) => resource.id(),
+            Self::File(resource) => resource.id(),
+            Self::Group(resource) => resource.id(),
+            Self::Host(resource) => resource.id(),
+            Self::ResolvConf(resource) => resource.id(),
+            Self::Symlink(resource) => resource.id(),
+            Self::User(resource) => resource.id(),
         }
     }
 
@@ -78,15 +82,16 @@ impl Resource {
     /// matching stuff to infer the resource type.
     pub fn repr(&self) -> String {
         match self {
-            Self::AptPackage(package) => package.repr(),
-            Self::AptPreference(preference) => preference.repr(),
-            Self::Directory(directory) => directory.repr(),
-            Self::File(file) => file.repr(),
-            Self::Group(group) => group.repr(),
-            Self::Host(host) => host.repr(),
-            Self::ResolvConf(resolv_conf) => resolv_conf.repr(),
-            Self::Symlink(symlink) => symlink.repr(),
-            Self::User(user) => user.repr(),
+            Self::AptPackage(resource) => resource.repr(),
+            Self::AptPreference(resource) => resource.repr(),
+            Self::CronJob(resource) => resource.repr(),
+            Self::Directory(resource) => resource.repr(),
+            Self::File(resource) => resource.repr(),
+            Self::Group(resource) => resource.repr(),
+            Self::Host(resource) => resource.repr(),
+            Self::ResolvConf(resource) => resource.repr(),
+            Self::Symlink(resource) => resource.repr(),
+            Self::User(resource) => resource.repr(),
         }
     }
 
@@ -96,15 +101,16 @@ impl Resource {
     /// matching stuff to infer the resource type.
     pub fn is_ready(&self, applied_resources: &HashMap<Uuid, Resource>) -> bool {
         match self {
-            Self::AptPackage(package) => package.is_ready(applied_resources),
-            Self::AptPreference(preference) => preference.is_ready(applied_resources),
-            Self::Directory(directory) => directory.is_ready(applied_resources),
-            Self::File(file) => file.is_ready(applied_resources),
-            Self::Group(group) => group.is_ready(applied_resources),
-            Self::Host(host) => host.is_ready(applied_resources),
-            Self::ResolvConf(resolv_conf) => resolv_conf.is_ready(applied_resources),
-            Self::Symlink(symlink) => symlink.is_ready(applied_resources),
-            Self::User(user) => user.is_ready(applied_resources),
+            Self::AptPackage(resource) => resource.is_ready(applied_resources),
+            Self::AptPreference(resource) => resource.is_ready(applied_resources),
+            Self::CronJob(resource) => resource.is_ready(applied_resources),
+            Self::Directory(resource) => resource.is_ready(applied_resources),
+            Self::File(resource) => resource.is_ready(applied_resources),
+            Self::Group(resource) => resource.is_ready(applied_resources),
+            Self::Host(resource) => resource.is_ready(applied_resources),
+            Self::ResolvConf(resource) => resource.is_ready(applied_resources),
+            Self::Symlink(resource) => resource.is_ready(applied_resources),
+            Self::User(resource) => resource.is_ready(applied_resources),
         }
     }
 
@@ -120,64 +126,68 @@ impl Resource {
         applied_resources: &HashMap<Uuid, Resource>,
     ) {
         match self {
-            Self::AptPackage(ref mut package) => package.apply(pid, applied_resources),
-            Self::AptPreference(ref mut preference) => preference.apply(pid, applied_resources),
-            Self::Directory(ref mut directory) => directory.apply(pid, applied_resources),
-            Self::File(ref mut file) => {
-                file.apply(pid, agent, base_url, api_key, applied_resources)
+            Self::AptPackage(ref mut resource) => resource.apply(pid, applied_resources),
+            Self::AptPreference(ref mut resource) => resource.apply(pid, applied_resources),
+            Self::CronJob(ref mut resource) => resource.apply(pid, applied_resources),
+            Self::Directory(ref mut resource) => resource.apply(pid, applied_resources),
+            Self::File(ref mut resource) => {
+                resource.apply(pid, agent, base_url, api_key, applied_resources)
             }
-            Self::Group(ref mut group) => group.apply(pid, applied_resources),
-            Self::Host(ref mut host) => host.apply(pid, applied_resources),
-            Self::ResolvConf(ref mut resolv_conf) => resolv_conf.apply(pid, applied_resources),
-            Self::Symlink(ref mut symlink) => symlink.apply(pid, applied_resources),
-            Self::User(ref mut user) => user.apply(pid, applied_resources),
+            Self::Group(ref mut resource) => resource.apply(pid, applied_resources),
+            Self::Host(ref mut resource) => resource.apply(pid, applied_resources),
+            Self::ResolvConf(ref mut resource) => resource.apply(pid, applied_resources),
+            Self::Symlink(ref mut resource) => resource.apply(pid, applied_resources),
+            Self::User(ref mut resource) => resource.apply(pid, applied_resources),
         }
     }
 
     /// Check whether the resource has been skipped.
     pub fn is_skipped(&self) -> bool {
         match self {
-            Self::AptPackage(package) => package.action == Action::Skipped,
-            Self::AptPreference(preference) => preference.action == Action::Skipped,
-            Self::Directory(directory) => directory.action == Action::Skipped,
-            Self::File(file) => file.action == Action::Skipped,
-            Self::Group(group) => group.action == Action::Skipped,
-            Self::Host(host) => host.action == Action::Skipped,
-            Self::ResolvConf(resolv_conf) => resolv_conf.action == Action::Skipped,
-            Self::Symlink(symlink) => symlink.action == Action::Skipped,
-            Self::User(user) => user.action == Action::Skipped,
+            Self::AptPackage(resource) => resource.action == Action::Skipped,
+            Self::AptPreference(resource) => resource.action == Action::Skipped,
+            Self::CronJob(resource) => resource.action == Action::Skipped,
+            Self::Directory(resource) => resource.action == Action::Skipped,
+            Self::File(resource) => resource.action == Action::Skipped,
+            Self::Group(resource) => resource.action == Action::Skipped,
+            Self::Host(resource) => resource.action == Action::Skipped,
+            Self::ResolvConf(resource) => resource.action == Action::Skipped,
+            Self::Symlink(resource) => resource.action == Action::Skipped,
+            Self::User(resource) => resource.action == Action::Skipped,
         }
     }
 
     /// Check whether the resource has failed to apply.
     pub fn is_failed(&self) -> bool {
         match self {
-            Self::AptPackage(package) => package.action == Action::Failed,
-            Self::AptPreference(preference) => preference.action == Action::Failed,
-            Self::Directory(directory) => directory.action == Action::Failed,
-            Self::File(file) => file.action == Action::Failed,
-            Self::Group(group) => group.action == Action::Failed,
-            Self::Host(host) => host.action == Action::Failed,
-            Self::ResolvConf(resolv_conf) => resolv_conf.action == Action::Failed,
-            Self::Symlink(symlink) => symlink.action == Action::Failed,
-            Self::User(user) => user.action == Action::Failed,
+            Self::AptPackage(resource) => resource.action == Action::Failed,
+            Self::AptPreference(resource) => resource.action == Action::Failed,
+            Self::CronJob(resource) => resource.action == Action::Failed,
+            Self::Directory(resource) => resource.action == Action::Failed,
+            Self::File(resource) => resource.action == Action::Failed,
+            Self::Group(resource) => resource.action == Action::Failed,
+            Self::Host(resource) => resource.action == Action::Failed,
+            Self::ResolvConf(resource) => resource.action == Action::Failed,
+            Self::Symlink(resource) => resource.action == Action::Failed,
+            Self::User(resource) => resource.action == Action::Failed,
         }
     }
 
     /// Check whether the resource is set to absent.
     pub fn is_absent(&self) -> bool {
         match self {
-            Self::AptPackage(package) => {
-                package.parameters.ensure.is_absent() || package.parameters.ensure.is_purged()
+            Self::AptPackage(resource) => {
+                resource.parameters.ensure.is_absent() || resource.parameters.ensure.is_purged()
             }
-            Self::AptPreference(preference) => preference.parameters.ensure.is_absent(),
-            Self::Directory(directory) => directory.parameters.ensure.is_absent(),
-            Self::File(file) => file.parameters.ensure.is_absent(),
-            Self::Group(group) => group.parameters.ensure.is_absent(),
-            Self::Host(host) => host.parameters.ensure.is_absent(),
-            Self::ResolvConf(resolv_conf) => resolv_conf.parameters.ensure.is_absent(),
-            Self::Symlink(symlink) => symlink.parameters.ensure.is_absent(),
-            Self::User(user) => user.parameters.ensure.is_absent(),
+            Self::AptPreference(resource) => resource.parameters.ensure.is_absent(),
+            Self::CronJob(resource) => resource.parameters.ensure.is_absent(),
+            Self::Directory(resource) => resource.parameters.ensure.is_absent(),
+            Self::File(resource) => resource.parameters.ensure.is_absent(),
+            Self::Group(resource) => resource.parameters.ensure.is_absent(),
+            Self::Host(resource) => resource.parameters.ensure.is_absent(),
+            Self::ResolvConf(resource) => resource.parameters.ensure.is_absent(),
+            Self::Symlink(resource) => resource.parameters.ensure.is_absent(),
+            Self::User(resource) => resource.parameters.ensure.is_absent(),
         }
     }
 }
