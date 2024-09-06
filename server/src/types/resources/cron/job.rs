@@ -4,7 +4,7 @@ use crate::types::resources::{
 };
 use common::{
     resources::{
-        cron::job::{Parameters, Relationships},
+        cron::job::{Environment, Parameters, Relationships},
         user::Name as Username,
     },
     Ensure, ResourceMetadata, ResourceType,
@@ -44,6 +44,29 @@ impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Job {
 
             let name = parameters.name.resolve("name", variables)?;
 
+            let mut environment: Vec<Environment> = match &parameters.environment {
+                Some(parameter) => parameter.resolve("environment", variables)?,
+                None => vec![],
+            };
+
+            if environment.iter().any(|variable| variable.name.is_empty()) {
+                return Err(
+                    "environment variable names in `environment` cannot be empty".to_string(),
+                );
+            }
+
+            environment.sort_by(|a, b| a.name.cmp(&b.name));
+
+            let environment_count = environment.len();
+
+            environment.dedup_by(|a, b| a.name == b.name);
+
+            if environment_count != environment.len() {
+                return Err(
+                    "environment variable names in `environment` must be unique".to_string()
+                );
+            }
+
             let schedule = parameters.schedule.resolve("schedule", variables)?;
 
             let user = match &parameters.user {
@@ -58,6 +81,7 @@ impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Job {
             Parameters {
                 ensure,
                 target,
+                environment,
                 name,
                 schedule,
                 user,
@@ -118,6 +142,7 @@ pub mod de {
         #[serde(default)]
         pub ensure: Option<VariableOrValue>,
         pub name: VariableOrValue,
+        pub environment: Option<VariableOrValue>,
         pub schedule: VariableOrValue,
         #[serde(default)]
         pub user: Option<VariableOrValue>,

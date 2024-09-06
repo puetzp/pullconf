@@ -4,10 +4,17 @@ use serde::{de::Error, Deserialize, Deserializer, Serialize};
 use std::{fmt, ops::Deref, path::PathBuf, str::FromStr};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Environment {
+    pub name: String,
+    pub value: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Parameters {
     pub ensure: Ensure,
     pub target: PathBuf,
     pub name: Name,
+    pub environment: Vec<Environment>,
     pub schedule: String,
     pub user: Username,
     pub command: String,

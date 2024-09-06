@@ -158,10 +158,25 @@ impl Job {
         match self.parameters.ensure {
             Ensure::Present => {
                 // Build the desired file content from the resource parameters.
-                let content = format!(
+                let mut content = format!(
                     "{} {} {}\n",
                     self.parameters.schedule, self.parameters.user, self.parameters.command
                 );
+
+                for item in &self.parameters.environment {
+                    let line = match &item.value {
+                        Some(value) => {
+                            if value.is_empty() {
+                                format!("{}=\"\"\n", item.name)
+                            } else {
+                                format!("{}=\"{}\"\n", item.name, value)
+                            }
+                        }
+                        None => format!("{}=\n", item.name),
+                    };
+
+                    content.insert_str(0, &line);
+                }
 
                 // Create or update the file, depending on the current file
                 // state.
