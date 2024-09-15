@@ -113,6 +113,14 @@ impl ResolvConf {
         format!("{} `{}`", self.kind(), self.parameters.target.display())
     }
 
+    pub fn must_depend_on(&self, resource: &Resource) -> bool {
+        match resource {
+            Resource::File(file) => *file.parameters.path == self.parameters.target,
+            Resource::Symlink(symlink) => *symlink.parameters.path == self.parameters.target,
+            _ => false,
+        }
+    }
+
     pub fn may_depend_on(&self, resource: &Resource) -> bool {
         !matches!(resource, Resource::ResolvConf(_))
     }

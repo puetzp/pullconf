@@ -417,8 +417,24 @@ impl Client {
                 Resource::User(ref mut item) => self.validate_user(item)?,
             }
 
-            // Save the metadata of explicit dependencies (other resources)
-            // that this resource should depend on.
+            // Process implicit dependencies by saving the metadata of
+            // other resources that this resource depends on.
+            for other in &self.resources {
+                if resource.must_depend_on(other) {
+                    self.temporary
+                        .dependencies
+                        .entry(resource.metadata().id)
+                        .or_default()
+                        .insert(other.metadata().id);
+
+                    resource.push_requirement(other.metadata().clone());
+                }
+            }
+
+            // Process explicit dependencies by saving the metadata of
+            // other resources that this resource must depend on
+            // according to the `requires` meta-parameter found in
+            // the configuration.
             for dependency in self
                 .temporary
                 .requires
@@ -527,46 +543,6 @@ impl Client {
             }
         }
 
-        // Save the metadata of ancestral directories and symlinks
-        // that this file depends on.
-        for ancestor in self.resources.iter().filter(|item| {
-            item.as_directory().is_some_and(|d| {
-                file.parameters
-                    .path
-                    .ancestors()
-                    .any(|a| a == *d.parameters.path)
-            })
-        }) {
-            let metadata = ancestor.metadata().clone();
-
-            self.temporary
-                .dependencies
-                .entry(file.id())
-                .or_default()
-                .insert(metadata.id);
-
-            file.relationships.requires.push(metadata);
-        }
-
-        for ancestor in self.resources.iter().filter(|item| {
-            item.as_symlink().is_some_and(|s| {
-                file.parameters
-                    .path
-                    .ancestors()
-                    .any(|a| a == *s.parameters.path)
-            })
-        }) {
-            let metadata = ancestor.metadata().clone();
-
-            self.temporary
-                .dependencies
-                .entry(file.id())
-                .or_default()
-                .insert(metadata.id);
-
-            file.relationships.requires.push(metadata);
-        }
-
         Ok(())
     }
 
@@ -605,46 +581,6 @@ impl Client {
             );
 
             return Err(Terminate);
-        }
-
-        // Save metadata of ancestral directories that the target file
-        // depends on.
-        for ancestor in self.resources.iter().filter(|item| {
-            item.as_directory().is_some_and(|d| {
-                job.parameters
-                    .target
-                    .ancestors()
-                    .any(|a| a == *d.parameters.path)
-            })
-        }) {
-            let other = ancestor.metadata().clone();
-
-            self.temporary
-                .dependencies
-                .entry(job.id())
-                .or_default()
-                .insert(other.id);
-
-            job.relationships.requires.push(other);
-        }
-
-        for ancestor in self.resources.iter().filter(|item| {
-            item.as_symlink().is_some_and(|s| {
-                job.parameters
-                    .target
-                    .ancestors()
-                    .any(|a| a == *s.parameters.path)
-            })
-        }) {
-            let metadata = ancestor.metadata().clone();
-
-            self.temporary
-                .dependencies
-                .entry(job.id())
-                .or_default()
-                .insert(metadata.id);
-
-            job.relationships.requires.push(metadata);
         }
 
         Ok(())
@@ -752,69 +688,6 @@ impl Client {
             directory.relationships.children.push(child.into());
         }
 
-        // Save the metadata of user resources whose `home` directory
-        // matches this directory's `path`.
-        for user in self.resources.iter().filter(|item| {
-            item.as_user()
-                .is_some_and(|u| u.parameters.home == directory.parameters.path)
-        }) {
-            let metadata = directory.metadata();
-            let other = user.metadata().clone();
-
-            self.temporary
-                .dependencies
-                .entry(metadata.id)
-                .or_default()
-                .insert(other.id);
-
-            directory.relationships.requires.push(other);
-        }
-
-        // Save the metadata of ancestral directories and symlinks
-        // that this directory depends on.
-        for ancestor in self.resources.iter().filter(|item| {
-            item.as_directory().is_some_and(|d| {
-                directory
-                    .parameters
-                    .path
-                    .ancestors()
-                    .skip(1)
-                    .any(|a| a == *d.parameters.path)
-            })
-        }) {
-            let metadata = directory.metadata();
-            let other = ancestor.metadata().clone();
-
-            self.temporary
-                .dependencies
-                .entry(metadata.id)
-                .or_default()
-                .insert(other.id);
-
-            directory.relationships.requires.push(other);
-        }
-
-        for ancestor in self.resources.iter().filter(|item| {
-            item.as_symlink().is_some_and(|s| {
-                directory
-                    .parameters
-                    .path
-                    .ancestors()
-                    .any(|a| a == *s.parameters.path)
-            })
-        }) {
-            let metadata = directory.metadata();
-            let other = ancestor.metadata().clone();
-
-            self.temporary
-                .dependencies
-                .entry(metadata.id)
-                .or_default()
-                .insert(other.id);
-
-            directory.relationships.requires.push(other);
-        }
-
         Ok(())
     }
 
@@ -858,82 +731,6 @@ impl Client {
             }
         }
 
-        // Save metadata of ancestral directories that the symlink
-        // depends on.
-        for ancestor in self.resources.iter().filter(|item| {
-            item.as_directory().is_some_and(|d| {
-                symlink
-                    .parameters
-                    .path
-                    .ancestors()
-                    .any(|a| a == *d.parameters.path)
-            })
-        }) {
-            let metadata = symlink.metadata();
-            let other = ancestor.metadata().clone();
-
-            self.temporary
-                .dependencies
-                .entry(metadata.id)
-                .or_default()
-                .insert(other.id);
-
-            symlink.relationships.requires.push(other);
-        }
-
-        // Save metadata of ancestral symlinks that this symlink
-        // depends on.
-        for ancestor in self.resources.iter().filter(|item| {
-            item.as_symlink().is_some_and(|s| {
-                symlink
-                    .parameters
-                    .path
-                    .ancestors()
-                    .skip(1)
-                    .any(|a| a == *s.parameters.path)
-            })
-        }) {
-            let metadata = symlink.metadata();
-            let other = ancestor.metadata().clone();
-
-            self.temporary
-                .dependencies
-                .entry(metadata.id)
-                .or_default()
-                .insert(other.id);
-
-            symlink.relationships.requires.push(other);
-        }
-
-        // Save metadata of the target that this symlink points to.
-        if let Some(other) = self
-            .resources
-            .iter()
-            .find(|item| {
-                item.as_directory()
-                    .is_some_and(|d| d.parameters.path == symlink.parameters.target)
-            })
-            .map(|d| d.metadata().clone())
-            .or(self
-                .resources
-                .iter()
-                .find(|item| {
-                    item.as_file()
-                        .is_some_and(|f| f.parameters.path == symlink.parameters.target)
-                })
-                .map(|f| f.metadata().clone()))
-        {
-            let metadata = symlink.metadata();
-
-            self.temporary
-                .dependencies
-                .entry(metadata.id)
-                .or_default()
-                .insert(other.id);
-
-            symlink.relationships.requires.push(other);
-        }
-
         Ok(())
     }
 
@@ -960,10 +757,9 @@ impl Client {
             return Err(Terminate);
         }
 
-        // Save the metadata of the target file or symlink for the host
-        // entry.
-        // Also check if the target is a file resource that sets its
-        // content  or source parameter. This combination is not supported.
+        // Check if there is also a file managing `/etc/hosts` whose `content`
+        // or `source` parameter are set. This combination is not supported if a
+        // `host` resource exists.
         if let Some(file) = self
             .resources
             .iter()
@@ -982,34 +778,7 @@ impl Client {
                 );
 
                 return Err(Terminate);
-            } else {
-                let metadata = host.metadata();
-                let other = file.metadata().clone();
-
-                self.temporary
-                    .dependencies
-                    .entry(metadata.id)
-                    .or_default()
-                    .insert(other.id);
-
-                host.relationships.requires.push(other);
             }
-        }
-
-        if let Some(symlink) = self.resources.iter().find(|item| {
-            item.as_symlink()
-                .is_some_and(|s| *s.parameters.path == host.parameters.target)
-        }) {
-            let metadata = host.metadata();
-            let other = symlink.metadata().clone();
-
-            self.temporary
-                .dependencies
-                .entry(metadata.id)
-                .or_default()
-                .insert(other.id);
-
-            host.relationships.requires.push(other);
         }
 
         Ok(())
@@ -1038,25 +807,6 @@ impl Client {
             return Err(Terminate);
         }
 
-        // Add users as dependency to a group if the group is a
-        // user's primary group.
-        // Primary groups must be handled after users as user creation
-        // usually involves creating the primary group as well.
-        for user in self.resources.iter().filter_map(|item| item.as_user()) {
-            if user.parameters.group == group.parameters.name {
-                let metadata = group.metadata();
-                let other = user.metadata().clone();
-
-                self.temporary
-                    .dependencies
-                    .entry(metadata.id)
-                    .or_default()
-                    .insert(other.id);
-
-                group.relationships.requires.push(other);
-            }
-        }
-
         Ok(())
     }
 
@@ -1081,27 +831,6 @@ impl Client {
             );
 
             return Err(Terminate);
-        }
-
-        // Add group resources as dependencies if their name appears
-        // in the list of user group names.
-        // Supplementary groups must be processed before users.
-        for name in &user.parameters.groups {
-            if let Some(group) = self.resources.iter().find(|item| {
-                item.as_group()
-                    .is_some_and(|group| group.parameters.name == *name)
-            }) {
-                let metadata = user.metadata();
-                let other = group.metadata().clone();
-
-                self.temporary
-                    .dependencies
-                    .entry(metadata.id)
-                    .or_default()
-                    .insert(other.id);
-
-                user.relationships.requires.push(other);
-            }
         }
 
         Ok(())
@@ -1130,10 +859,9 @@ impl Client {
             return Err(Terminate);
         }
 
-        // Save the metadata of the target file or symlink corresponding to the
-        // /etc/resolv.conf file.
-        // Also check if the target is a file resource that sets its
-        // content or source parameter. This combination is not supported.
+        // Check if there is also a file managing `/etc/resolv.conf` whose `content`
+        // or `source` parameter are set. This combination is not supported if a
+        // `resolv.conf` resource exists.
         if let Some(file) = self
             .resources
             .iter()
@@ -1151,34 +879,7 @@ impl Client {
                 );
 
                 return Err(Terminate);
-            } else {
-                let metadata = resolv_conf.metadata();
-                let other = file.metadata().clone();
-
-                self.temporary
-                    .dependencies
-                    .entry(metadata.id)
-                    .or_default()
-                    .insert(other.id);
-
-                resolv_conf.relationships.requires.push(other);
             }
-        }
-
-        if let Some(symlink) = self.resources.iter().find(|item| {
-            item.as_symlink()
-                .is_some_and(|s| *s.parameters.path == resolv_conf.parameters.target)
-        }) {
-            let metadata = resolv_conf.metadata();
-            let other = symlink.metadata().clone();
-
-            self.temporary
-                .dependencies
-                .entry(metadata.id)
-                .or_default()
-                .insert(other.id);
-
-            resolv_conf.relationships.requires.push(other);
         }
 
         Ok(())
@@ -1255,48 +956,6 @@ impl Client {
             );
 
             return Err(Terminate);
-        }
-
-        // Save metadata of ancestral directories that the target file
-        // depends on.
-        for ancestor in self.resources.iter().filter(|item| {
-            item.as_directory().is_some_and(|d| {
-                preference
-                    .parameters
-                    .target
-                    .ancestors()
-                    .any(|a| a == *d.parameters.path)
-            })
-        }) {
-            let other = ancestor.metadata().clone();
-
-            self.temporary
-                .dependencies
-                .entry(preference.id())
-                .or_default()
-                .insert(other.id);
-
-            preference.relationships.requires.push(other);
-        }
-
-        for ancestor in self.resources.iter().filter(|item| {
-            item.as_symlink().is_some_and(|s| {
-                preference
-                    .parameters
-                    .target
-                    .ancestors()
-                    .any(|a| a == *s.parameters.path)
-            })
-        }) {
-            let metadata = ancestor.metadata().clone();
-
-            self.temporary
-                .dependencies
-                .entry(preference.id())
-                .or_default()
-                .insert(metadata.id);
-
-            preference.relationships.requires.push(metadata);
         }
 
         Ok(())

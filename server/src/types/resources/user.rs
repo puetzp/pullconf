@@ -142,6 +142,16 @@ impl User {
         format!("{} `{}`", self.kind(), self.display())
     }
 
+    pub fn must_depend_on(&self, resource: &Resource) -> bool {
+        match resource {
+            // Add group resources as dependencies if their name appears
+            // in the list of user group names.
+            // Supplementary groups must be processed before users.
+            Resource::Group(group) => self.parameters.groups.contains(&group.parameters.name),
+            _ => false,
+        }
+    }
+
     pub fn may_depend_on(&self, resource: &Resource) -> bool {
         match resource {
             Resource::Directory(directory) => self.parameters.home != directory.parameters.path,

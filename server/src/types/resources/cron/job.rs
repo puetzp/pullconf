@@ -121,6 +121,24 @@ impl Job {
         format!("{} `{}`", self.kind(), self.display())
     }
 
+    pub fn must_depend_on(&self, resource: &Resource) -> bool {
+        match resource {
+            Resource::Directory(directory) => self
+                .parameters
+                .target
+                .ancestors()
+                .skip(1)
+                .any(|ancestor| ancestor == *directory.parameters.path),
+            Resource::Symlink(symlink) => self
+                .parameters
+                .target
+                .ancestors()
+                .skip(1)
+                .any(|ancestor| ancestor == *symlink.parameters.path),
+            _ => false,
+        }
+    }
+
     pub fn may_depend_on(&self, resource: &Resource) -> bool {
         match resource {
             Resource::CronJob(item) => item.parameters.name != self.parameters.name,

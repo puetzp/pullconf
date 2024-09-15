@@ -85,6 +85,15 @@ impl Group {
         format!("{} `{}`", self.kind(), self.display())
     }
 
+    pub fn must_depend_on(&self, resource: &Resource) -> bool {
+        match resource {
+            // Primary groups must be handled after users as user creation
+            // usually involves creating the primary group as well.
+            Resource::User(user) => user.parameters.group == self.parameters.name,
+            _ => false,
+        }
+    }
+
     pub fn may_depend_on(&self, resource: &Resource) -> bool {
         match resource {
             Resource::Group(group) => group.parameters.name != self.parameters.name,

@@ -178,6 +178,21 @@ impl Resource {
         }
     }
 
+    pub fn must_depend_on(&self, other: &Self) -> bool {
+        match self {
+            Self::AptPackage(item) => item.must_depend_on(other),
+            Self::AptPreference(item) => item.must_depend_on(other),
+            Self::CronJob(item) => item.must_depend_on(other),
+            Self::Directory(item) => item.must_depend_on(other),
+            Self::File(item) => item.must_depend_on(other),
+            Self::Group(item) => item.must_depend_on(other),
+            Self::Host(item) => item.must_depend_on(other),
+            Self::ResolvConf(item) => item.must_depend_on(other),
+            Self::Symlink(item) => item.must_depend_on(other),
+            Self::User(item) => item.must_depend_on(other),
+        }
+    }
+
     pub fn push_requirement(&mut self, metadata: ResourceMetadata) {
         match self {
             Self::AptPackage(item) => item.push_requirement(metadata),

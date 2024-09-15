@@ -85,6 +85,10 @@ impl Package {
         format!("{} `{}`", self.kind(), self.display())
     }
 
+    pub fn must_depend_on(&self, _resource: &Resource) -> bool {
+        false
+    }
+
     pub fn may_depend_on(&self, resource: &Resource) -> bool {
         !matches!(resource, Resource::AptPackage(package) if package.parameters.name == self.parameters.name)
     }

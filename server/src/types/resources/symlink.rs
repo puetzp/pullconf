@@ -83,6 +83,25 @@ impl Symlink {
         format!("{} `{}`", self.kind(), self.display())
     }
 
+    pub fn must_depend_on(&self, resource: &Resource) -> bool {
+        match resource {
+            Resource::Directory(directory) => {
+                self.parameters
+                    .path
+                    .ancestors()
+                    .any(|ancestor| ancestor == *directory.parameters.path)
+                    || directory.parameters.path == self.parameters.target
+            }
+            Resource::File(file) => file.parameters.path == self.parameters.target,
+            Resource::Symlink(symlink) => self
+                .parameters
+                .path
+                .ancestors()
+                .any(|ancestor| ancestor == *symlink.parameters.path),
+            _ => false,
+        }
+    }
+
     pub fn may_depend_on(&self, resource: &Resource) -> bool {
         match resource {
             Resource::AptPreference(preference) => {

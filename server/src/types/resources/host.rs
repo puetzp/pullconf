@@ -102,6 +102,14 @@ impl Host {
         format!("{} `{}`", self.kind(), self.display())
     }
 
+    pub fn must_depend_on(&self, resource: &Resource) -> bool {
+        match resource {
+            Resource::File(file) => *file.parameters.path == self.parameters.target,
+            Resource::Symlink(symlink) => *symlink.parameters.path == self.parameters.target,
+            _ => false,
+        }
+    }
+
     pub fn may_depend_on(&self, resource: &Resource) -> bool {
         match resource {
             Resource::Host(host) => host.parameters.ip_address != self.parameters.ip_address,
