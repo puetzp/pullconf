@@ -35,7 +35,7 @@ impl ChildNode {
 
     pub fn is_file(&self, _path: &PathBuf) -> bool {
         match self {
-            Self::AptPreference { path } => path == path,
+            Self::AptPreference { path } => path == _path,
             Self::File { path } => **path == *_path,
             _ => false,
         }

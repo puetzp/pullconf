@@ -161,7 +161,7 @@ impl fmt::Display for Name {
 
 impl PartialEq<Groupname> for Name {
     fn eq(&self, other: &Groupname) -> bool {
-        &self.0 == other.deref()
+        self.0 == other.deref()
     }
 }
 
