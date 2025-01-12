@@ -70,6 +70,7 @@ impl Serialize for ExpiryDate {
 }
 
 #[derive(Clone, Debug, Eq, Default, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(untagged)]
 pub enum Password {
     #[default]
     #[serde(rename(serialize = "!"))]
