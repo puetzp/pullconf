@@ -4,7 +4,7 @@ use common::{
     resources::symlink::{Parameters, Relationships},
     Ensure, ResourceMetadata,
 };
-use log::{debug, error, info, warn};
+use log::{debug, error, info};
 use serde::Deserialize;
 use std::{
     collections::HashMap, default::Default, fs, io, os::unix::fs::symlink as create_symlink,
@@ -45,15 +45,15 @@ impl ResourceTrait for Symlink {
 impl Symlink {
     /// A wrapper around the actual apply function. This ensure that some
     /// meaningful log messages are printed and pre-checks are done.
-    pub fn apply(&mut self, pid: u32, applied_resources: &HashMap<Uuid, Resource>) {
-        if let Some(action) = self.maybe_return_early(pid, applied_resources) {
+    pub fn apply(&mut self, applied_resources: &HashMap<Uuid, Resource>) {
+        if let Some(action) = self.maybe_return_early(applied_resources) {
             self.action = action;
             return;
         }
 
         debug!("`{}`: applying resource", self.repr(),);
 
-        match self._apply(pid) {
+        match self._apply() {
             Ok(action) => {
                 info!("`{}`: successfully applied resource", self.repr());
 
@@ -70,7 +70,7 @@ impl Symlink {
     /// Apply this resource's configuration. This function can be called repeatedly
     /// and produce the same result if neither the configuration nor the actual
     /// symlink in the file system change.
-    pub fn _apply(&self, pid: u32) -> Result<Action, anyhow::Error> {
+    pub fn _apply(&self) -> Result<Action, anyhow::Error> {
         // Check if the intended symlink target exists by searching for it in
         // the filesystem.
         let target_exists = match fs::symlink_metadata(&*self.parameters.target) {
@@ -98,7 +98,7 @@ impl Symlink {
                 Ensure::Present => {
                     // When some error occurs during symlink creation it can be safely
                     // deleted again (cleaned up) as it did not exist in the first place.
-                    match self.create(pid) {
+                    match self.create() {
                         Ok(action) => Ok(action),
                         Err(error) => {
                             debug!(
@@ -115,14 +115,14 @@ impl Symlink {
                 Ensure::Absent => Ok(Action::Unchanged),
             },
             Some(metadata) => match self.parameters.ensure {
-                Ensure::Present => self.maybe_update(pid, metadata),
-                Ensure::Absent => self.delete(pid, metadata),
+                Ensure::Present => self.maybe_update(metadata),
+                Ensure::Absent => self.delete(metadata),
             },
         }
     }
 
     /// Re-create this symlink if the current target differs from the one that was configured.
-    fn maybe_update(&self, pid: u32, metadata: fs::Metadata) -> Result<Action, anyhow::Error> {
+    fn maybe_update(&self, metadata: fs::Metadata) -> Result<Action, anyhow::Error> {
         debug!(
             "`{}`: symlink exists, checking if current and desired states match",
             self.repr()
@@ -157,7 +157,7 @@ impl Symlink {
     }
 
     /// Create this symlink.
-    fn create(&self, pid: u32) -> Result<Action, anyhow::Error> {
+    fn create(&self) -> Result<Action, anyhow::Error> {
         debug!("`{}`: creating symlink as it does no exist", self.repr(),);
 
         create_symlink(&*self.parameters.target, &*self.parameters.path)
@@ -167,7 +167,7 @@ impl Symlink {
     }
 
     /// Delete this symlink.
-    fn delete(&self, pid: u32, metadata: fs::Metadata) -> Result<Action, anyhow::Error> {
+    fn delete(&self, metadata: fs::Metadata) -> Result<Action, anyhow::Error> {
         debug!("`{}`: deleting symlink", self.repr());
 
         if metadata.is_symlink() {

@@ -2,6 +2,7 @@ mod configuration;
 mod resources;
 mod util;
 
+use std::io::Write;
 use std::process::ExitCode;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -18,23 +19,34 @@ fn main() -> ExitCode {
     let pid = std::process::id();
 
     // Initialize logging.
-    env_logger::init();
+    env_logger::builder()
+        .format(move |buf, record| {
+            writeln!(
+                buf,
+                "[{} {} {}] {}",
+                buf.timestamp_millis(),
+                pid,
+                record.level(),
+                record.args()
+            )
+        })
+        .init();
 
     log::info!("starting {} v{}", APPLICATION, VERSION);
 
     if !nix::unistd::getuid().is_root() {
-        log::error!("(pid: {}) pullconf must be executed as root", pid);
+        log::error!("pullconf must be executed as root");
         return ExitCode::FAILURE;
     }
 
     // Fetch the client configuration from pullconfd and apply it.
-    match configuration::Configuration::get(pid) {
+    match configuration::Configuration::get() {
         Ok(configuration) => {
-            configuration.apply(pid);
+            configuration.apply();
             ExitCode::SUCCESS
         }
         Err(error) => {
-            log::error!("(pid: {}) {}", pid, error);
+            log::error!("{}", error);
             ExitCode::FAILURE
         }
     }

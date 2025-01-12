@@ -119,25 +119,24 @@ impl Resource {
     /// matching stuff to infer the resource type.
     pub fn apply(
         &mut self,
-        pid: u32,
         agent: &Agent,
         base_url: &Url,
         api_key: &str,
         applied_resources: &HashMap<Uuid, Resource>,
     ) {
         match self {
-            Self::AptPackage(ref mut resource) => resource.apply(pid, applied_resources),
-            Self::AptPreference(ref mut resource) => resource.apply(pid, applied_resources),
-            Self::CronJob(ref mut resource) => resource.apply(pid, applied_resources),
-            Self::Directory(ref mut resource) => resource.apply(pid, applied_resources),
+            Self::AptPackage(ref mut resource) => resource.apply(applied_resources),
+            Self::AptPreference(ref mut resource) => resource.apply(applied_resources),
+            Self::CronJob(ref mut resource) => resource.apply(applied_resources),
+            Self::Directory(ref mut resource) => resource.apply(applied_resources),
             Self::File(ref mut resource) => {
-                resource.apply(pid, agent, base_url, api_key, applied_resources)
+                resource.apply(agent, base_url, api_key, applied_resources)
             }
-            Self::Group(ref mut resource) => resource.apply(pid, applied_resources),
-            Self::Host(ref mut resource) => resource.apply(pid, applied_resources),
-            Self::ResolvConf(ref mut resource) => resource.apply(pid, applied_resources),
-            Self::Symlink(ref mut resource) => resource.apply(pid, applied_resources),
-            Self::User(ref mut resource) => resource.apply(pid, applied_resources),
+            Self::Group(ref mut resource) => resource.apply(applied_resources),
+            Self::Host(ref mut resource) => resource.apply(applied_resources),
+            Self::ResolvConf(ref mut resource) => resource.apply(applied_resources),
+            Self::Symlink(ref mut resource) => resource.apply(applied_resources),
+            Self::User(ref mut resource) => resource.apply(applied_resources),
         }
     }
 
@@ -259,11 +258,7 @@ pub trait ResourceTrait {
     /// There might also be cases were this resource's state interferes
     /// with that of a dependency, in which case this resource fails
     /// (Action::Failed).
-    fn maybe_return_early(
-        &self,
-        pid: u32,
-        applied_resources: &HashMap<Uuid, Resource>,
-    ) -> Option<Action> {
+    fn maybe_return_early(&self, applied_resources: &HashMap<Uuid, Resource>) -> Option<Action> {
         if let Some(dependency) = self.find_failed_dependency(applied_resources) {
             log::warn!(
                 "`{}`: skipping resource as dependency `{}` has failed to apply",
@@ -307,7 +302,7 @@ pub trait ResourceTrait {
     /// resource is applied. When the program cannot be found the
     /// resource should fail early to avoid failing when it is applied
     /// and possibly leaving the resource in a half-applied state.
-    fn check_prerequisites(&self, _pid: u32) -> Option<Action> {
+    fn check_prerequisites(&self) -> Option<Action> {
         None
     }
 

@@ -4,7 +4,7 @@ use common::{
     resources::resolv_conf::{Parameters, Relationships},
     Ensure, ResourceMetadata,
 };
-use log::{debug, error, info, warn};
+use log::{debug, error, info};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::{
@@ -48,15 +48,15 @@ impl ResourceTrait for ResolvConf {
 impl ResolvConf {
     /// A wrapper around the actual apply function. This ensure that some
     /// meaningful log messages are printed and pre-checks are done.
-    pub fn apply(&mut self, pid: u32, applied_resources: &HashMap<Uuid, Resource>) {
-        if let Some(action) = self.maybe_return_early(pid, applied_resources) {
+    pub fn apply(&mut self, applied_resources: &HashMap<Uuid, Resource>) {
+        if let Some(action) = self.maybe_return_early(applied_resources) {
             self.action = action;
             return;
         }
 
         debug!("`{}`: applying resource", self.repr());
 
-        match self._apply(pid) {
+        match self._apply() {
             Ok(action) => {
                 info!("`{}`: successfully applied resource", self.repr(),);
 
@@ -71,7 +71,7 @@ impl ResolvConf {
     }
 
     /// Apply this resource's configuration.
-    pub fn _apply(&self, pid: u32) -> Result<Action, anyhow::Error> {
+    pub fn _apply(&self) -> Result<Action, anyhow::Error> {
         match fs::File::open(&self.parameters.target) {
             Ok(mut file) => {
                 // If the file is found compute its current checksum.
@@ -147,12 +147,12 @@ impl ResolvConf {
                 // Apply the resource based on the result of the checksum comparison
                 // and the desired resource state.
                 match self.parameters.ensure {
-                    Ensure::Absent => self.clear(pid),
+                    Ensure::Absent => self.clear(),
                     Ensure::Present => {
                         if _match {
                             Ok(Action::Unchanged)
                         } else {
-                            self.populate(pid, content)
+                            self.populate(content)
                         }
                     }
                 }
@@ -171,7 +171,7 @@ impl ResolvConf {
     }
 
     /// Replace the current target file contents with the desired contents.
-    fn populate(&self, pid: u32, content: String) -> Result<Action, anyhow::Error> {
+    fn populate(&self, content: String) -> Result<Action, anyhow::Error> {
         debug!(
             "`{}`: populating target file `{}`",
             self.repr(),
@@ -203,7 +203,7 @@ impl ResolvConf {
     }
 
     /// Clear the target file.
-    fn clear(&self, pid: u32) -> Result<Action, anyhow::Error> {
+    fn clear(&self) -> Result<Action, anyhow::Error> {
         debug!(
             "`{}`: truncating target file `{}`",
             self.repr(),

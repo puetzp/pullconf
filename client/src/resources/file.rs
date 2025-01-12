@@ -5,7 +5,7 @@ use common::{
     resources::file::{Parameters, Relationships},
     Ensure, ResourceMetadata,
 };
-use log::{debug, error, info, warn};
+use log::{debug, error, info};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::{
@@ -54,20 +54,19 @@ impl File {
     /// meaningful log messages are printed and pre-checks are done.
     pub fn apply(
         &mut self,
-        pid: u32,
         agent: &Agent,
         base_url: &Url,
         api_key: &str,
         applied_resources: &HashMap<Uuid, Resource>,
     ) {
-        if let Some(action) = self.maybe_return_early(pid, applied_resources) {
+        if let Some(action) = self.maybe_return_early(applied_resources) {
             self.action = action;
             return;
         }
 
         debug!("`{}`: applying resource", self.repr(),);
 
-        match self._apply(pid, agent, base_url, api_key) {
+        match self._apply(agent, base_url, api_key) {
             Ok(action) => {
                 info!("`{}`: successfully applied resource", self.repr());
 
@@ -88,7 +87,6 @@ impl File {
     /// content may need to be downloaded from pullconfd.
     pub fn _apply(
         &self,
-        pid: u32,
         agent: &Agent,
         base_url: &Url,
         api_key: &str,
@@ -104,7 +102,7 @@ impl File {
                 Ensure::Present => {
                     // When some error occurs during file creation it can be safely
                     // deleted again (cleaned up) as it did not exist in the first place.
-                    match self.create(pid, agent, base_url, api_key) {
+                    match self.create(agent, base_url, api_key) {
                         Ok(action) => Ok(action),
                         Err(error) => {
                             debug!(
@@ -120,8 +118,8 @@ impl File {
                 Ensure::Absent => Ok(Action::Unchanged),
             },
             Some(metadata) => match self.parameters.ensure {
-                Ensure::Present => self.maybe_update(pid, agent, base_url, api_key, metadata),
-                Ensure::Absent => self.delete(pid, metadata),
+                Ensure::Present => self.maybe_update(agent, base_url, api_key, metadata),
+                Ensure::Absent => self.delete(metadata),
             },
         }
     }
@@ -130,7 +128,6 @@ impl File {
     /// from the desired state.
     fn maybe_update(
         &self,
-        pid: u32,
         agent: &Agent,
         base_url: &Url,
         api_key: &str,
@@ -275,7 +272,6 @@ impl File {
     /// configuration.
     fn create(
         &self,
-        pid: u32,
         agent: &Agent,
         base_url: &Url,
         api_key: &str,
@@ -344,7 +340,7 @@ impl File {
     }
 
     /// Delete this file.
-    fn delete(&self, pid: u32, metadata: fs::Metadata) -> Result<Action, anyhow::Error> {
+    fn delete(&self, metadata: fs::Metadata) -> Result<Action, anyhow::Error> {
         debug!("`{}`: deleting file", self.repr());
 
         if metadata.is_file() {

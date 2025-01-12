@@ -5,7 +5,7 @@ use common::{
     resources::directory::{Parameters, Relationships},
     Ensure, ResourceMetadata,
 };
-use log::{debug, error, info, warn};
+use log::{debug, error, info};
 use serde::Deserialize;
 use std::{
     collections::HashMap,
@@ -49,15 +49,15 @@ impl ResourceTrait for Directory {
 impl Directory {
     /// A wrapper around the actual apply function. This ensure that some
     /// meaningful log messages are printed and pre-checks are done.
-    pub fn apply(&mut self, pid: u32, applied_resources: &HashMap<Uuid, Resource>) {
-        if let Some(action) = self.maybe_return_early(pid, applied_resources) {
+    pub fn apply(&mut self, applied_resources: &HashMap<Uuid, Resource>) {
+        if let Some(action) = self.maybe_return_early(applied_resources) {
             self.action = action;
             return;
         }
 
         debug!("`{}`: applying resource", self.repr());
 
-        match self._apply(pid) {
+        match self._apply() {
             Ok(action) => {
                 info!("`{}`: successfully applied resource", self.repr(),);
 
@@ -74,7 +74,7 @@ impl Directory {
     /// Apply this resource's configuration. This function can be called repeatedly
     /// and produce the same result if neither the configuration nor the actual
     /// directory in the file system change.
-    pub fn _apply(&self, pid: u32) -> Result<Action, anyhow::Error> {
+    pub fn _apply(&self) -> Result<Action, anyhow::Error> {
         let metadata = match fs::metadata(&*self.parameters.path) {
             Ok(metadata) => Some(metadata),
             Err(error) if error.kind() == io::ErrorKind::NotFound => None,
@@ -86,7 +86,7 @@ impl Directory {
                 Ensure::Present => {
                     // When some error occurs during directory creation it can be safely
                     // deleted again (cleaned up) as it did not exist in the first place.
-                    match self.create(pid) {
+                    match self.create() {
                         Ok(action) => Ok(action),
                         Err(error) => {
                             debug!(
@@ -102,15 +102,15 @@ impl Directory {
                 Ensure::Absent => Ok(Action::Unchanged),
             },
             Some(metadata) => match self.parameters.ensure {
-                Ensure::Present => self.maybe_update(pid, metadata),
-                Ensure::Absent => self.delete(pid, metadata),
+                Ensure::Present => self.maybe_update(metadata),
+                Ensure::Absent => self.delete(metadata),
             },
         }
     }
 
     /// Change the directory's ownership parameters if the actual ownership
     /// configuration in the file system differ from the desired state.
-    fn maybe_update(&self, pid: u32, metadata: fs::Metadata) -> Result<Action, anyhow::Error> {
+    fn maybe_update(&self, metadata: fs::Metadata) -> Result<Action, anyhow::Error> {
         debug!(
             "`{}`: directory exists, checking if current and desired states match",
             self.repr()
@@ -182,7 +182,7 @@ impl Directory {
     }
 
     /// Create the directory and set ownership parameters.
-    fn create(&self, pid: u32) -> Result<Action, anyhow::Error> {
+    fn create(&self) -> Result<Action, anyhow::Error> {
         debug!(
             "`{}`: directory does not exist, creating new empty directory",
             self.repr()
@@ -206,7 +206,7 @@ impl Directory {
     }
 
     // Recursively (!) delete this directory.
-    fn delete(&self, pid: u32, metadata: fs::Metadata) -> Result<Action, anyhow::Error> {
+    fn delete(&self, metadata: fs::Metadata) -> Result<Action, anyhow::Error> {
         debug!("`{}`: deleting directory", self.repr());
 
         if metadata.is_dir() {

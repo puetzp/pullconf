@@ -1,8 +1,8 @@
 use crate::resources::{
     Resource, {Error, Resources},
 };
-use common::{error::Terminate, Hostname};
-use log::{debug, error, info};
+use common::Hostname;
+use log::{debug, info};
 use std::{
     collections::{HashMap, VecDeque},
     env,
@@ -34,7 +34,7 @@ impl Configuration {
     /// Retrieve this system's configuration from pullconfd.
     /// Depending on pullconfd's answer, either the payload or the cached resource
     /// list are parsed from JSON and then returned.
-    pub fn get(pid: u32) -> Result<Self, String> {
+    pub fn get() -> Result<Self, String> {
         // Retrieve the system's (fully-qualified) hostname. The hostname is used
         // to query pullconfd for this system's configuration.
         let hostname = {
@@ -148,8 +148,6 @@ impl Configuration {
         // the response comes from an intermediary (e.g. a reverse proxy).
         let content_type = "application/json";
 
-        let scope = "request";
-
         // Query pullconfd for this system's configuration and parse the result.
         let url = base_url
             .join(&format!("/api/clients/{}/resources", hostname))
@@ -160,39 +158,32 @@ impl Configuration {
             .set("accept", content_type)
             .set("x-api-key", &api_key);
 
-        debug!(
-            "(pid: {}) checking if a file with an etag of a saved resource list exists",
-            pid
-        );
+        debug!("checking if a file with an etag of a saved resource list exists",);
 
-        if let Some(etag) = get_etag(pid)? {
-            debug!(
-                "(pid: {}) adding etag of saved resource list to request",
-                pid
-            );
+        if let Some(etag) = get_etag()? {
+            debug!("adding etag of saved resource list to request",);
             request = request.set("if-none-match", &etag);
         }
 
         let _timer = Instant::now();
 
-        debug!("(pid: {}) requesting resource list from `{}`", pid, url);
+        debug!("requesting resource list from `{}`", url);
 
         let resources = match request.call().inspect(|response| {
             if let Some(content_length) = response.header("content-length") {
-                debug!("(pid: {}) received {} bytes", pid, content_length);
+                debug!("received {} bytes", content_length);
             }
 
             debug!(
-                "(pid: {}) finished request in {} ms",
-                pid,
+                "finished request in {} ms",
                 (_timer.elapsed().as_millis() as f64) / 1000.0
             )
         }) {
             Ok(response) => {
                 if response.status() == 304 {
-                    debug!("(pid: {}) server returned 304, ignoring the request body and reading saved resource list from disk", pid);
+                    debug!("server returned 304, ignoring the request body and reading saved resource list from disk");
 
-                    get_saved_resource_list(pid)?.data
+                    get_saved_resource_list()?.data
                 } else {
                     // If the response is successful according to the status code, but the
                     // content type hints at a non-JSON body, log a generic error including
@@ -211,8 +202,8 @@ impl Configuration {
                         let etag = response.header("etag").map(|value| value.to_string());
 
                         debug!(
-                            "(pid: {}) content type is `{}`, deserializing resource list",
-                            pid, content_type
+                            "content type is `{}`, deserializing resource list",
+                            content_type
                         );
 
                         // Otherwise parse the payload as it is expected to be a JSON-encoded
@@ -222,9 +213,9 @@ impl Configuration {
                         })?;
 
                         if let Some(etag) = etag {
-                            debug!("(pid: {}) saving resource list to disk", pid);
+                            debug!("saving resource list to disk");
 
-                            save_resource_list(pid, &etag, &payload)?;
+                            save_resource_list(&etag, &payload)?;
                         }
 
                         serde_json::from_str::<Resources>(&payload)
@@ -251,8 +242,8 @@ impl Configuration {
                         ));
                     } else {
                         debug!(
-                            "(pid: {}) content type is `{}`, deserializing error message",
-                            pid, content_type
+                            "content type is `{}`, deserializing error message",
+                            content_type
                         );
 
                         // Otherwise parse the well-known API error format from JSON and log
@@ -296,7 +287,7 @@ impl Configuration {
     /// Since there are always resources that have no dependencies, those are
     /// applied first and then everything else, until every resource has been
     /// applied.
-    pub fn apply(mut self, pid: u32) {
+    pub fn apply(mut self) {
         let _timer = Instant::now();
 
         let mut applied_resources = HashMap::with_capacity(self.resources.len());
@@ -308,7 +299,6 @@ impl Configuration {
             }
 
             resource.apply(
-                pid,
                 &self.agent,
                 &self.base_url,
                 &self.api_key,
@@ -324,7 +314,7 @@ impl Configuration {
     }
 }
 
-fn get_etag(pid: u32) -> Result<Option<String>, String> {
+fn get_etag() -> Result<Option<String>, String> {
     match fs::read_to_string(ETAG_FILE) {
         Ok(etag) => {
             if etag.is_empty() {
@@ -346,7 +336,7 @@ fn get_etag(pid: u32) -> Result<Option<String>, String> {
     }
 }
 
-fn get_saved_resource_list(pid: u32) -> Result<Resources, String> {
+fn get_saved_resource_list() -> Result<Resources, String> {
     let content = fs::read_to_string(DATA_FILE).map_err(|error| {
         format!(
             "failed to read resource list from file `{}`: {}",
@@ -362,7 +352,7 @@ fn get_saved_resource_list(pid: u32) -> Result<Resources, String> {
     })
 }
 
-fn save_resource_list(pid: u32, etag: &str, data: &str) -> Result<(), String> {
+fn save_resource_list(etag: &str, data: &str) -> Result<(), String> {
     if let Err(error) = fs::write(ETAG_FILE, etag) {
         return Err(format!(
             "failed to save latest resource list etag to file `{}`: {}",

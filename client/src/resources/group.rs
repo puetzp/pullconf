@@ -3,7 +3,7 @@ use common::{
     resources::group::{Name, Parameters, Relationships},
     Ensure, ResourceMetadata,
 };
-use log::{debug, error, info, warn};
+use log::{debug, error, info};
 use serde::Deserialize;
 use std::{
     collections::HashMap,
@@ -45,8 +45,8 @@ impl ResourceTrait for Group {
         self.parameters.ensure.is_present()
     }
 
-    fn check_prerequisites(&self, pid: u32) -> Option<Action> {
-        fn find(group: &Group, pid: u32, program: &str) -> Option<Action> {
+    fn check_prerequisites(&self) -> Option<Action> {
+        fn find(group: &Group, program: &str) -> Option<Action> {
             match fs::metadata(program) {
                 Ok(metadata) => {
                     if metadata.is_file() {
@@ -74,8 +74,8 @@ impl ResourceTrait for Group {
             }
         }
 
-        let groupadd = find(self, pid, GROUPADD);
-        let groupdel = find(self, pid, GROUPDEL);
+        let groupadd = find(self, GROUPADD);
+        let groupdel = find(self, GROUPDEL);
 
         groupadd.or(groupdel)
     }
@@ -84,20 +84,20 @@ impl ResourceTrait for Group {
 impl Group {
     /// A wrapper around the actual apply function. This ensure that some
     /// meaningful log messages are printed and pre-checks are done.
-    pub fn apply(&mut self, pid: u32, applied_resources: &HashMap<Uuid, Resource>) {
-        if let Some(action) = self.maybe_return_early(pid, applied_resources) {
+    pub fn apply(&mut self, applied_resources: &HashMap<Uuid, Resource>) {
+        if let Some(action) = self.maybe_return_early(applied_resources) {
             self.action = action;
             return;
         }
 
-        if let Some(action) = self.check_prerequisites(pid) {
+        if let Some(action) = self.check_prerequisites() {
             self.action = action;
             return;
         }
 
         debug!("`{}`: applying resource", self.repr(),);
 
-        match self._apply(pid) {
+        match self._apply() {
             Ok(action) => {
                 info!("`{}`: successfully applied resource", self.repr(),);
 
@@ -112,22 +112,22 @@ impl Group {
     }
 
     /// Apply this resource's configuration.
-    pub fn _apply(&self, pid: u32) -> Result<Action, anyhow::Error> {
+    pub fn _apply(&self) -> Result<Action, anyhow::Error> {
         if exists(&self.parameters.name)? {
             match self.parameters.ensure {
                 Ensure::Present => Ok(Action::Unchanged),
-                Ensure::Absent => self.delete(pid),
+                Ensure::Absent => self.delete(),
             }
         } else {
             match self.parameters.ensure {
-                Ensure::Present => self.create(pid),
+                Ensure::Present => self.create(),
                 Ensure::Absent => Ok(Action::Unchanged),
             }
         }
     }
 
     /// Add the group to the system.
-    fn create(&self, pid: u32) -> Result<Action, anyhow::Error> {
+    fn create(&self) -> Result<Action, anyhow::Error> {
         debug!("`{}`: creating group", self.repr());
 
         let mut command = Command::new(GROUPADD);
@@ -154,7 +154,7 @@ impl Group {
     }
 
     /// Delete the group from the system.
-    fn delete(&self, pid: u32) -> Result<Action, anyhow::Error> {
+    fn delete(&self) -> Result<Action, anyhow::Error> {
         debug!("`{}`: deleting group", self.repr());
 
         let status = Command::new(GROUPDEL)

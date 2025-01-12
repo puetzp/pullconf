@@ -3,7 +3,7 @@ use common::{
     resources::apt::package::{Ensure, Parameters, Relationships, Version},
     ResourceMetadata,
 };
-use log::{debug, error, info, warn};
+use log::{debug, error, info};
 use serde::Deserialize;
 use std::{collections::HashMap, fs, process::Command, str::FromStr};
 use uuid::Uuid;
@@ -41,8 +41,8 @@ impl ResourceTrait for Package {
         self.parameters.ensure.is_present()
     }
 
-    fn check_prerequisites(&self, pid: u32) -> Option<Action> {
-        fn find(package: &Package, pid: u32, program: &str) -> Option<Action> {
+    fn check_prerequisites(&self) -> Option<Action> {
+        fn find(package: &Package, program: &str) -> Option<Action> {
             match fs::metadata(program) {
                 Ok(metadata) => {
                     if metadata.is_file() {
@@ -70,8 +70,8 @@ impl ResourceTrait for Package {
             }
         }
 
-        let dpkg_query = find(self, pid, DPKG_QUERY);
-        let apt_get = find(self, pid, APT_GET);
+        let dpkg_query = find(self, DPKG_QUERY);
+        let apt_get = find(self, APT_GET);
 
         dpkg_query.or(apt_get)
     }
@@ -80,20 +80,20 @@ impl ResourceTrait for Package {
 impl Package {
     /// A wrapper around the actual apply function. This ensure that some
     /// meaningful log messages are printed and pre-checks are done.
-    pub fn apply(&mut self, pid: u32, applied_resources: &HashMap<Uuid, Resource>) {
-        if let Some(action) = self.maybe_return_early(pid, applied_resources) {
+    pub fn apply(&mut self, applied_resources: &HashMap<Uuid, Resource>) {
+        if let Some(action) = self.maybe_return_early(applied_resources) {
             self.action = action;
             return;
         }
 
-        if let Some(action) = self.check_prerequisites(pid) {
+        if let Some(action) = self.check_prerequisites() {
             self.action = action;
             return;
         }
 
         debug!("`{}`: applying resource", self.repr(),);
 
-        match self._apply(pid) {
+        match self._apply() {
             Ok(action) => {
                 info!("`{}`: successfully applied resource", self.repr(),);
 
@@ -108,8 +108,8 @@ impl Package {
     }
 
     /// Apply this resource's configuration.
-    pub fn _apply(&self, pid: u32) -> Result<Action, anyhow::Error> {
-        if let Some(current_version) = self.exists(pid)? {
+    pub fn _apply(&self) -> Result<Action, anyhow::Error> {
+        if let Some(current_version) = self.exists()? {
             match self.parameters.ensure {
                 Ensure::Present => {
                     if self
@@ -118,17 +118,17 @@ impl Package {
                         .as_ref()
                         .is_some_and(|version| *version != current_version)
                     {
-                        self.install(pid, Action::Changed)
+                        self.install(Action::Changed)
                     } else {
                         Ok(Action::Unchanged)
                     }
                 }
-                Ensure::Absent => self.remove(pid, false),
-                Ensure::Purged => self.remove(pid, true),
+                Ensure::Absent => self.remove(false),
+                Ensure::Purged => self.remove(true),
             }
         } else {
             match self.parameters.ensure {
-                Ensure::Present => self.install(pid, Action::Created),
+                Ensure::Present => self.install(Action::Created),
                 Ensure::Absent | Ensure::Purged => Ok(Action::Unchanged),
             }
         }
@@ -137,7 +137,7 @@ impl Package {
     /// Install or up-/downgrade the package.
     /// The `action` parameter is used to return the correct action
     /// according to the context this function is executed in.
-    fn install(&self, pid: u32, action: Action) -> Result<Action, anyhow::Error> {
+    fn install(&self, action: Action) -> Result<Action, anyhow::Error> {
         debug!("`{}`: installing package", self.repr());
 
         let mut command = Command::new(APT_GET);
@@ -170,7 +170,7 @@ impl Package {
     }
 
     /// Remove the package from the system.
-    fn remove(&self, pid: u32, purge: bool) -> Result<Action, anyhow::Error> {
+    fn remove(&self, purge: bool) -> Result<Action, anyhow::Error> {
         debug!("`{}`: removing package", self.repr());
 
         let mut command = Command::new(APT_GET);
@@ -202,7 +202,7 @@ impl Package {
     }
 
     /// Try to find a package by this name within the system.
-    fn exists(&self, pid: u32) -> Result<Option<Version>, anyhow::Error> {
+    fn exists(&self) -> Result<Option<Version>, anyhow::Error> {
         let mut command = Command::new(DPKG_QUERY);
         command.args(["-W", "-f", "'${VERSION}'", self.parameters.name.as_str()]);
 

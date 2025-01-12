@@ -3,7 +3,7 @@ use common::{
     resources::user::{Name, Parameters, Password, Relationships, EXPIRY_DATE_FORMAT},
     Ensure, ResourceMetadata, SafePathBuf,
 };
-use log::{debug, error, info, warn};
+use log::{debug, error, info};
 use serde::Deserialize;
 use std::{
     collections::HashMap,
@@ -51,8 +51,8 @@ impl ResourceTrait for User {
         self.parameters.ensure.is_present()
     }
 
-    fn check_prerequisites(&self, pid: u32) -> Option<Action> {
-        fn find(user: &User, pid: u32, program: &str) -> Option<Action> {
+    fn check_prerequisites(&self) -> Option<Action> {
+        fn find(user: &User, program: &str) -> Option<Action> {
             match fs::metadata(program) {
                 Ok(metadata) => {
                     if metadata.is_file() {
@@ -80,11 +80,11 @@ impl ResourceTrait for User {
             }
         }
 
-        let useradd = find(self, pid, USERADD);
-        let usermod = find(self, pid, USERMOD);
-        let passwd = find(self, pid, PASSWD);
-        let deluser = find(self, pid, DELUSER);
-        let id = find(self, pid, ID);
+        let useradd = find(self, USERADD);
+        let usermod = find(self, USERMOD);
+        let passwd = find(self, PASSWD);
+        let deluser = find(self, DELUSER);
+        let id = find(self, ID);
 
         useradd.or(usermod).or(passwd).or(deluser).or(id)
     }
@@ -93,20 +93,20 @@ impl ResourceTrait for User {
 impl User {
     /// A wrapper around the actual apply function. This ensure that some
     /// meaningful log messages are printed and pre-checks are done.
-    pub fn apply(&mut self, pid: u32, applied_resources: &HashMap<Uuid, Resource>) {
-        if let Some(action) = self.maybe_return_early(pid, applied_resources) {
+    pub fn apply(&mut self, applied_resources: &HashMap<Uuid, Resource>) {
+        if let Some(action) = self.maybe_return_early(applied_resources) {
             self.action = action;
             return;
         }
 
-        if let Some(action) = self.check_prerequisites(pid) {
+        if let Some(action) = self.check_prerequisites() {
             self.action = action;
             return;
         }
 
         debug!("`{}`: applying resource", self.repr());
 
-        match self._apply(pid) {
+        match self._apply() {
             Ok(action) => {
                 info!("`{}`: successfully applied resource", self.repr());
 
@@ -121,21 +121,21 @@ impl User {
     }
 
     /// Apply this resource's configuration.
-    pub fn _apply(&self, pid: u32) -> Result<Action, anyhow::Error> {
+    pub fn _apply(&self) -> Result<Action, anyhow::Error> {
         match find(&self.parameters.name)? {
             None => match self.parameters.ensure {
-                Ensure::Present => self.create(pid),
+                Ensure::Present => self.create(),
                 Ensure::Absent => Ok(Action::Unchanged),
             },
             Some(current_user) => match self.parameters.ensure {
-                Ensure::Present => self.maybe_update(pid, current_user),
-                Ensure::Absent => self.delete(pid),
+                Ensure::Present => self.maybe_update(current_user),
+                Ensure::Absent => self.delete(),
             },
         }
     }
 
     /// Create the user account.
-    fn create(&self, pid: u32) -> Result<Action, anyhow::Error> {
+    fn create(&self) -> Result<Action, anyhow::Error> {
         debug!("`{}`: creating user account", self.repr());
 
         {
@@ -215,7 +215,7 @@ impl User {
     }
 
     /// Update the user account if necessary.
-    fn maybe_update(&self, pid: u32, current_user: CurrentUser) -> Result<Action, anyhow::Error> {
+    fn maybe_update(&self, current_user: CurrentUser) -> Result<Action, anyhow::Error> {
         let mut action = Action::default();
 
         let mut usermod = Command::new(USERMOD);
@@ -362,7 +362,7 @@ impl User {
     }
 
     /// Delete the user account.
-    fn delete(&self, pid: u32) -> Result<Action, anyhow::Error> {
+    fn delete(&self) -> Result<Action, anyhow::Error> {
         debug!("`{}`: deleting user account", self.repr());
 
         let mut command = Command::new(DELUSER);

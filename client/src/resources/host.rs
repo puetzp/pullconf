@@ -4,7 +4,7 @@ use common::{
     resources::host::{Parameters, Relationships},
     Ensure, ResourceMetadata,
 };
-use log::{debug, error, info, warn};
+use log::{debug, error, info};
 use serde::Deserialize;
 use std::{
     collections::HashMap,
@@ -49,15 +49,15 @@ impl ResourceTrait for Host {
 impl Host {
     /// A wrapper around the actual apply function. This ensure that some
     /// meaningful log messages are printed and pre-checks are done.
-    pub fn apply(&mut self, pid: u32, applied_resources: &HashMap<Uuid, Resource>) {
-        if let Some(action) = self.maybe_return_early(pid, applied_resources) {
+    pub fn apply(&mut self, applied_resources: &HashMap<Uuid, Resource>) {
+        if let Some(action) = self.maybe_return_early(applied_resources) {
             self.action = action;
             return;
         }
 
         debug!("`{}`: applying resource", self.repr());
 
-        match self._apply(pid) {
+        match self._apply() {
             Ok(action) => {
                 info!("`{}`: successfully applied resource", self.repr());
 
@@ -72,7 +72,7 @@ impl Host {
     }
 
     /// Apply this resource's configuration.
-    pub fn _apply(&self, pid: u32) -> Result<Action, anyhow::Error> {
+    pub fn _apply(&self) -> Result<Action, anyhow::Error> {
         match fs::File::open(&self.parameters.target) {
             Ok(mut file) => {
                 // If the file is found read its entire contents to a string.
@@ -145,8 +145,8 @@ impl Host {
                 // 2. the current host state (not found/full match/partial match)
                 match self.parameters.ensure {
                     Ensure::Absent => match _match {
-                        Some(Match::Full(index)) => self.delete(pid, index, mtime, content),
-                        Some(Match::Partial(index)) => self.delete(pid, index, mtime, content),
+                        Some(Match::Full(index)) => self.delete(index, mtime, content),
+                        Some(Match::Partial(index)) => self.delete(index, mtime, content),
                         None => {
                             debug!(
                                 "`{}`: current host state matches the desired state",
@@ -166,9 +166,9 @@ impl Host {
                             Ok(Action::default())
                         }
                         Some(Match::Partial(index)) => {
-                            self.update(pid, index, mtime, content, parameters)
+                            self.update(index, mtime, content, parameters)
                         }
-                        None => self.create(pid, mtime, content, parameters),
+                        None => self.create(mtime, content, parameters),
                     },
                 }
             }
@@ -189,7 +189,6 @@ impl Host {
     /// This effectively replaces the target file with the updated host in it.
     fn update(
         &self,
-        pid: u32,
         index: usize,
         mtime: SystemTime,
         content: String,
@@ -244,7 +243,6 @@ impl Host {
     /// This effectively replaces the target file with the host appended to it.
     fn create(
         &self,
-        pid: u32,
         mtime: SystemTime,
         mut content: String,
         parameters: Vec<String>,
@@ -294,7 +292,6 @@ impl Host {
     /// This effectively replaces the target file with the host removed.
     fn delete(
         &self,
-        pid: u32,
         index: usize,
         mtime: SystemTime,
         content: String,

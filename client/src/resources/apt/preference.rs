@@ -4,7 +4,7 @@ use common::{
     resources::apt::preference::{Parameters, Relationships},
     Ensure, ResourceMetadata,
 };
-use log::{debug, error, info, warn};
+use log::{debug, error, info};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use std::{
@@ -49,15 +49,15 @@ impl ResourceTrait for Preference {
 impl Preference {
     /// A wrapper around the actual apply function. This ensure that some
     /// meaningful log messages are printed and pre-checks are done.
-    pub fn apply(&mut self, pid: u32, applied_resources: &HashMap<Uuid, Resource>) {
-        if let Some(action) = self.maybe_return_early(pid, applied_resources) {
+    pub fn apply(&mut self, applied_resources: &HashMap<Uuid, Resource>) {
+        if let Some(action) = self.maybe_return_early(applied_resources) {
             self.action = action;
             return;
         }
 
         debug!("`{}`: applying resource", self.repr(),);
 
-        match self._apply(pid) {
+        match self._apply() {
             Ok(action) => {
                 info!("`{}`: successfully applied resource", self.repr());
 
@@ -72,7 +72,7 @@ impl Preference {
     }
 
     /// Apply this resource's configuration.
-    pub fn _apply(&self, pid: u32) -> Result<Action, anyhow::Error> {
+    pub fn _apply(&self) -> Result<Action, anyhow::Error> {
         let file = match fs::File::open(&*self.parameters.target) {
             Ok(file) => Some(file),
             Err(error) if error.kind() == io::ErrorKind::NotFound => None,
@@ -116,10 +116,10 @@ impl Preference {
                         } else {
                             let mtime = file.metadata()?.modified()?;
 
-                            self.update(pid, content, mtime)
+                            self.update(content, mtime)
                         }
                     }
-                    None => match self.create(pid, content) {
+                    None => match self.create(content) {
                         Ok(action) => Ok(action),
                         Err(error) => {
                             debug!(
@@ -134,19 +134,14 @@ impl Preference {
                 }
             }
             Ensure::Absent => match file {
-                Some(file) => self.delete(pid, file.metadata()?),
+                Some(file) => self.delete(file.metadata()?),
                 None => Ok(Action::Unchanged),
             },
         }
     }
 
     /// Update the target file contents.
-    fn update(
-        &self,
-        pid: u32,
-        content: String,
-        mtime: SystemTime,
-    ) -> Result<Action, anyhow::Error> {
+    fn update(&self, content: String, mtime: SystemTime) -> Result<Action, anyhow::Error> {
         debug!(
             "`{}`: updating target file `{}`",
             self.repr(),
@@ -183,7 +178,7 @@ impl Preference {
     }
 
     /// Create the target file.
-    fn create(&self, pid: u32, content: String) -> Result<Action, anyhow::Error> {
+    fn create(&self, content: String) -> Result<Action, anyhow::Error> {
         debug!(
             "`{}`: creating target file `{}` as it does not exist",
             self.repr(),
@@ -197,7 +192,7 @@ impl Preference {
     }
 
     /// Delete the target file.
-    fn delete(&self, pid: u32, metadata: fs::Metadata) -> Result<Action, anyhow::Error> {
+    fn delete(&self, metadata: fs::Metadata) -> Result<Action, anyhow::Error> {
         debug!(
             "`{}`: deleting target file `{}`",
             self.repr(),
