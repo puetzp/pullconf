@@ -1,4 +1,3 @@
-pub mod error;
 pub mod name;
 pub mod path;
 pub mod resources;
