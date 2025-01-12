@@ -9,6 +9,7 @@ use rouille::Server;
 use signal_hook::{consts::signal::*, iterator::Signals};
 use std::{
     fs,
+    io::Write,
     path::PathBuf,
     process::ExitCode,
     sync::{Arc, RwLock},
@@ -59,7 +60,17 @@ impl AppState {
 
 fn main() -> ExitCode {
     // Initialize logging.
-    env_logger::init();
+    env_logger::builder()
+        .format(move |buf, record| {
+            writeln!(
+                buf,
+                "[{} {}] {}",
+                buf.timestamp_millis(),
+                record.level(),
+                record.args()
+            )
+        })
+        .init();
 
     info!("starting {} v{}", APPLICATION, VERSION);
 
