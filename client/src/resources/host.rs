@@ -41,62 +41,8 @@ impl ResourceTrait for Host {
         self.relationships.requires.as_slice()
     }
 
-    fn maybe_return_early(
-        &self,
-        pid: u32,
-        applied_resources: &HashMap<Uuid, Resource>,
-    ) -> Option<Action> {
-        if let Some(dependency) = self.find_failed_dependency(applied_resources) {
-            let action = Action::Skipped;
-
-            warn!(
-                pid,
-                resource = self.kind(),
-                ip_address:% = self.display(),
-                result:% = action;
-                "skipping {} as {} has failed to apply",
-                self.repr(),
-                dependency.repr()
-            );
-
-            return Some(action);
-        }
-
-        if let Some(dependency) = self.find_skipped_dependency(applied_resources) {
-            let action = Action::Skipped;
-
-            warn!(
-                pid,
-                resource = self.kind(),
-                ip_address:% = self.display(),
-                result:% = action;
-                "skipping {} as {} has been skipped",
-                self.repr(),
-                dependency.repr()
-            );
-
-            return Some(action);
-        }
-
-        if self.parameters.ensure.is_present() {
-            if let Some(dependency) = self.find_absent_dependency(applied_resources) {
-                let action = Action::Failed;
-
-                error!(
-                    pid,
-                    resource = self.kind(),
-                    ip_address:% = self.display(),
-                    result:% = action;
-                    "cannot apply {} as {} is set to absent",
-                    self.repr(),
-                    dependency.repr()
-                );
-
-                return Some(action);
-            }
-        }
-
-        None
+    fn is_present(&self) -> bool {
+        self.parameters.ensure.is_present()
     }
 }
 
@@ -109,41 +55,18 @@ impl Host {
             return;
         }
 
-        debug!(
-            pid,
-            resource = self.kind(),
-            ip_address:% = self.display();
-            "applying {}",
-            self.repr()
-        );
+        debug!("`{}`: applying resource", self.repr());
 
         match self._apply(pid) {
             Ok(action) => {
-                info!(
-                    pid,
-                    resource = self.kind(),
-                    ip_address:% = self.display(),
-                    result:% = action;
-                    "successfully applied {}",
-                    self.repr()
-                );
+                info!("`{}`: successfully applied resource", self.repr());
 
                 self.action = action;
             }
             Err(error) => {
-                let action = Action::Failed;
+                error!("`{}`: failed to apply resource: {:#}", self.repr(), error);
 
-                error!(
-                    pid,
-                    resource = self.kind(),
-                    ip_address:% = self.display(),
-                    result:% = action;
-                    "failed to apply {}: {:#}",
-                    self.repr(),
-                    error
-                );
-
-                self.action = action;
+                self.action = Action::Failed;
             }
         }
     }
@@ -209,10 +132,8 @@ impl Host {
 
                 match _match {
                     Some(Match::Full(index)) | Some(Match::Partial(index)) => debug!(
-                        pid,
-                        resource = self.kind(),
-                        ip_address:% = self.display();
-                        "host was found in target file {} at line {}",
+                        "`{}`: host was found in target file `{}` at line `{}`",
+                        self.repr(),
                         self.parameters.target.display(),
                         index
                     ),
@@ -228,10 +149,8 @@ impl Host {
                         Some(Match::Partial(index)) => self.delete(pid, index, mtime, content),
                         None => {
                             debug!(
-                                pid,
-                                resource = self.kind(),
-                                ip_address:% = self.display();
-                                "current host state matches the desired state",
+                                "`{}`: current host state matches the desired state",
+                                self.repr(),
                             );
 
                             Ok(Action::default())
@@ -240,10 +159,8 @@ impl Host {
                     Ensure::Present => match _match {
                         Some(Match::Full(_)) => {
                             debug!(
-                                pid,
-                                resource = self.kind(),
-                                ip_address:% = self.display();
-                                "current host state matches the desired state",
+                                "`{}`: current host state matches the desired state",
+                                self.repr()
                             );
 
                             Ok(Action::default())
@@ -257,10 +174,8 @@ impl Host {
             }
             Err(error) if error.kind() == io::ErrorKind::NotFound => {
                 debug!(
-                    pid,
-                    resource = self.kind(),
-                    ip_address:% = self.display();
-                    "skipping host as target file {} does not exist",
+                    "`{}`: skipping host as target file `{}` does not exist",
+                    self.repr(),
                     self.parameters.target.display()
                 );
 
@@ -281,10 +196,8 @@ impl Host {
         parameters: Vec<String>,
     ) -> Result<Action, anyhow::Error> {
         debug!(
-            pid,
-            resource = self.kind(),
-            ip_address:% = self.display();
-            "trying to update host in target file {}",
+            "`{}`: trying to update host in target file `{}`",
+            self.repr(),
             self.parameters.target.display()
         );
 
@@ -301,10 +214,7 @@ impl Host {
         }
 
         debug!(
-            pid,
-            resource = self.kind(),
-            ip_address:% = self.display();
-            "writing replacement file for target file {} with an updated version of this host",
+            "`{}`: writing replacement file for target file `{}` with an updated version of this host",self.repr(),
             self.parameters.target.display()
         );
 
@@ -316,10 +226,8 @@ impl Host {
             .is_ok_and(|_mtime| _mtime == mtime)
         {
             debug!(
-                pid,
-                resource = self.kind(),
-                ip_address:% = self.display();
-                "renaming replacement file to original target file {}",
+                "`{}`: renaming replacement file to original target file `{}`",
+                self.repr(),
                 self.parameters.target.display()
             );
 
@@ -342,10 +250,8 @@ impl Host {
         parameters: Vec<String>,
     ) -> Result<Action, anyhow::Error> {
         debug!(
-            pid,
-            resource = self.kind(),
-            ip_address:% = self.display();
-            "trying to append host to target file {}",
+            "`{}`: trying to append host to target file `{}`",
+            self.repr(),
             self.parameters.target.display()
         );
 
@@ -357,10 +263,8 @@ impl Host {
         content.push('\n');
 
         debug!(
-            pid,
-            resource = self.kind(),
-            ip_address:% = self.display();
-            "writing replacement file for target file {} with this host appended",
+            "`{}`: writing replacement file for target file `{}` with this host appended",
+            self.repr(),
             self.parameters.target.display()
         );
 
@@ -372,10 +276,8 @@ impl Host {
             .is_ok_and(|_mtime| _mtime == mtime)
         {
             debug!(
-                pid,
-                resource = self.kind(),
-                ip_address:% = self.display();
-                "renaming replacement file to original target file {}",
+                "`{}`: renaming replacement file to original target file `{}`",
+                self.repr(),
                 self.parameters.target.display()
             );
 
@@ -398,10 +300,8 @@ impl Host {
         content: String,
     ) -> Result<Action, anyhow::Error> {
         debug!(
-            pid,
-            resource = self.kind(),
-            ip_address:% = self.display();
-            "trying to delete host from target file {}",
+            "`{}`: trying to delete host from target file `{}`",
+            self.repr(),
             self.parameters.target.display()
         );
 
@@ -415,10 +315,8 @@ impl Host {
         }
 
         debug!(
-            pid,
-            resource = self.kind(),
-            ip_address:% = self.display();
-            "writing replacement file for target file {} without this host",
+            "`{}`: writing replacement file for target file `{}` without this host",
+            self.repr(),
             self.parameters.target.display()
         );
 
@@ -430,10 +328,8 @@ impl Host {
             .is_ok_and(|_mtime| _mtime == mtime)
         {
             debug!(
-                pid,
-                resource = self.kind(),
-                ip_address:% = self.display();
-                "renaming replacement file to original target file {}",
+                "`{}`: renaming replacement file to original target file `{}`",
+                self.repr(),
                 self.parameters.target.display()
             );
 

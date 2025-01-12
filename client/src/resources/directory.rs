@@ -41,60 +41,8 @@ impl ResourceTrait for Directory {
         self.relationships.requires.as_slice()
     }
 
-    fn maybe_return_early(
-        &self,
-        pid: u32,
-        applied_resources: &HashMap<Uuid, Resource>,
-    ) -> Option<Action> {
-        if let Some(dependency) = self.find_failed_dependency(applied_resources) {
-            let action = Action::Skipped;
-
-            warn!(pid,
-                  resource = self.kind(),
-                  path = self.display(),
-                  result:% = action;
-                  "skipping {} as {} has failed to apply",
-                  self.repr(),
-                  dependency.repr()
-            );
-
-            return Some(action);
-        }
-
-        if let Some(dependency) = self.find_skipped_dependency(applied_resources) {
-            let action = Action::Skipped;
-
-            warn!(pid,
-                  resource = self.kind(),
-                  path = self.display(),
-                  result:% = action;
-                  "skipping {} as {} has been skipped",
-                  self.repr(),
-                  dependency.repr()
-            );
-
-            return Some(action);
-        }
-
-        if self.parameters.ensure.is_present() {
-            if let Some(dependency) = self.find_absent_dependency(applied_resources) {
-                let action = Action::Failed;
-
-                error!(
-                    pid,
-                    resource = self.kind(),
-                    path = self.display(),
-                    result:% = action;
-                    "cannot apply {} as {} is set to absent",
-                    self.repr(),
-                    dependency.repr()
-                );
-
-                return Some(action);
-            }
-        }
-
-        None
+    fn is_present(&self) -> bool {
+        self.parameters.ensure.is_present()
     }
 }
 
@@ -107,38 +55,18 @@ impl Directory {
             return;
         }
 
-        debug!(pid,
-               resource = self.kind(),
-               path = self.display();
-               "applying {}",
-               self.repr()
-        );
+        debug!("`{}`: applying resource", self.repr());
 
         match self._apply(pid) {
             Ok(action) => {
-                info!(pid,
-                      resource = self.kind(),
-                      path = self.display(),
-                      result:% = action;
-                      "successfully applied {}",
-                      self.repr(),
-                );
+                info!("`{}`: successfully applied resource", self.repr(),);
 
                 self.action = action;
             }
             Err(error) => {
-                let action = Action::Failed;
+                error!("`{}`: failed to apply resource: {:#}", self.repr(), error);
 
-                error!(pid,
-                       resource = self.kind(),
-                       path = self.display(),
-                       result:% = action;
-                       "failed to apply {}: {:#}",
-                       self.repr(),
-                       error
-                );
-
-                self.action = action;
+                self.action = Action::Failed;
             }
         }
     }
@@ -161,11 +89,10 @@ impl Directory {
                     match self.create(pid) {
                         Ok(action) => Ok(action),
                         Err(error) => {
-                            debug!(pid,
-                                   resource = self.kind(),
-                                   path = self.display();
-                                   "deleting {} as at least one condition failed",
-                                   self.repr(),
+                            debug!(
+                                "`{}`: deleting `{}` as at least one condition failed",
+                                self.repr(),
+                                self.parameters.path.display(),
                             );
                             fs::remove_dir(&*self.parameters.path).ok();
                             Err(error)
@@ -184,10 +111,9 @@ impl Directory {
     /// Change the directory's ownership parameters if the actual ownership
     /// configuration in the file system differ from the desired state.
     fn maybe_update(&self, pid: u32, metadata: fs::Metadata) -> Result<Action, anyhow::Error> {
-        debug!(pid,
-               resource = self.kind(),
-               path = self.display();
-               "directory exists, checking if current and desired states match"
+        debug!(
+            "`{}`: directory exists, checking if current and desired states match",
+            self.repr()
         );
 
         let mut action = Action::default();
@@ -199,12 +125,11 @@ impl Directory {
         let (uid, gid) = uid_and_gid(&self.parameters.owner, &self.parameters.group)?;
 
         if metadata.uid() != uid || metadata.gid() != gid {
-            debug!(pid,
-                   resource = self.kind(),
-                   path = self.display();
-                   "updating directory owner (uid: {}) and group (gid: {})",
-                   uid,
-                   gid
+            debug!(
+                "`{}`: updating directory owner (uid: `{}`) and group (gid: `{}`)",
+                self.repr(),
+                uid,
+                gid
             );
 
             chown(&*self.parameters.path, Some(uid), Some(gid))
@@ -258,22 +183,20 @@ impl Directory {
 
     /// Create the directory and set ownership parameters.
     fn create(&self, pid: u32) -> Result<Action, anyhow::Error> {
-        debug!(pid,
-               resource = self.kind(),
-               path = self.display();
-               "directory does not exist, creating new empty directory"
+        debug!(
+            "`{}`: directory does not exist, creating new empty directory",
+            self.repr()
         );
 
         let (uid, gid) = uid_and_gid(&self.parameters.owner, &self.parameters.group)?;
 
         fs::create_dir(&*self.parameters.path).context("failed to create directory")?;
 
-        debug!(pid,
-               resource = self.kind(),
-               path = self.display();
-               "setting file owner (uid: {}) and group ({})",
-               uid,
-               gid
+        debug!(
+            "`{}`: setting file owner (uid: `{}`) and group (gid: `{}`)",
+            self.repr(),
+            uid,
+            gid
         );
 
         chown(&*self.parameters.path, Some(uid), Some(gid))
@@ -284,11 +207,7 @@ impl Directory {
 
     // Recursively (!) delete this directory.
     fn delete(&self, pid: u32, metadata: fs::Metadata) -> Result<Action, anyhow::Error> {
-        debug!(pid,
-               resource = self.kind(),
-               path = self.display();
-               "deleting directory",
-        );
+        debug!("`{}`: deleting directory", self.repr());
 
         if metadata.is_dir() {
             fs::remove_dir_all(&*self.parameters.path).context("failed to delete directory")?

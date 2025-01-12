@@ -41,60 +41,8 @@ impl ResourceTrait for Job {
         self.relationships.requires.as_slice()
     }
 
-    fn maybe_return_early(
-        &self,
-        pid: u32,
-        applied_resources: &HashMap<Uuid, Resource>,
-    ) -> Option<Action> {
-        if let Some(dependency) = self.find_failed_dependency(applied_resources) {
-            let action = Action::Skipped;
-
-            warn!(pid,
-                  resource = self.kind(),
-                  name = self.display(),
-                  result:% = action;
-                  "skipping {} as {} has failed to apply",
-                  self.repr(),
-                  dependency.repr()
-            );
-
-            return Some(action);
-        }
-
-        if let Some(dependency) = self.find_skipped_dependency(applied_resources) {
-            let action = Action::Skipped;
-
-            warn!(pid,
-                  resource = self.kind(),
-                  name = self.display(),
-                  result:% = action;
-                  "skipping {} as {} has been skipped",
-                  self.repr(),
-                  dependency.repr()
-            );
-
-            return Some(action);
-        }
-
-        if self.parameters.ensure.is_present() {
-            if let Some(dependency) = self.find_absent_dependency(applied_resources) {
-                let action = Action::Failed;
-
-                error!(
-                    pid,
-                    resource = self.kind(),
-                    name = self.display(),
-                    result:% = action;
-                    "cannot apply {} as {} is set to absent",
-                    self.repr(),
-                    dependency.repr()
-                );
-
-                return Some(action);
-            }
-        }
-
-        None
+    fn is_present(&self) -> bool {
+        self.parameters.ensure.is_present()
     }
 }
 
@@ -107,38 +55,18 @@ impl Job {
             return;
         }
 
-        debug!(pid,
-               resource = self.kind(),
-               name = self.display();
-               "applying {}",
-               self.repr(),
-        );
+        debug!("`{}`: applying resource", self.repr(),);
 
         match self._apply(pid) {
             Ok(action) => {
-                info!(pid,
-                      resource = self.kind(),
-                      name = self.display(),
-                      result:% = action;
-                      "successfully applied {}",
-                      self.repr()
-                );
+                info!("`{}`: successfully applied resource", self.repr());
 
                 self.action = action;
             }
             Err(error) => {
-                let action = Action::Failed;
+                error!("`{}`: failed to apply resource: {:#}", self.repr(), error);
 
-                error!(pid,
-                       resource = self.kind(),
-                       name = self.display(),
-                       result:% = action;
-                       "failed to apply {}: {:#}",
-                       self.repr(),
-                       error
-                );
-
-                self.action = action;
+                self.action = Action::Failed;
             }
         }
     }
@@ -205,11 +133,10 @@ impl Job {
                     None => match self.create(pid, content) {
                         Ok(action) => Ok(action),
                         Err(error) => {
-                            debug!(pid,
-                                   resource = self.kind(),
-                                   name = self.display();
-                                   "deleting file `{}` as at least one condition failed",
-                                   self.parameters.target.display()
+                            debug!(
+                                "`{}`: deleting file `{}` as at least one condition failed",
+                                self.repr(),
+                                self.parameters.target.display()
                             );
                             fs::remove_file(&*self.parameters.target).ok();
                             Err(error)
@@ -231,11 +158,10 @@ impl Job {
         content: String,
         mtime: SystemTime,
     ) -> Result<Action, anyhow::Error> {
-        debug!(pid,
-               resource = self.kind(),
-               name = self.display();
-               "updating target file `{}`",
-               self.parameters.target.display()
+        debug!(
+            "`{}`: updating target file `{}`",
+            self.repr(),
+            self.parameters.target.display()
         );
 
         let tmp_path = format!("/tmp/{}.pullconf", self.parameters.name);
@@ -248,10 +174,8 @@ impl Job {
             .is_ok_and(|_mtime| _mtime == mtime)
         {
             debug!(
-                pid,
-                resource = self.kind(),
-                name = self.display();
-                "renaming replacement file `{}` to original target file {}",
+                "`{}`: renaming replacement file `{}` to original target file {}",
+                self.repr(),
                 tmp_path,
                 self.parameters.target.display()
             );
@@ -271,11 +195,10 @@ impl Job {
 
     /// Create the target file.
     fn create(&self, pid: u32, content: String) -> Result<Action, anyhow::Error> {
-        debug!(pid,
-               resource = self.kind(),
-               name = self.display();
-               "creating target file `{}` as it does not exist",
-               self.parameters.target.display()
+        debug!(
+            "`{}`: creating target file `{}` as it does not exist",
+            self.repr(),
+            self.parameters.target.display()
         );
 
         fs::write(&self.parameters.target, content)
@@ -286,11 +209,10 @@ impl Job {
 
     /// Delete the target file.
     fn delete(&self, pid: u32, metadata: fs::Metadata) -> Result<Action, anyhow::Error> {
-        debug!(pid,
-               resource = self.kind(),
-               name = self.display();
-               "deleting target file `{}`",
-               self.parameters.target.display()
+        debug!(
+            "`{}`: deleting target file `{}`",
+            self.repr(),
+            self.parameters.target.display()
         );
 
         if metadata.is_file() {

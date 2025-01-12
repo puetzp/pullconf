@@ -50,7 +50,7 @@ pub enum Resource {
     File(file::File),
     Group(group::Group),
     Host(host::Host),
-    #[serde(alias = "resolv.conf")]
+    #[serde(rename = "resolv.conf")]
     ResolvConf(resolv_conf::ResolvConf),
     Symlink(symlink::Symlink),
     User(user::User),
@@ -247,7 +247,7 @@ pub trait ResourceTrait {
     /// Return a concatenated string from the output of the two functions
     /// above. This representation is primarily used in logs.
     fn repr(&self) -> String {
-        format!("{} `{}`", self.kind(), self.display())
+        format!("{}[{}]", self.kind(), self.display())
     }
 
     /// Return the UUID of this resource as assigned by pullconfd.
@@ -263,7 +263,43 @@ pub trait ResourceTrait {
         &self,
         pid: u32,
         applied_resources: &HashMap<Uuid, Resource>,
-    ) -> Option<Action>;
+    ) -> Option<Action> {
+        if let Some(dependency) = self.find_failed_dependency(applied_resources) {
+            log::warn!(
+                "`{}`: skipping resource as dependency `{}` has failed to apply",
+                self.repr(),
+                dependency.repr()
+            );
+
+            return Some(Action::Skipped);
+        }
+
+        if let Some(dependency) = self.find_skipped_dependency(applied_resources) {
+            log::warn!(
+                "`{}`: skipping resource as dependency `{}` has been skipped",
+                self.repr(),
+                dependency.repr()
+            );
+
+            return Some(Action::Skipped);
+        }
+
+        if self.is_present() {
+            if let Some(dependency) = self.find_absent_dependency(applied_resources) {
+                log::error!(
+                    "`{}`: cannot apply resource as dependency `{}` is set to absent",
+                    self.repr(),
+                    dependency.repr()
+                );
+
+                return Some(Action::Failed);
+            }
+        }
+
+        None
+    }
+
+    fn is_present(&self) -> bool;
 
     /// Check any prerequisites that are needed for this resource to
     /// function properly. For example a resource may depend on a

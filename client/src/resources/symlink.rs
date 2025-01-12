@@ -37,60 +37,8 @@ impl ResourceTrait for Symlink {
         self.relationships.requires.as_slice()
     }
 
-    fn maybe_return_early(
-        &self,
-        pid: u32,
-        applied_resources: &HashMap<Uuid, Resource>,
-    ) -> Option<Action> {
-        if let Some(dependency) = self.find_failed_dependency(applied_resources) {
-            let action = Action::Skipped;
-
-            warn!(pid,
-                  resource = self.kind(),
-                  path = self.display(),
-                  result:% = action;
-                  "skipping {} as {} has failed to apply",
-                  self.repr(),
-                  dependency.repr()
-            );
-
-            return Some(action);
-        }
-
-        if let Some(dependency) = self.find_skipped_dependency(applied_resources) {
-            let action = Action::Skipped;
-
-            warn!(pid,
-                  resource = self.kind(),
-                  path = self.display(),
-                  result:% = action;
-                  "skipping {} as {} has been skipped",
-                  self.repr(),
-                  dependency.repr()
-            );
-
-            return Some(action);
-        }
-
-        if self.parameters.ensure.is_present() {
-            if let Some(dependency) = self.find_absent_dependency(applied_resources) {
-                let action = Action::Failed;
-
-                error!(
-                    pid,
-                    resource = self.kind(),
-                    path = self.display(),
-                    result:% = action;
-                    "cannot apply {} as {} is set to absent",
-                    self.repr(),
-                    dependency.repr()
-                );
-
-                return Some(action);
-            }
-        }
-
-        None
+    fn is_present(&self) -> bool {
+        self.parameters.ensure.is_present()
     }
 }
 
@@ -103,38 +51,18 @@ impl Symlink {
             return;
         }
 
-        debug!(pid,
-               resource = self.kind(),
-               path = self.display();
-               "applying {}",
-               self.repr(),
-        );
+        debug!("`{}`: applying resource", self.repr(),);
 
         match self._apply(pid) {
             Ok(action) => {
-                info!(pid,
-                      resource = self.kind(),
-                      path = self.display(),
-                      result:% = action;
-                      "successfully applied {}",
-                      self.repr()
-                );
+                info!("`{}`: successfully applied resource", self.repr());
 
                 self.action = action;
             }
             Err(error) => {
-                let action = Action::Failed;
+                error!("`{}`: failed to apply resource: {:#}", self.repr(), error);
 
-                error!(pid,
-                       resource = self.kind(),
-                       path = self.display(),
-                       result:% = action;
-                       "failed to apply {}: {:#}",
-                       self.repr(),
-                       error
-                );
-
-                self.action = action;
+                self.action = Action::Failed;
             }
         }
     }
@@ -173,10 +101,9 @@ impl Symlink {
                     match self.create(pid) {
                         Ok(action) => Ok(action),
                         Err(error) => {
-                            debug!(pid,
-                                   resource = self.kind(),
-                                   path = self.display();
-                                   "deleting symlink as at least one condition failed",
+                            debug!(
+                                "`{}`: deleting symlink as at least one condition failed",
+                                self.repr(),
                             );
 
                             fs::remove_file(&*self.parameters.path).ok();
@@ -197,8 +124,8 @@ impl Symlink {
     /// Re-create this symlink if the current target differs from the one that was configured.
     fn maybe_update(&self, pid: u32, metadata: fs::Metadata) -> Result<Action, anyhow::Error> {
         debug!(
-            "{}: symlink exists, checking if current and desired states match",
-            self.parameters.path.display()
+            "`{}`: symlink exists, checking if current and desired states match",
+            self.repr()
         );
 
         let mut action = Action::default();
@@ -210,10 +137,9 @@ impl Symlink {
         match fs::read_link(&*self.parameters.path) {
             Ok(target) => {
                 if target != *self.parameters.target {
-                    debug!(pid,
-                           resource = self.kind(),
-                           path = self.display();
-                           "symlink exists, but points to the wrong target, will be deleted and re-created",
+                    debug!(
+                        "`{}`: symlink exists, but points to the wrong target, will be deleted and re-created",
+                        self.repr()
                     );
 
                     fs::remove_file(&*self.parameters.path).context("failed to delete symlink")?;
@@ -232,11 +158,7 @@ impl Symlink {
 
     /// Create this symlink.
     fn create(&self, pid: u32) -> Result<Action, anyhow::Error> {
-        debug!(pid,
-               resource = self.kind(),
-               path = self.display();
-               "creating symlink as it does no exist",
-        );
+        debug!("`{}`: creating symlink as it does no exist", self.repr(),);
 
         create_symlink(&*self.parameters.target, &*self.parameters.path)
             .context("failed to create symlink")?;
@@ -246,11 +168,7 @@ impl Symlink {
 
     /// Delete this symlink.
     fn delete(&self, pid: u32, metadata: fs::Metadata) -> Result<Action, anyhow::Error> {
-        debug!(pid,
-               resource = self.kind(),
-               path = self.display();
-               "deleting symlink"
-        );
+        debug!("`{}`: deleting symlink", self.repr());
 
         if metadata.is_symlink() {
             fs::remove_file(&*self.parameters.path).context("failed to delete symlink")?

@@ -44,60 +44,8 @@ impl ResourceTrait for File {
         self.relationships.requires.as_slice()
     }
 
-    fn maybe_return_early(
-        &self,
-        pid: u32,
-        applied_resources: &HashMap<Uuid, Resource>,
-    ) -> Option<Action> {
-        if let Some(dependency) = self.find_failed_dependency(applied_resources) {
-            let action = Action::Skipped;
-
-            warn!(pid,
-                  resource = self.kind(),
-                  path = self.display(),
-                  result:% = action;
-                  "skipping {} as {} has failed to apply",
-                  self.repr(),
-                  dependency.repr()
-            );
-
-            return Some(action);
-        }
-
-        if let Some(dependency) = self.find_skipped_dependency(applied_resources) {
-            let action = Action::Skipped;
-
-            warn!(pid,
-                  resource = self.kind(),
-                  path = self.display(),
-                  result:% = action;
-                  "skipping {} as {} has been skipped",
-                  self.repr(),
-                  dependency.repr()
-            );
-
-            return Some(action);
-        }
-
-        if self.parameters.ensure.is_present() {
-            if let Some(dependency) = self.find_absent_dependency(applied_resources) {
-                let action = Action::Failed;
-
-                error!(
-                    pid,
-                    resource = self.kind(),
-                    path = self.display(),
-                    result:% = action;
-                    "cannot apply {} as {} is set to absent",
-                    self.repr(),
-                    dependency.repr()
-                );
-
-                return Some(action);
-            }
-        }
-
-        None
+    fn is_present(&self) -> bool {
+        self.parameters.ensure.is_present()
     }
 }
 
@@ -117,38 +65,18 @@ impl File {
             return;
         }
 
-        debug!(pid,
-               resource = self.kind(),
-               path = self.display();
-               "applying {}",
-               self.repr(),
-        );
+        debug!("`{}`: applying resource", self.repr(),);
 
         match self._apply(pid, agent, base_url, api_key) {
             Ok(action) => {
-                info!(pid,
-                      resource = self.kind(),
-                      path = self.display(),
-                      result:% = action;
-                      "successfully applied {}",
-                      self.repr()
-                );
+                info!("`{}`: successfully applied resource", self.repr());
 
                 self.action = action;
             }
             Err(error) => {
-                let action = Action::Failed;
+                error!("`{}`: failed to apply resource: {:#}", self.repr(), error);
 
-                error!(pid,
-                       resource = self.kind(),
-                       path = self.display(),
-                       result:% = action;
-                       "failed to apply {}: {:#}",
-                       self.repr(),
-                       error
-                );
-
-                self.action = action;
+                self.action = Action::Failed;
             }
         }
     }
@@ -179,10 +107,10 @@ impl File {
                     match self.create(pid, agent, base_url, api_key) {
                         Ok(action) => Ok(action),
                         Err(error) => {
-                            debug!(pid,
-                                   resource = self.kind(),
-                                   path = self.display();
-                                   "deleting file as at least one condition failed"
+                            debug!(
+                                "`{}`: deleting file `{}` as at least one condition failed",
+                                self.repr(),
+                                self.parameters.path.display()
                             );
                             fs::remove_file(&*self.parameters.path).ok();
                             Err(error)
@@ -208,10 +136,9 @@ impl File {
         api_key: &str,
         metadata: fs::Metadata,
     ) -> Result<Action, anyhow::Error> {
-        debug!(pid,
-               resource = self.kind(),
-               path = self.display();
-               "file exists, checking if current and desired states match"
+        debug!(
+            "`{}`: file exists, checking if current and desired states match",
+            self.repr()
         );
 
         let mut action = Action::default();
@@ -225,11 +152,10 @@ impl File {
 
         // Update permissions if necessary.
         if (metadata.permissions().mode() & 0o777) != permissions.mode() {
-            debug!(pid,
-                   resource = self.kind(),
-                   path = self.display();
-                   "updating file mode to {}",
-                   permissions.mode()
+            debug!(
+                "`{}`: updating file mode to `{}`",
+                self.repr(),
+                permissions.mode()
             );
 
             let handle = fs::File::open(&*self.parameters.path)
@@ -246,12 +172,11 @@ impl File {
 
         // Update ownership if necessary.
         if metadata.uid() != uid || metadata.gid() != gid {
-            debug!(pid,
-                   resource = self.kind(),
-                   path = self.display();
-                   "updating file owner (uid: {}) and group (gid: {})",
-                   uid,
-                   gid
+            debug!(
+                "`{}`: updating file owner (uid: `{}`) and group (gid: `{}`)",
+                self.repr(),
+                uid,
+                gid
             );
 
             chown(&*self.parameters.path, Some(uid), Some(gid))
@@ -262,10 +187,9 @@ impl File {
 
         // Compute an etag from the current file contents.
         let etag = {
-            debug!(pid,
-                   resource = self.kind(),
-                   path = self.display();
-                   "computing etag (sha256 digest) from current file content",
+            debug!(
+                "`{}`: computing etag (sha256 digest) from current file content",
+                self.repr()
             );
 
             let mut bytes = vec![];
@@ -285,12 +209,7 @@ impl File {
         if let Some(path) = &self.parameters.source {
             let url = base_url.join(&format!("/assets{}", path.display()))?;
 
-            debug!(pid,
-                   resource = self.kind(),
-                   path = self.display();
-                   "downloading file from {}",
-                   url
-            );
+            debug!("`{}`: downloading file from `{}`", self.repr(), url);
 
             let response = agent
                 .get(url.as_str())
@@ -301,10 +220,9 @@ impl File {
                 .context("failed to download file contents")?;
 
             if response.status() != 304 {
-                debug!(pid,
-                       resource = self.kind(),
-                       path = self.display();
-                       "remote file content has changed, writing new content to file",
+                debug!(
+                    "`{}`: remote file content has changed, writing new content to file",
+                    self.repr()
                 );
 
                 let mut bytes = vec![];
@@ -325,18 +243,16 @@ impl File {
 
                 action = Action::Changed;
             } else {
-                debug!(pid,
-                       resource = self.kind(),
-                       path = self.display();
-                       "remote file content matches current file content",
+                debug!(
+                    "`{}`: remote file content matches current file content",
+                    self.repr(),
                 );
             }
         } else if let Some(content) = &self.parameters.content {
             if format!("{:x}", Sha256::digest(content.as_bytes())) != etag {
-                debug!(pid,
-                       resource = self.kind(),
-                       path = self.display();
-                       "remote file content has changed, writing new content to file",
+                debug!(
+                    "`{}`: remote file content has changed, writing new content to file",
+                    self.repr()
                 );
 
                 fs::write(&*self.parameters.path, content.as_bytes())
@@ -344,10 +260,9 @@ impl File {
 
                 action = Action::Changed;
             } else {
-                debug!(pid,
-                       resource = self.kind(),
-                       path = self.display();
-                       "remote file content matches current file content",
+                debug!(
+                    "`{}`: remote file content matches current file content",
+                    self.repr()
                 );
             }
         }
@@ -365,11 +280,7 @@ impl File {
         base_url: &Url,
         api_key: &str,
     ) -> Result<Action, anyhow::Error> {
-        debug!(pid,
-               resource = self.kind(),
-               path = self.display();
-               "file does no exist, creating file",
-        );
+        debug!("`{}`: file does no exist, creating file", self.repr(),);
 
         let (uid, gid) = uid_and_gid(&self.parameters.owner, &self.parameters.group)?;
 
@@ -379,23 +290,21 @@ impl File {
         let permissions =
             fs::Permissions::from_mode(u32::from_str_radix(&self.parameters.mode, 8)?);
 
-        debug!(pid,
-               resource = self.kind(),
-               path = self.display();
-               "setting file mode to {}",
-               permissions.mode()
+        debug!(
+            "`{}`: setting file mode to `{}`",
+            self.repr(),
+            permissions.mode()
         );
 
         handle
             .set_permissions(permissions)
             .context("failed to set permissions")?;
 
-        debug!(pid,
-               resource = self.kind(),
-               path = self.display();
-               "setting file owner (uid: {}) and group ({})",
-               uid,
-               gid
+        debug!(
+            "`{}`: setting file owner (uid: `{}`) and group (gid: `{}`)",
+            self.repr(),
+            uid,
+            gid
         );
 
         chown(&*self.parameters.path, Some(uid), Some(gid))
@@ -406,12 +315,7 @@ impl File {
 
             let url = base_url.join(&format!("/assets{}", path.display()))?;
 
-            debug!(pid,
-                   resource = self.kind(),
-                   path = self.display();
-                   "downloading file from {}",
-                   url
-            );
+            debug!("`{}`: downloading file from `{}`", self.repr(), url);
 
             agent
                 .get(url.as_str())
@@ -423,21 +327,13 @@ impl File {
                 .read_to_end(&mut bytes)
                 .context("failed to write payload to buffer")?;
 
-            debug!(pid,
-                   resource = self.kind(),
-                   path = self.display();
-                   "writing content to file",
-            );
+            debug!("`{}`: writing content to file", self.repr());
 
             handle
                 .write_all(&bytes)
                 .context("failed to write payload to file")?;
         } else if let Some(content) = &self.parameters.content {
-            debug!(pid,
-                   resource = self.kind(),
-                   path = self.display();
-                   "writing content to file",
-            );
+            debug!("`{}`: writing content to file", self.repr(),);
 
             handle
                 .write_all(content.as_bytes())
@@ -449,11 +345,7 @@ impl File {
 
     /// Delete this file.
     fn delete(&self, pid: u32, metadata: fs::Metadata) -> Result<Action, anyhow::Error> {
-        debug!(pid,
-               resource = self.kind(),
-               path = self.display();
-               "deleting file"
-        );
+        debug!("`{}`: deleting file", self.repr());
 
         if metadata.is_file() {
             fs::remove_file(&*self.parameters.path).context("failed to delete file")?

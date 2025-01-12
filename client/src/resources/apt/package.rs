@@ -37,60 +37,8 @@ impl ResourceTrait for Package {
         self.relationships.requires.as_slice()
     }
 
-    fn maybe_return_early(
-        &self,
-        pid: u32,
-        applied_resources: &HashMap<Uuid, Resource>,
-    ) -> Option<Action> {
-        if let Some(dependency) = self.find_failed_dependency(applied_resources) {
-            let action = Action::Skipped;
-
-            warn!(pid,
-                  resource = self.kind(),
-                  name = self.display(),
-                  result:% = action;
-                  "skipping {} as {} has failed to apply",
-                  self.repr(),
-                  dependency.repr()
-            );
-
-            return Some(action);
-        }
-
-        if let Some(dependency) = self.find_skipped_dependency(applied_resources) {
-            let action = Action::Skipped;
-
-            warn!(pid,
-                  resource = self.kind(),
-                  name = self.display(),
-                  result:% = action;
-                  "skipping {} as {} has been skipped",
-                  self.repr(),
-                  dependency.repr()
-            );
-
-            return Some(action);
-        }
-
-        if self.parameters.ensure.is_present() {
-            if let Some(dependency) = self.find_absent_dependency(applied_resources) {
-                let action = Action::Failed;
-
-                error!(
-                    pid,
-                    resource = self.kind(),
-                    name = self.display(),
-                    result:% = action;
-                    "cannot apply {} as {} is set to absent",
-                    self.repr(),
-                    dependency.repr()
-                );
-
-                return Some(action);
-            }
-        }
-
-        None
+    fn is_present(&self) -> bool {
+        self.parameters.ensure.is_present()
     }
 
     fn check_prerequisites(&self, pid: u32) -> Option<Action> {
@@ -100,36 +48,24 @@ impl ResourceTrait for Package {
                     if metadata.is_file() {
                         None
                     } else {
-                        let action = Action::Failed;
-
                         error!(
-                            pid,
-                            resource = package.kind(),
-                            name = package.display(),
-                            result:% = action;
-                            "cannot apply {} as executable `{}` is missing",
+                            "`{}`: cannot apply resource as executable `{}` is missing",
                             package.repr(),
                             program
                         );
 
-                        Some(action)
+                        Some(Action::Failed)
                     }
                 }
                 Err(error) => {
-                    let action = Action::Failed;
-
                     error!(
-                        pid,
-                        resource = package.kind(),
-                        name = package.display(),
-                        result:% = action;
-                        "cannot apply {} as executable `{}` cannot be accessed: {}",
+                        "`{}`: cannot apply resource as executable `{}` cannot be accessed: {}",
                         package.repr(),
                         program,
                         error
                     );
 
-                    Some(action)
+                    Some(Action::Failed)
                 }
             }
         }
@@ -155,38 +91,18 @@ impl Package {
             return;
         }
 
-        debug!(pid,
-               resource = self.kind(),
-               name = self.display();
-               "applying {}",
-               self.repr(),
-        );
+        debug!("`{}`: applying resource", self.repr(),);
 
         match self._apply(pid) {
             Ok(action) => {
-                info!(pid,
-                      resource = self.kind(),
-                      name = self.display(),
-                      result:% = action;
-                      "successfully applied {}",
-                      self.repr(),
-                );
+                info!("`{}`: successfully applied resource", self.repr(),);
 
                 self.action = action;
             }
             Err(error) => {
-                let action = Action::Failed;
+                error!("`{}`: failed to apply resource: {:#}", self.repr(), error);
 
-                error!(pid,
-                       resource = self.kind(),
-                       name = self.display(),
-                       result:% = action;
-                       "failed to apply {}: {:#}",
-                       self.repr(),
-                       error
-                );
-
-                self.action = action;
+                self.action = Action::Failed;
             }
         }
     }
@@ -222,12 +138,7 @@ impl Package {
     /// The `action` parameter is used to return the correct action
     /// according to the context this function is executed in.
     fn install(&self, pid: u32, action: Action) -> Result<Action, anyhow::Error> {
-        debug!(
-            pid,
-            resource = self.kind(),
-            name = self.display();
-            "installing package"
-        );
+        debug!("`{}`: installing package", self.repr());
 
         let mut command = Command::new(APT_GET);
         command.arg("install");
@@ -248,7 +159,7 @@ impl Package {
             let s = String::from_utf8_lossy(&output.stderr).to_owned();
 
             anyhow::bail!(
-                "failed to install package, {} exited with status {}: {}",
+                "failed to install package, `{}` exited with status `{}`: {}",
                 APT_GET,
                 output.status.code().unwrap(),
                 s.trim_end()
@@ -260,12 +171,7 @@ impl Package {
 
     /// Remove the package from the system.
     fn remove(&self, pid: u32, purge: bool) -> Result<Action, anyhow::Error> {
-        debug!(
-            pid,
-            resource = self.kind(),
-            name = self.display();
-            "removing package"
-        );
+        debug!("`{}`: removing package", self.repr());
 
         let mut command = Command::new(APT_GET);
         command.arg("remove");
@@ -285,7 +191,7 @@ impl Package {
             let s = String::from_utf8_lossy(&output.stderr).to_owned();
 
             anyhow::bail!(
-                "failed to remove package, {} exited with status {}: {}",
+                "failed to remove package, `{}` exited with status `{}`: {}",
                 APT_GET,
                 output.status.code().unwrap(),
                 s.trim_end()
@@ -301,10 +207,8 @@ impl Package {
         command.args(["-W", "-f", "'${VERSION}'", self.parameters.name.as_str()]);
 
         debug!(
-            pid,
-            resource = self.kind(),
-            name = self.display();
-            "executing {:?} with args {:?}",
+            "`{}`: executing {:?} with args {:?}",
+            self.repr(),
             command.get_program(),
             command.get_args()
         );
@@ -317,7 +221,8 @@ impl Package {
             match Version::from_str(s.trim_start_matches('\'').trim_end_matches('\'')) {
                 Ok(version) => Ok(Some(version)),
                 Err(error) => anyhow::bail!(
-                    "failed to parse output from dpkg-query as package version: {}",
+                    "failed to parse output from `{}` as package version: {}",
+                    DPKG_QUERY,
                     error
                 ),
             }

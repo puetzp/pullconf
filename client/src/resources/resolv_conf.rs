@@ -40,62 +40,8 @@ impl ResourceTrait for ResolvConf {
         self.relationships.requires.as_slice()
     }
 
-    fn maybe_return_early(
-        &self,
-        pid: u32,
-        applied_resources: &HashMap<Uuid, Resource>,
-    ) -> Option<Action> {
-        if let Some(dependency) = self.find_failed_dependency(applied_resources) {
-            let action = Action::Skipped;
-
-            warn!(
-                pid,
-                resource = self.kind(),
-                path = self.display(),
-                result:% = action;
-                "skipping {} as {} has failed to apply",
-                self.repr(),
-                dependency.repr()
-            );
-
-            return Some(action);
-        }
-
-        if let Some(dependency) = self.find_skipped_dependency(applied_resources) {
-            let action = Action::Skipped;
-
-            warn!(
-                pid,
-                resource = self.kind(),
-                path = self.display(),
-                result:% = action;
-                "skipping {} as {} has been skipped",
-                self.repr(),
-                dependency.repr()
-            );
-
-            return Some(action);
-        }
-
-        if self.parameters.ensure.is_present() {
-            if let Some(dependency) = self.find_absent_dependency(applied_resources) {
-                let action = Action::Failed;
-
-                error!(
-                    pid,
-                    resource = self.kind(),
-                    path = self.display(),
-                    result:% = action;
-                    "cannot apply {} as {} is set to absent",
-                    self.repr(),
-                    dependency.repr()
-                );
-
-                return Some(action);
-            }
-        }
-
-        None
+    fn is_present(&self) -> bool {
+        self.parameters.ensure.is_present()
     }
 }
 
@@ -108,41 +54,18 @@ impl ResolvConf {
             return;
         }
 
-        debug!(
-            pid,
-            resource = self.kind(),
-            path = self.display();
-            "applying {}",
-            self.repr()
-        );
+        debug!("`{}`: applying resource", self.repr());
 
         match self._apply(pid) {
             Ok(action) => {
-                info!(
-                    pid,
-                    resource = self.kind(),
-                    path = self.display(),
-                    result:% = action;
-                    "successfully applied {}",
-                    self.repr(),
-                );
+                info!("`{}`: successfully applied resource", self.repr(),);
 
                 self.action = action;
             }
             Err(error) => {
-                let action = Action::Failed;
+                error!("`{}`: failed to apply resource: {:#}", self.repr(), error);
 
-                error!(
-                    pid,
-                    resource = self.kind(),
-                    path = self.display(),
-                    result:% = action;
-                    "failed to apply {}: {:#}",
-                    self.repr(),
-                    error
-                );
-
-                self.action = action;
+                self.action = Action::Failed;
             }
         }
     }
@@ -236,10 +159,8 @@ impl ResolvConf {
             }
             Err(error) if error.kind() == io::ErrorKind::NotFound => {
                 debug!(
-                    pid,
-                    resource = self.kind(),
-                    path = self.display();
-                    "skipping resource as target file {} does not exist",
+                    "`{}`: skipping resource as target file `{}` does not exist",
+                    self.repr(),
                     self.parameters.target.display()
                 );
 
@@ -252,18 +173,14 @@ impl ResolvConf {
     /// Replace the current target file contents with the desired contents.
     fn populate(&self, pid: u32, content: String) -> Result<Action, anyhow::Error> {
         debug!(
-            pid,
-            resource = self.kind(),
-            path = self.display();
-            "populating target file {}",
+            "`{}`: populating target file `{}`",
+            self.repr(),
             self.parameters.target.display()
         );
 
         debug!(
-            pid,
-            resource = self.kind(),
-            path = self.display();
-            "writing replacement file for target file {} with the desired contents",
+            "`{}`: writing replacement file for target file `{}` with the desired contents",
+            self.repr(),
             self.parameters.target.display()
         );
 
@@ -273,10 +190,8 @@ impl ResolvConf {
             anyhow::bail!("target file cannot be accessed: {}", error);
         } else {
             debug!(
-                pid,
-                resource = self.kind(),
-                path = self.display();
-                "renaming replacement file to original target file {}",
+                "`{}`: renaming replacement file to original target file `{}`",
+                self.repr(),
                 self.parameters.target.display()
             );
 
@@ -290,10 +205,8 @@ impl ResolvConf {
     /// Clear the target file.
     fn clear(&self, pid: u32) -> Result<Action, anyhow::Error> {
         debug!(
-            pid,
-            resource = self.kind(),
-            path = self.display();
-            "truncating target file {}",
+            "`{}`: truncating target file `{}`",
+            self.repr(),
             self.parameters.target.display()
         );
 

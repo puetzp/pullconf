@@ -10,13 +10,13 @@ license = "MIT"
 [dependencies]
 anyhow = "1.0"
 common = { path = "../common" }
+env_logger = "0.11"
 log = "0.4"
 nix = { version = "0.29", features = ["user"] }
 rustls = "0.23"
 rustls-pemfile = "2.1"
 serde = { version = "1", features = ["derive"] }
 sha2 = "0.10"
-std-logger = "0.5"
 time = { version = "0.3", features = ["macros"] }
 ureq = { version = "2.10", features = ["brotli", "json"] }
 url = "2.5"

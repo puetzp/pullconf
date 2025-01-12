@@ -17,27 +17,13 @@ fn main() -> ExitCode {
     // logs.
     let pid = std::process::id();
 
-    // Initialize logfmt logging.
-    let log_format = std::env::var("PULLCONF_LOG_FORMAT")
-        .ok()
-        .unwrap_or("logfmt".to_string());
-    if log_format == "logfmt" {
-        std_logger::Config::logfmt()
-            .with_kvs(&[("application", APPLICATION), ("version", VERSION)])
-            .with_call_location(false)
-            .init()
-    } else if log_format == "json" {
-        std_logger::Config::json()
-            .with_kvs(&[("application", APPLICATION), ("version", VERSION)])
-            .with_call_location(false)
-            .init()
-    } else {
-        eprintln!("unknown log format {}", log_format);
-        return ExitCode::FAILURE;
-    }
+    // Initialize logging.
+    env_logger::init();
+
+    log::info!("starting {} v{}", APPLICATION, VERSION);
 
     if !nix::unistd::getuid().is_root() {
-        log::error!(scope = "main", pid; "pullconf must be executed as root");
+        log::error!("(pid: {}) pullconf must be executed as root", pid);
         return ExitCode::FAILURE;
     }
 
@@ -47,6 +33,9 @@ fn main() -> ExitCode {
             configuration.apply(pid);
             ExitCode::SUCCESS
         }
-        Err(error) => error.into(),
+        Err(error) => {
+            log::error!("(pid: {}) {}", pid, error);
+            ExitCode::FAILURE
+        }
     }
 }

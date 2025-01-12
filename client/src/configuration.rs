@@ -18,10 +18,10 @@ use ureq::{serde_json, Agent, AgentBuilder};
 use url::Url;
 
 const ETAG_FILE: &str = "/var/lib/pullconf/etag";
-const CATALOG_FILE: &str = "/var/lib/pullconf/catalog";
+const DATA_FILE: &str = "/var/lib/pullconf/data";
 
 /// This struct contains every piece of information that is needed to retrieve
-/// this system's configuration (resource catalog) from pullconfd and apply it.
+/// this system's configuration (resource list) from pullconfd and apply it.
 #[derive(Debug)]
 pub struct Configuration {
     agent: Agent,
@@ -33,48 +33,31 @@ pub struct Configuration {
 impl Configuration {
     /// Retrieve this system's configuration from pullconfd.
     /// Depending on pullconfd's answer, either the payload or the cached resource
-    /// catalog are parsed from JSON and then returned.
-    pub fn get(pid: u32) -> Result<Self, Terminate> {
-        let scope = "configuration";
-
+    /// list are parsed from JSON and then returned.
+    pub fn get(pid: u32) -> Result<Self, String> {
         // Retrieve the system's (fully-qualified) hostname. The hostname is used
         // to query pullconfd for this system's configuration.
         let hostname = {
             let mut command = Command::new("hostname");
             command.arg("--fqdn");
 
-            let result = match command.output() {
-                Ok(r) => r,
-                Err(error) => {
-                    error!(scope, pid; "failed to execute {:?}: {}", command, error);
-                    return Err(Terminate);
-                }
-            };
+            let result = command
+                .output()
+                .map_err(|error| format!("failed to execute {:?}: {}", command, error))?;
 
             if result.status.success() {
-                let output = match String::from_utf8(result.stdout) {
-                    Ok(stdout) => stdout,
-                    Err(error) => {
-                        error!(scope, pid; "failed to read stdout from {:?}: {}", command, error);
-                        return Err(Terminate);
-                    }
-                };
+                let output = String::from_utf8(result.stdout).map_err(|error| {
+                    format!("failed to read stdout from {:?}: {}", command, error)
+                })?;
 
-                match Hostname::from_str(output.as_str().trim()) {
-                    Ok(hostname) => hostname,
-                    Err(error) => {
-                        error!(scope, pid; "failed to parse output from {:?}: {}", command, error);
-                        return Err(Terminate);
-                    }
-                }
+                Hostname::from_str(output.as_str().trim()).map_err(|error| {
+                    format!("failed to parse output from {:?}: {}", command, error)
+                })?
             } else {
-                error!(
-                    scope,
-                    pid;
+                return Err(format!(
                     "failed to execute {:?}, returned non-zero exit code",
                     command
-                );
-                return Err(Terminate);
+                ));
             }
         };
 
@@ -84,31 +67,25 @@ impl Configuration {
                 match env::var(v) {
                     Ok(value) => format!("https://{}", value),
                     Err(error) => {
-                        error!(scope, pid; "failed to read environment variable {}: {}", v, error);
-                        return Err(Terminate);
+                        return Err(format!(
+                            "failed to read environment variable `{}`: {}",
+                            v, error
+                        ))
                     }
                 }
             };
 
-            match Url::parse(&address) {
-                Ok(url) => url,
-                Err(error) => {
-                    error!(scope, pid; "failed to parse {} as URL: {}", address, error);
-                    return Err(Terminate);
-                }
-            }
+            Url::parse(&address)
+                .map_err(|error| format!("failed to parse `{}` as URL: {}", address, error))?
         };
 
         // The API key that is defined in the TOML configuration file on the server.
         let api_key = {
             let v = "PULLCONF_API_KEY";
-            match env::var(v) {
-                Ok(value) => value,
-                Err(error) => {
-                    error!(scope, pid; "failed to read environment variable {}: {}", v, error);
-                    return Err(Terminate);
-                }
-            }
+
+            env::var(v).map_err(|error| {
+                format!("failed to read environment variable `{}`: {}", v, error)
+            })?
         };
 
         // Add common CA certificates to the truststore of this request.
@@ -120,36 +97,29 @@ impl Configuration {
         // CA certificates, parse every certificate in each file and add them to
         // the truststore as well.
         if let Ok(ca_dir) = env::var("PULLCONF_CA_DIR") {
-            let path = match PathBuf::from_str(&ca_dir) {
-                Ok(path) => path,
-                Err(error) => {
-                    error!(scope, pid; "failed to parse {} as filesystem path: {}", ca_dir, error);
-                    return Err(Terminate);
-                }
-            };
+            let path = PathBuf::from_str(&ca_dir).map_err(|error| {
+                format!("failed to parse `{}` as filesystem path: {}", ca_dir, error)
+            })?;
 
-            let entries = match fs::read_dir(&path) {
-                Ok(e) => e,
-                Err(error) => {
-                    error!(scope, pid; "failed to access directory {}: {}", path.display(), error);
-                    return Err(Terminate);
-                }
-            };
+            let entries = fs::read_dir(&path)
+                .map_err(|error| {
+                    format!("failed to access directory `{}`: {}", path.display(), error)
+                })?
+                .into_iter()
+                .map(|entry| entry.map_err(|error| error.to_string()))
+                .collect::<Result<Vec<fs::DirEntry>, String>>()?;
 
             for entry in entries {
-                let cert_path = match entry {
-                    Ok(entry) => entry.path(),
-                    Err(error) => {
-                        error!(pid, scope; "{}", error);
-                        return Err(Terminate);
-                    }
-                };
+                let cert_path = entry.path();
 
                 let mut reader = match fs::File::open(&cert_path) {
                     Ok(cert_file) => BufReader::new(cert_file),
                     Err(error) => {
-                        error!(pid, scope; "failed to open file {}: {}", cert_path.display(), error);
-                        return Err(Terminate);
+                        return Err(format!(
+                            "failed to open file `{}`: {}",
+                            cert_path.display(),
+                            error
+                        ));
                     }
                 };
 
@@ -190,75 +160,78 @@ impl Configuration {
             .set("accept", content_type)
             .set("x-api-key", &api_key);
 
-        debug!(scope, pid, url:%; "checking if a file with an etag of a saved resource catalog exists");
+        debug!(
+            "(pid: {}) checking if a file with an etag of a saved resource list exists",
+            pid
+        );
 
         if let Some(etag) = get_etag(pid)? {
-            debug!(scope, pid, url:%; "adding etag of saved resource catalog to request");
+            debug!(
+                "(pid: {}) adding etag of saved resource list to request",
+                pid
+            );
             request = request.set("if-none-match", &etag);
         }
 
         let _timer = Instant::now();
 
+        debug!("(pid: {}) requesting resource list from `{}`", pid, url);
+
         let resources = match request.call().inspect(|response| {
             if let Some(content_length) = response.header("content-length") {
-                debug!(scope, pid, url:%; "received {} bytes", content_length);
+                debug!("(pid: {}) received {} bytes", pid, content_length);
             }
 
-            debug!(scope, pid, url:%;
-                   "finished request in {} ms",
-                   (_timer.elapsed().as_millis() as f64) / 1000.0
+            debug!(
+                "(pid: {}) finished request in {} ms",
+                pid,
+                (_timer.elapsed().as_millis() as f64) / 1000.0
             )
         }) {
             Ok(response) => {
                 if response.status() == 304 {
-                    debug!(scope, pid, url:%; "server returned 304, ignoring the request body and reading saved resource catalog from disk");
+                    debug!("(pid: {}) server returned 304, ignoring the request body and reading saved resource list from disk", pid);
 
-                    get_saved_resource_catalog(pid)?.data
+                    get_saved_resource_list(pid)?.data
                 } else {
                     // If the response is successful according to the status code, but the
                     // content type hints at a non-JSON body, log a generic error including
                     // relevant information for debugging and terminate the program.
                     if response.content_type() != content_type {
-                        error!(
-                            scope,
-                            pid,
-                            url:%;
-                            "unexpected API response content type, expected {}, got {} and status {} {} from {}",
+                        return Err(format!(
+                            "unexpected API response content type, expected `{}`, got `{}` and status `{} {}` from `{}`",
+
                             content_type,
                             response.content_type(),
                             response.status(),
                             response.status_text(),
                             response.header("server").unwrap_or_default()
-                        );
-                        return Err(Terminate);
+                        ));
                     } else {
                         let etag = response.header("etag").map(|value| value.to_string());
 
-                        debug!(scope, pid, url:%; "content type is {}, deserializing resource catalog", content_type);
+                        debug!(
+                            "(pid: {}) content type is `{}`, deserializing resource list",
+                            pid, content_type
+                        );
 
                         // Otherwise parse the payload as it is expected to be a JSON-encoded
-                        // resource catalog.
-                        let payload = match response.into_string() {
-                            Ok(s) => s,
-                            Err(error) => {
-                                error!(scope, pid, url:%; "failed to parse payload as utf-8 string: {}", error);
-                                return Err(Terminate);
-                            }
-                        };
+                        // resource list.
+                        let payload = response.into_string().map_err(|error| {
+                            format!("failed to parse payload as utf-8 string: {}", error)
+                        })?;
 
                         if let Some(etag) = etag {
-                            debug!(scope, pid, url:%; "saving resource catalog data to disk");
+                            debug!("(pid: {}) saving resource list to disk", pid);
 
-                            save_resource_catalog(pid, &etag, &payload)?;
+                            save_resource_list(pid, &etag, &payload)?;
                         }
 
-                        match serde_json::from_str::<Resources>(&payload) {
-                            Ok(catalog) => catalog.data,
-                            Err(error) => {
-                                error!(scope, pid, url:%; "failed to deserialize resource catalog : {}", error);
-                                return Err(Terminate);
-                            }
-                        }
+                        serde_json::from_str::<Resources>(&payload)
+                            .map_err(|error| {
+                                format!("failed to deserialize resource list : {}", error)
+                            })?
+                            .data
                     }
                 }
             }
@@ -268,48 +241,39 @@ impl Configuration {
                     // content type hints at a non-JSON body, log a generic error including
                     // relevant information for debugging and terminate the program.
                     if response.content_type() != content_type {
-                        error!(
-                            scope,
-                            pid,
-                            url:%;
-                            "unexpected API response content type, expected {}, got {} and status {} {} from {}",
+                        return Err(format!(
+                            "unexpected API response content type, expected `{}`, got `{}` and status `{} {}` from `{}`",
                             content_type,
                             response.content_type(),
                             response.status(),
                             response.status_text(),
                             response.header("server").unwrap_or_default()
-                        );
-                        return Err(Terminate);
+                        ));
                     } else {
-                        debug!(scope, pid, url:%; "content type is {}, deserializing error message", content_type);
+                        debug!(
+                            "(pid: {}) content type is `{}`, deserializing error message",
+                            pid, content_type
+                        );
 
                         // Otherwise parse the well-known API error format from JSON and log
                         // the error appropiately. Then terminate the program.
-                        let error = match response.into_json::<Error>() {
-                            Ok(error) => error,
-                            Err(error) => {
-                                error!(scope, pid, url:%; "failed to deserialize error response: {}", error);
-                                return Err(Terminate);
-                            }
-                        };
+                        let error = response.into_json::<Error>().map_err(|error| {
+                            format!("failed to deserialize error response: {}", error)
+                        })?;
 
-                        error!(
-                            scope,
-                            pid,
-                            url:%
-                            ;
-                            "pullconfd failed to process the request: ({}) {}",
-                            error.title,
-                            error.detail
-                        );
-
-                        return Err(Terminate);
+                        return Err(format!(
+                            "pullconfd failed to process the request: {}, {}",
+                            error.title, error.detail
+                        ));
                     }
                 }
                 // Log any unexpected errors as-is and terminate the program.
                 ureq::Error::Transport(error) => {
-                    error!(scope, pid, url:%; "failed to send request to pullconfd: {}: {}", error.message().unwrap(), error.source().unwrap());
-                    return Err(Terminate);
+                    return Err(format!(
+                        "failed to send request to pullconfd: {}, {}",
+                        error.message().unwrap(),
+                        error.source().unwrap()
+                    ));
                 }
             },
         };
@@ -356,11 +320,11 @@ impl Configuration {
 
         let _elapsed = (_timer.elapsed().as_millis() as f64) / 1000.0;
 
-        info!(pid; "applied resource catalog in {:.3} seconds", _elapsed);
+        info!("applied resource list in {:.3} seconds", _elapsed);
     }
 }
 
-fn get_etag(pid: u32) -> Result<Option<String>, Terminate> {
+fn get_etag(pid: u32) -> Result<Option<String>, String> {
     match fs::read_to_string(ETAG_FILE) {
         Ok(etag) => {
             if etag.is_empty() {
@@ -370,53 +334,47 @@ fn get_etag(pid: u32) -> Result<Option<String>, Terminate> {
             }
         }
         Err(error) if error.kind() == ErrorKind::NotFound => {
-            debug!(scope = "request", pid; "etag file does not exist");
+            debug!("etag file does not exist");
             Ok(None)
         }
         Err(error) => {
-            error!(scope = "request", pid; "failed to read etag file {}: {}", ETAG_FILE, error);
-            Err(Terminate)
+            return Err(format!(
+                "failed to read etag file `{}`: {}",
+                ETAG_FILE, error
+            ));
         }
     }
 }
 
-fn get_saved_resource_catalog(pid: u32) -> Result<Resources, Terminate> {
-    match fs::read_to_string(CATALOG_FILE) {
-        Ok(s) => match serde_json::from_str::<Resources>(&s) {
-            Ok(resources) => Ok(resources),
-            Err(error) => {
-                error!(scope = "request", pid; "failed to deserialize resource catalog from file: {}", error);
-                Err(Terminate)
-            }
-        },
-        Err(error) => {
-            error!(scope = "request", pid; "failed to read resource catalog file: {}", error);
-            Err(Terminate)
-        }
-    }
+fn get_saved_resource_list(pid: u32) -> Result<Resources, String> {
+    let content = fs::read_to_string(DATA_FILE).map_err(|error| {
+        format!(
+            "failed to read resource list from file `{}`: {}",
+            DATA_FILE, error
+        )
+    })?;
+
+    serde_json::from_str::<Resources>(&content).map_err(|error| {
+        format!(
+            "failed to deserialize resource list from file `{}`: {}",
+            DATA_FILE, error
+        )
+    })
 }
 
-fn save_resource_catalog(pid: u32, etag: &str, catalog: &str) -> Result<(), Terminate> {
+fn save_resource_list(pid: u32, etag: &str, data: &str) -> Result<(), String> {
     if let Err(error) = fs::write(ETAG_FILE, etag) {
-        error!(
-            scope = "request",
-            pid;
-            "failed to save latest resource catalog etag to file: {}",
-            error
-        );
-
-        return Err(Terminate);
+        return Err(format!(
+            "failed to save latest resource list etag to file `{}`: {}",
+            ETAG_FILE, error
+        ));
     }
 
-    if let Err(error) = fs::write(CATALOG_FILE, catalog) {
-        error!(
-            scope = "request",
-            pid;
-            "failed to save latest resource catalog to file: {}",
-            error
-        );
-
-        return Err(Terminate);
+    if let Err(error) = fs::write(DATA_FILE, data) {
+        return Err(format!(
+            "failed to save latest resource list to file `{}`: {}",
+            DATA_FILE, error
+        ));
     }
 
     Ok(())
