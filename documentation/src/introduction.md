@@ -84,7 +84,6 @@ As far as configuration management systems go, Pullconf's features are and will 
 
 You might want to consider using it when:
 
-
 - you operate a fleet of homogeneous server systems and your needs for extensive customization are thus low.
 - you are just getting started with system configuration management and other, more powerful systems such as Ansible, Puppet or Chef may be overkill.
 - all the resource types that you require are covered by Pullconf.

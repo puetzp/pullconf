@@ -1,8 +1,12 @@
 # Pullconf
 
-Pullconf is a configuration management system focused on Debian GNU/Linux and other Debian-based Linux systems. For those familiar with other configuration management systems, Pullconf's approach bears  a strong resemblance to [Puppet](https://puppet.com). Most importantly it employs a pull-based approach to configuration management, meaning a client periodically fetches its configuration from a central server and applies it.
+Pullconf is a **configuration management system** for Debian GNU/Linux and other Debian-based Linux servers. It is heavily influenced by [Puppet](https://puppet.com) (a popular and widely-used configuration management system). In contrast to other configuration management systems this project focuses a lot on simplicity and ease of use. Or to put it in other words: its primary goal is being *boring*. Ideally as boring as its uninspired name.
 
-The configuration that a client applies to itself is just a collection of resources (such as "file", "directory", "user" or "host"). Pullconf infers dependencies between resources automatically to the extent it is able to.
+Pullconf uses a simple client-server architecture: Clients communicate with a central server in order to retrieve a list of resources via an HTTP API. These resources are then applied on the client to achieve a desired state, e.g. create a file at a certain location.
+
+As the name implies Pullconf follows a **pull-based** approach to system configuration: a client actively fetches a designated list of resources and applies it according to a certain schedule. Pullconf thereby ensures that every resource maintains its desired state, e.g. that a file has specific content and is owned by a certain user.
+
+**Resources** such as a file, directory or user are defined in configuration files on the server. These files follow the [StrictYAML](https://hitchdev.com/strictyaml) syntax.
 
 Pullconf does not try to do anything revolutionary in the space of configuration management systems. In fact it tries to be as boring and straightforward as possible. It might fit your needs when:
 
@@ -23,7 +27,7 @@ A fleet of clients (Debian-based Linux servers) connects regularly with a centra
 
 ## Features
 
-As already mentioned the resource catalog of a client is compiled from TOML files that follow a certain syntax. There are some features that allow you to manage your configuration effectively:
+As already mentioned the resources belonging to a client are compiled from StrictYAML files that follow a certain syntax. There are some features that allow you to manage your configuration effectively:
 
 - Resources can be collected into groups. A client can be a member of any number of groups. Clients inherit the resources defined in groups in addition to their own set of resources. The server prevents you from submitting ambiguous or invalid configuration and provides detailed error messages for conflict resolution. Meanwhile clients continue to be served with the most recent, valid configuration.
 - Variables can be defined per client and used throughout configuration files to substitute resource parameters.
@@ -35,64 +39,69 @@ As already mentioned the resource catalog of a client is compiled from TOML file
 
 ## Example
 
-This is a basic example for a client configuration file to get a sense of the way TOML is used to define resources:
+This is a basic example for a client configuration file to get a sense of the way StrictYAML is used to define resources:
 
-```toml
-# /etc/pullconfd/resources/clients/blechbuechse.local.toml
+```yaml
+# /etc/pullconfd/conf.d/blechkiste.local.yaml
 
-api-key = "<...>"
-groups = [ "sshd", "postfix", "nginx", "hardening" ]
+type: client
+name: blechkiste.local
+api_key: 20b5094257d70c8d126cf278510b6443d5139e86e18be1389b90a28d526c8236
+groups:
+  - sshd
+  - postfix
+  - nginx
+  - hardening
 
-[variables]
-ip-address = "172.16.5.6"
-proxy-ip-address = "172.16.10.5"
+variables:
+  ip_address: 172.16.5.6
 
-[[resources]]
-type = "host"
-# "$pullconf::hostname" is a pre-defined variable that evaluates to "blechbuechse.local".
-hostname = "$pullconf::hostname"
-ip-address = "$pullconf::ip-address"
+resources:
+  - type: host
+    parameters:
+	  # `$pullconf::hostname` is a pre-defined variable that evaluates to `blechkiste.local`
+	  hostname: $pullconf::hostname
+	  ip_address: $pullconf::ip_address
 
-[[resources]]
-type = "host"
-hostname = "proxy"
-ip-address = "$pullconf::proxy-ip-address"
-aliases = [ "proxy.local" ]
+  - type: host
+    parameters:
+	  hostname: proxy
+	  ip_address: 172.16.10.5
+	  aliases:
+	    - proxy.local
 
-[[resources]]
-type = "file"
-path = "/etc/logrotate.d/rsyslog"
-owner = "root"
-group = "root"
-mode = "0644"
-content = """
-/var/log/syslog
-/var/log/mail.info
-/var/log/mail.warn
-/var/log/mail.err
-/var/log/mail.log
-/var/log/daemon.log
-/var/log/kern.log
-/var/log/auth.log
-/var/log/user.log
-/var/log/lpr.log
-/var/log/cron.log
-/var/log/debug
-/var/log/messages
-{
-	rotate 4
-	weekly
-	missingok
-	notifempty
-	compress
-	delaycompress
-	sharedscripts
-	postrotate
-		/usr/lib/rsyslog/rsyslog-rotate
-	endscript
-}
-"""
-
+  - type: file
+    parameters:
+	  path: /etc/logrotate.d/rsyslog
+	  owner: root
+	  group: root
+	  mode: 0644
+	  content: |
+	    /var/log/syslog
+		/var/log/mail.info
+		/var/log/mail.warn
+		/var/log/mail.err
+		/var/log/mail.log
+		/var/log/daemon.log
+		/var/log/kern.log
+		/var/log/auth.log
+		/var/log/user.log
+		/var/log/lpr.log
+		/var/log/cron.log
+		/var/log/debug
+		/var/log/messages
+		{
+			rotate 4
+			weekly
+			missingok
+			notifempty
+			compress
+			delaycompress
+			sharedscripts
+			postrotate
+			/usr/lib/rsyslog/rsyslog-rotate
+			endscript
+		}
 ```
 
 ## Future development
