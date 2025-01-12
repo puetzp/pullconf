@@ -59,49 +59,49 @@ variables:
 resources:
   - type: host
     parameters:
-	  # `$pullconf::hostname` is a pre-defined variable that evaluates to `blechkiste.local`
-	  hostname: $pullconf::hostname
-	  ip_address: $pullconf::ip_address
+      # `$pullconf::hostname` is a pre-defined variable that evaluates to `blechkiste.local`
+      hostname: $pullconf::hostname
+      ip_address: $pullconf::ip_address
 
   - type: host
     parameters:
-	  hostname: proxy
-	  ip_address: 172.16.10.5
-	  aliases:
-	    - proxy.local
+      hostname: proxy
+      ip_address: 172.16.10.5
+      aliases:
+        - proxy.local
 
   - type: file
     parameters:
-	  path: /etc/logrotate.d/rsyslog
-	  owner: root
-	  group: root
-	  mode: 0644
-	  content: |
-	    /var/log/syslog
-		/var/log/mail.info
-		/var/log/mail.warn
-		/var/log/mail.err
-		/var/log/mail.log
-		/var/log/daemon.log
-		/var/log/kern.log
-		/var/log/auth.log
-		/var/log/user.log
-		/var/log/lpr.log
-		/var/log/cron.log
-		/var/log/debug
-		/var/log/messages
-		{
-			rotate 4
-			weekly
-			missingok
-			notifempty
-			compress
-			delaycompress
-			sharedscripts
-			postrotate
-			/usr/lib/rsyslog/rsyslog-rotate
-			endscript
-		}
+      path: /etc/logrotate.d/rsyslog
+      owner: root
+      group: root
+      mode: 0644
+      content: |
+        /var/log/syslog
+        /var/log/mail.info
+        /var/log/mail.warn
+        /var/log/mail.err
+        /var/log/mail.log
+        /var/log/daemon.log
+        /var/log/kern.log
+        /var/log/auth.log
+        /var/log/user.log
+        /var/log/lpr.log
+        /var/log/cron.log
+        /var/log/debug
+        /var/log/messages
+        {
+            rotate 4
+            weekly
+            missingok
+            notifempty
+            compress
+            delaycompress
+            sharedscripts
+            postrotate
+            /usr/lib/rsyslog/rsyslog-rotate
+            endscript
+        }
 ```
 
 ## Future development
