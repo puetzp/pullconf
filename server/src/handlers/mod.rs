@@ -12,33 +12,19 @@ use std::{fs, io::Read, path::PathBuf, time::Instant};
 pub fn handle_request(request: &Request, state: SharedAppState) -> Response {
     let start = Instant::now();
 
-    let scope = "api";
-
     let request_id = rand::thread_rng()
         .sample_iter(&Alphanumeric)
         .take(6)
         .map(char::from)
         .collect::<String>();
 
-    debug!(
-        scope,
-        request_id,
-        url = request.url();
-        "received {:?}",
-        request
-    );
+    debug!("(request: {}) received {:?}", request_id, request);
 
     let header = "x-api-key";
 
     let response = match request.header(header) {
         Some(key) => {
-            debug!(
-                scope,
-                request_id,
-                url = request.url();
-                "found {} header",
-                header
-            );
+            debug!("(request: {}) found {} header", request_id, header);
 
             match handle_route(&request_id, request, state, key) {
                 Ok(r) => r,
@@ -47,10 +33,8 @@ pub fn handle_request(request: &Request, state: SharedAppState) -> Response {
         }
         None => {
             debug!(
-                scope,
+                "(request: {}) client failed to provide authentication credentials via the {} header",
                 request_id,
-                url = request.url();
-                "client failed to provide authentication credentials via the {} header",
                 header,
             );
 
@@ -59,27 +43,17 @@ pub fn handle_request(request: &Request, state: SharedAppState) -> Response {
     };
 
     debug!(
-        scope,
-        request_id,
-        url = request.url();
-        "applying optional encoding based on the accept-encoding header",
+        "(request: {}) applying optional encoding based on the accept-encoding header",
+        request_id
     );
 
     let response = content_encoding::apply(request, response);
 
-    debug!(
-        scope,
-        request_id,
-        url = request.url();
-        "returning {:?}",
-        response
-    );
+    debug!("(request: {}) returning {:?}", request_id, response);
 
     debug!(
-        scope,
+        "(request: {}) took {} ms to process the request",
         request_id,
-        url = request.url();
-        "took {} ms to process the request",
         start.elapsed().as_millis()
     );
 
@@ -92,8 +66,6 @@ fn handle_route(
     state: SharedAppState,
     api_key: &str,
 ) -> Result<Response, Error> {
-    let scope = "api";
-
     let state = state.read().unwrap();
 
     let encrypted_key = ApiKey::encrypt(api_key);
@@ -106,22 +78,15 @@ fn handle_route(
     {
         Some(client) => client.clone(),
         None => {
-            debug!(
-                scope,
-                request_id,
-                url = request.url();
-                "client failed to authenticate"
-            );
+            debug!("(request: {}) client failed to authenticate", request_id,);
             return Err(Error::failed_authorization());
         }
     };
 
     debug!(
-        scope,
+        "(request: {}) client authenticated successfully as `{}`",
         request_id,
-        url = request.url(),
-        client:% = client.name();
-        "client authenticated successfully"
+        client.name()
     );
 
     if let Some(request) = request.remove_prefix("/assets") {
@@ -139,11 +104,9 @@ fn handle_route(
             .any(|path| path == request.url())
         {
             debug!(
-                scope,
+                "(request: {}) client `{}` is not permitted to download file as none of its associated file resources specify this download path",
                 request_id,
-                url = request.url(),
-                client:% = client.name();
-                "client is not permitted to download file as none of its associated file resources specify this download path",
+                client.name()
             );
 
             return Err(Error::forbidden());
@@ -167,11 +130,9 @@ fn handle_route(
 
                     if client.name() != &hostname {
                         debug!(
-                            scope,
+                            "(request: {}) client `{}` is not permitted to download this resource catalog",
                             request_id,
-                            url = request.url(),
-                            client:% = client.name();
-                            "client is not permitted to download this resource catalog",
+                            client.name()
                         );
 
                         return Ok(Error::forbidden().into());
@@ -193,11 +154,7 @@ fn handle_route(
                 },
                 _ => {
                     debug!(
-                        scope,
-                        request_id,
-                        url = request.url(),
-                        client:% = client.name();
-                        "failed to find route matching this request"
+                        "(request: {}) failed to find route matching this request", request_id
                     );
 
                     Ok(Response::empty_404())
