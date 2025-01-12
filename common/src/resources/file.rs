@@ -2,7 +2,7 @@ use super::group::Name as Groupname;
 use super::user::Name as Username;
 use crate::{Ensure, ResourceMetadata, SafePathBuf};
 use serde::{de::Error, Deserialize, Deserializer, Serialize};
-use std::{ops::Deref, str::FromStr};
+use std::{fmt, ops::Deref, str::FromStr};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Parameters {
@@ -23,16 +23,7 @@ pub struct Relationships {
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
 pub struct Mode(String);
 
-impl<'de> Deserialize<'de> for Mode {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-
-        Self::from_str(&s).map_err(Error::custom)
-    }
-}
+crate::impl_string_newtype!(Mode);
 
 impl FromStr for Mode {
     type Err = anyhow::Error;
@@ -49,13 +40,5 @@ impl FromStr for Mode {
 impl Default for Mode {
     fn default() -> Self {
         Self("644".to_string())
-    }
-}
-
-impl Deref for Mode {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        self.0.as_str()
     }
 }

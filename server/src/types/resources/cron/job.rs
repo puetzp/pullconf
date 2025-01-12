@@ -1,17 +1,17 @@
-use crate::types::resources::{
-    deserialize::{Dependency, VariableOrValue},
-    Resource,
+use crate::{
+    configuration::Source,
+    types::resources::{Resolvable, Resource, UnresolvedNode},
 };
 use common::{
     resources::{
-        cron::job::{Environment, Parameters, Relationships},
+        cron::job::{Environment, Name, Parameters, Relationships},
         user::Name as Username,
     },
     Ensure, ResourceMetadata, ResourceType,
 };
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::{collections::HashMap, path::PathBuf};
-use toml::Value;
+use strict_yaml_rust::{strict_yaml::Hash, StrictYaml};
 use uuid::Uuid;
 
 #[derive(Clone, Debug, Serialize)]
@@ -30,22 +30,22 @@ impl PartialEq for Job {
 
 impl Eq for Job {}
 
-impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Job {
+impl TryFrom<(UnresolvedParameters, &HashMap<String, StrictYaml>)> for Job {
     type Error = String;
 
     fn try_from(
-        (parameters, variables): (&de::Parameters, &HashMap<String, Value>),
+        (parameters, variables): (UnresolvedParameters, &HashMap<String, StrictYaml>),
     ) -> Result<Self, Self::Error> {
         let parameters = {
-            let ensure = match &parameters.ensure {
-                Some(parameter) => parameter.resolve("ensure", variables)?,
+            let ensure = match parameters.ensure {
+                Some(parameter) => Ensure::resolve(parameter, variables)?,
                 None => Ensure::default(),
             };
 
-            let name = parameters.name.resolve("name", variables)?;
+            let name = Name::resolve(parameters.name, variables)?;
 
-            let mut environment: Vec<Environment> = match &parameters.environment {
-                Some(parameter) => parameter.resolve("environment", variables)?,
+            let mut environment = match parameters.environment {
+                Some(parameter) => Vec::<Environment>::resolve(parameter, variables)?,
                 None => vec![],
             };
 
@@ -67,14 +67,14 @@ impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Job {
                 );
             }
 
-            let schedule = parameters.schedule.resolve("schedule", variables)?;
+            let schedule = String::resolve(parameters.schedule, variables)?;
 
-            let user = match &parameters.user {
-                Some(parameter) => parameter.resolve("user", variables)?,
+            let user = match parameters.user {
+                Some(parameter) => Username::resolve(parameter, variables)?,
                 None => Username::root(),
             };
 
-            let command = parameters.command.resolve("command", variables)?;
+            let command = String::resolve(parameters.command, variables)?;
 
             let target = PathBuf::from(format!("/etc/cron.d/{}", name));
 
@@ -118,7 +118,7 @@ impl Job {
     }
 
     pub fn repr(&self) -> String {
-        format!("{} `{}`", self.kind(), self.display())
+        format!("{}[{}]", self.kind(), self.display())
     }
 
     pub fn must_depend_on(&self, resource: &Resource) -> bool {
@@ -151,27 +151,100 @@ impl Job {
     }
 }
 
-pub mod de {
-    use super::*;
+#[derive(Clone, Debug)]
+pub struct UnresolvedParameters {
+    pub ensure: Option<UnresolvedNode>,
+    pub name: UnresolvedNode,
+    pub environment: Option<UnresolvedNode>,
+    pub schedule: UnresolvedNode,
+    pub user: Option<UnresolvedNode>,
+    pub command: UnresolvedNode,
+}
 
-    #[derive(Clone, Debug, Deserialize)]
-    #[serde(deny_unknown_fields)]
-    pub struct Parameters {
-        #[serde(default)]
-        pub ensure: Option<VariableOrValue>,
-        pub name: VariableOrValue,
-        pub environment: Option<VariableOrValue>,
-        pub schedule: VariableOrValue,
-        #[serde(default)]
-        pub user: Option<VariableOrValue>,
-        pub command: VariableOrValue,
-        #[serde(default)]
-        pub requires: Vec<Dependency>,
+impl UnresolvedParameters {
+    pub fn kind(&self) -> ResourceType {
+        ResourceType::CronJob
     }
+}
 
-    impl Parameters {
-        pub fn kind(&self) -> ResourceType {
-            ResourceType::CronJob
+impl TryFrom<(Source, Hash)> for UnresolvedParameters {
+    type Error = String;
+
+    fn try_from((source, mut hash): (Source, Hash)) -> Result<Self, Self::Error> {
+        let ensure = {
+            let key = "ensure";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+        };
+
+        let name = {
+            let key = "name";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+                .ok_or(format!("{}: failed to find required key `{}`", source, key))?
+        };
+
+        let environment = {
+            let key = "environment";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+        };
+
+        let schedule = {
+            let key = "schedule";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+                .ok_or(format!("{}: failed to find required key `{}`", source, key))?
+        };
+
+        let user = {
+            let key = "user";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+        };
+
+        let command = {
+            let key = "command";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+                .ok_or(format!("{}: failed to find required key `{}`", source, key))?
+        };
+
+        if let Some(key) = hash.pop_back().and_then(|(key, _)| key.into_string()) {
+            return Err(format!("{}: encountered unexpected key `{}`", source, key));
         }
+
+        Ok(Self {
+            ensure,
+            name,
+            environment,
+            schedule,
+            user,
+            command,
+        })
     }
 }

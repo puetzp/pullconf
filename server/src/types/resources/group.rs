@@ -1,14 +1,12 @@
-use super::{
-    deserialize::{Dependency, VariableOrValue},
-    Resource,
-};
+use super::{Resolvable, Resource, UnresolvedNode};
+use crate::configuration::Source;
 use common::{
-    resources::group::{Parameters, Relationships},
+    resources::group::{Name, Parameters, Relationships},
     Ensure, ResourceMetadata, ResourceType,
 };
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::collections::HashMap;
-use toml::Value;
+use strict_yaml_rust::{strict_yaml::Hash, StrictYaml};
 use uuid::Uuid;
 
 #[derive(Clone, Debug, Serialize)]
@@ -27,22 +25,22 @@ impl PartialEq for Group {
 
 impl Eq for Group {}
 
-impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Group {
+impl TryFrom<(UnresolvedParameters, &HashMap<String, StrictYaml>)> for Group {
     type Error = String;
 
     fn try_from(
-        (parameters, variables): (&de::Parameters, &HashMap<String, Value>),
+        (parameters, variables): (UnresolvedParameters, &HashMap<String, StrictYaml>),
     ) -> Result<Self, Self::Error> {
         let parameters = {
-            let ensure = match &parameters.ensure {
-                Some(parameter) => parameter.resolve("ensure", variables)?,
+            let ensure = match parameters.ensure {
+                Some(parameter) => Ensure::resolve(parameter, variables)?,
                 None => Ensure::default(),
             };
 
-            let name = parameters.name.resolve("name", variables)?;
+            let name = Name::resolve(parameters.name, variables)?;
 
-            let system = match &parameters.system {
-                Some(parameter) => parameter.resolve("system", variables)?,
+            let system = match parameters.system {
+                Some(parameter) => bool::resolve(parameter, variables)?,
                 None => false,
             };
 
@@ -82,7 +80,7 @@ impl Group {
     }
 
     pub fn repr(&self) -> String {
-        format!("{} `{}`", self.kind(), self.display())
+        format!("{}[{}]", self.kind(), self.display())
     }
 
     pub fn must_depend_on(&self, resource: &Resource) -> bool {
@@ -107,24 +105,62 @@ impl Group {
     }
 }
 
-pub mod de {
-    use super::*;
+#[derive(Clone, Debug)]
+pub struct UnresolvedParameters {
+    pub ensure: Option<UnresolvedNode>,
+    pub name: UnresolvedNode,
+    pub system: Option<UnresolvedNode>,
+}
 
-    #[derive(Clone, Debug, Deserialize)]
-    #[serde(deny_unknown_fields)]
-    pub struct Parameters {
-        #[serde(default)]
-        pub ensure: Option<VariableOrValue>,
-        pub name: VariableOrValue,
-        #[serde(default)]
-        pub system: Option<VariableOrValue>,
-        #[serde(default)]
-        pub requires: Vec<Dependency>,
+impl UnresolvedParameters {
+    pub fn kind(&self) -> ResourceType {
+        ResourceType::Group
     }
+}
 
-    impl Parameters {
-        pub fn kind(&self) -> ResourceType {
-            ResourceType::Group
+impl TryFrom<(Source, Hash)> for UnresolvedParameters {
+    type Error = String;
+
+    fn try_from((source, mut hash): (Source, Hash)) -> Result<Self, Self::Error> {
+        let ensure = {
+            let key = "ensure";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+        };
+
+        let name = {
+            let key = "name";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+                .ok_or(format!("{}: failed to find required key `{}`", source, key))?
+        };
+
+        let system = {
+            let key = "system";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+        };
+
+        if let Some(key) = hash.pop_back().and_then(|(key, _)| key.into_string()) {
+            return Err(format!("{}: encountered unexpected key `{}`", source, key));
         }
+
+        Ok(Self {
+            ensure,
+            name,
+            system,
+        })
     }
 }

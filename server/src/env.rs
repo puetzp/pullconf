@@ -1,5 +1,4 @@
-use common::error::Terminate;
-use log::{debug, error};
+use log::debug;
 use std::{env, net::SocketAddr, path::PathBuf, str::FromStr};
 
 pub enum FileType {
@@ -7,80 +6,70 @@ pub enum FileType {
     File,
 }
 
-pub fn parse_path(kind: FileType, variable: &str, default: &str) -> Result<PathBuf, Terminate> {
-    let scope = "environment";
-
+pub fn parse_path(kind: FileType, variable: &str, default: &str) -> Result<PathBuf, String> {
     match env::var(variable).ok() {
         Some(v) => {
-            let path = match PathBuf::from_str(&v) {
-                Ok(p) => p,
-                Err(error) => {
-                    error!(scope, variable; "{}", error);
-                    return Err(Terminate);
-                }
-            };
+            let path =
+                PathBuf::from_str(&v).map_err(|error| format!("`{}`: {}", variable, error))?;
 
             match kind {
                 FileType::Directory => {
                     if !path.is_dir() || !path.is_absolute() {
-                        error!(
-                            scope,
-                            variable;
-                            "value must be an absolute path pointing to an existing directory"
-                        );
-                        return Err(Terminate);
+                        return  Err(format!(
+                            "`{}`: value must be an absolute path pointing to an existing directory", variable
+                        ));
                     }
                 }
                 FileType::File => {
                     if !path.is_file() || !path.is_absolute() {
-                        error!(
-                            scope,
-                            variable;
-                            "value must be an absolute path pointing to an existing file"
-                        );
-                        return Err(Terminate);
+                        return Err(format!(
+                            "`{}`: value must be an absolute path pointing to an existing file",
+                            variable
+                        ));
                     }
                 }
             }
 
-            let path = match path.canonicalize() {
-                Ok(p) => p,
-                Err(error) => {
-                    error!(scope, variable; "{}", error);
-                    return Err(Terminate);
-                }
-            };
+            let path = path
+                .canonicalize()
+                .map_err(|error| format!("`{}`: {}", variable, error))?;
 
-            debug!(scope, variable; "variable evaluates to {}", path.display());
+            debug!(
+                "`{}`: environment variable evaluates to `{}`",
+                variable,
+                path.display()
+            );
 
             Ok(path)
         }
         None => {
-            debug!(scope, variable; "variable not found, using default {}", default);
+            debug!(
+                "`{}`: environment variable not found, using default `{}`",
+                variable, default
+            );
             Ok(PathBuf::from_str(default).unwrap())
         }
     }
 }
 
-pub fn parse_socket(variable: &str, default: &str) -> Result<SocketAddr, Terminate> {
-    let scope = "environment";
-
+pub fn parse_socket(variable: &str, default: &str) -> Result<SocketAddr, String> {
     match env::var(variable).ok() {
         Some(v) => {
-            let addr = match SocketAddr::from_str(&v) {
-                Ok(s) => s,
-                Err(error) => {
-                    error!(scope, variable; "{}", error);
-                    return Err(Terminate);
-                }
-            };
+            let addr =
+                SocketAddr::from_str(&v).map_err(|error| format!("`{}`: {}", variable, error))?;
 
-            debug!(scope, variable; "variable evaluates to {}", addr);
+            debug!(
+                "`{}`: environment variable evaluates to `{}`",
+                variable, addr
+            );
 
             Ok(addr)
         }
         None => {
-            debug!(scope, variable; "variable not found, using default {}", default);
+            debug!(
+                "`{}`: environment variable not found, using default `{}`",
+                variable, default
+            );
             Ok(SocketAddr::from_str(default).unwrap())
         }
     }

@@ -1,7 +1,70 @@
 use crate::types::{client, ApiKey, Client, Group};
-use common::{error::Terminate, Hostname};
-use log::{debug, error, warn};
-use std::{collections::HashMap, fs, path::PathBuf, str::FromStr, time::Instant};
+use common::Hostname;
+use log::{debug, warn};
+use std::{
+    collections::HashMap,
+    fmt, fs,
+    io::ErrorKind,
+    ops::{Add, AddAssign},
+    path::PathBuf,
+    time::Instant,
+};
+use strict_yaml_rust::{StrictYaml, StrictYamlLoader};
+
+#[derive(Clone, Debug)]
+pub struct Source {
+    pub file: PathBuf,
+    pub path: String,
+}
+
+impl Source {
+    pub fn new(file: PathBuf, path: &str) -> Self {
+        Self {
+            file,
+            path: path.to_string(),
+        }
+    }
+}
+
+impl Add<usize> for Source {
+    type Output = Self;
+
+    fn add(self, other: usize) -> Self {
+        Self {
+            file: self.file,
+            path: format!("{}[{}]", self.path, other),
+        }
+    }
+}
+
+impl Add<&str> for Source {
+    type Output = Self;
+
+    fn add(self, other: &str) -> Self {
+        Self {
+            file: self.file,
+            path: format!("{}.{}", self.path, other),
+        }
+    }
+}
+
+impl AddAssign<usize> for Source {
+    fn add_assign(&mut self, other: usize) {
+        self.path = format!("{}[{}]", self.path, other);
+    }
+}
+
+impl AddAssign<&str> for Source {
+    fn add_assign(&mut self, other: &str) {
+        self.path = format!("{}.{}", self.path, other);
+    }
+}
+
+impl fmt::Display for Source {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "`{}`>`{}`", self.file.display(), self.path)
+    }
+}
 
 #[derive(Default)]
 pub struct Configuration {
@@ -10,266 +73,151 @@ pub struct Configuration {
 }
 
 impl TryFrom<&PathBuf> for Configuration {
-    type Error = Terminate;
+    type Error = String;
 
-    fn try_from(resources: &PathBuf) -> Result<Self, Self::Error> {
-        let scope = "validation";
-
-        debug!(scope, source:% = resources.display(); "parsing configuration");
+    fn try_from(resource_path: &PathBuf) -> Result<Self, Self::Error> {
+        debug!("`{}`: parsing configuration", resource_path.display());
 
         let start = Instant::now();
 
-        let client_directory = {
-            let mut path = resources.to_owned();
-            path.push("clients");
-
-            if !path.is_dir() {
-                error!(
-                    scope,
-                    source:% = path.display();
-                    "directory containing client configuration files does not exist"
-                );
-
-                return Err(Terminate);
-            }
-
-            path
-        };
-
-        let group_directory = {
-            let mut path = resources.to_owned();
-            path.push("groups");
-
-            if !path.is_dir() {
-                error!(
-                    scope,
-                    source:% = path.display();
-                    "directory containing group configuration files does not exist"
-                );
-
-                return Err(Terminate);
-            }
-
-            path
-        };
-
         let mut groups = HashMap::new();
+        let mut unresolved_clients = HashMap::new();
 
-        let entries = match fs::read_dir(&group_directory) {
-            Ok(e) => e,
-            Err(error) => {
-                error!(
-                    scope,
-                    source:% = group_directory.display();
-                    "{}",
-                    error
-                );
-
-                return Err(Terminate);
-            }
-        };
-
-        for entry in entries {
-            let path = match entry {
-                Ok(entry) => entry.path(),
-                Err(error) => {
-                    error!(
-                        scope,
-                        source:% = group_directory.display();
-                        "{}",
-                        error
-                    );
-
-                    return Err(Terminate);
-                }
-            };
-
-            if path.is_file() {
-                if path
-                    .extension()
-                    .is_some_and(|extension| extension == "toml")
-                {
-                    let (name, group) = parse_file::<Group>(&path)?;
-
-                    if groups.insert(name.clone(), (group, 0)).is_some() {
-                        error!(
-                            scope,
-                            source:% = path.display();
-                            "group {} appears multiple times, but group names must be unique",
-                            name
-                        );
-
-                        return Err(Terminate);
-                    }
-                } else {
-                    warn!(
-                        scope,
-                        source:% = path.display();
-                        "ignoring file as it does not end with a .toml extension",
-                    );
-                }
-            } else {
-                warn!(
-                    scope,
-                    source:% = path.display();
-                    "ignoring nested directory"
-                );
-            }
-        }
-
-        let entries = match fs::read_dir(&client_directory) {
-            Ok(e) => e,
-            Err(error) => {
-                error!(
-                    scope,
-                    source:% = client_directory.display();
-                    "{}",
-                    error
-                );
-
-                return Err(Terminate);
-            }
-        };
+        parse(0, resource_path, &mut groups, &mut unresolved_clients)?;
 
         let mut clients: HashMap<Hostname, Client> = HashMap::new();
         let mut api_keys: HashMap<ApiKey, Hostname> = HashMap::new();
 
-        for entry in entries {
-            let path = match entry {
-                Ok(entry) => entry.path(),
-                Err(error) => {
-                    error!(
-                        scope,
-                        source:% = client_directory.display();
-                        "{}",
-                        error
-                    );
+        for unresolved_client in unresolved_clients.into_values() {
+            let client = Client::try_from((unresolved_client, &mut groups))?;
 
-                    return Err(Terminate);
-                }
-            };
-
-            if path.is_file() {
-                if path
-                    .extension()
-                    .is_some_and(|extension| extension == "toml")
-                {
-                    let (name, intermediate) = parse_file::<client::deserialize::Client>(&path)?;
-
-                    if clients.contains_key(&name) {
-                        error!(
-                            scope,
-                            source:% = path.display();
-                            "client `{}` appears multiple times, but client names must be unique",
-                            name
-                        );
-
-                        return Err(Terminate);
-                    }
-
-                    let client = Client::try_from((name, intermediate, &mut groups))?;
-
-                    if let Some(other) =
-                        api_keys.insert(client.api_key.clone(), client.name.clone())
-                    {
-                        error!(
-                            scope,
-                            source:% = path.display();
-                            "API key hash from client `{}` matches that from client `{}`, but API keys must be unique",
-                            client.name(),
-                            other
-                        );
-
-                        return Err(Terminate);
-                    } else {
-                        clients.insert(client.name().clone(), client);
-                    }
-                } else {
-                    warn!(
-                        scope,
-                        source:% = path.display();
-                        "ignoring file as it does not end with a .toml extension",
-                    );
-                }
+            if let Some(other) = api_keys.insert(client.api_key.clone(), client.name.clone()) {
+                return Err(format!(
+                    "`{}`: API key from client `{}` matches that from client `{}`, but API keys must be unique",
+                    resource_path.display(),
+                    client.name(),
+                    other
+                ));
             } else {
+                clients.insert(client.name().clone(), client);
+            }
+        }
+
+        for (group, count) in groups.values() {
+            if *count == 0 {
                 warn!(
-                    scope,
-                    source:% = path.display();
-                    "ignoring nested directory"
+                    "`{}`: group `{}` is never referenced by any client",
+                    resource_path.display(),
+                    group.name
                 );
             }
         }
 
-        for (name, (_, count)) in &groups {
-            if *count == 0 {
-                warn!("group `{}` is never referenced by any client", name);
-            }
-        }
-
         debug!(
-            scope;
-            "took {} ms to parse configuration from `{}`",
-            start.elapsed().as_millis(),
-            resources.display()
+            "`{}`: took {} ms to parse configuration",
+            resource_path.display(),
+            start.elapsed().as_millis()
         );
 
         Ok(Self { clients, api_keys })
     }
 }
 
-fn parse_file<T: serde::de::DeserializeOwned>(path: &PathBuf) -> Result<(Hostname, T), Terminate> {
-    let scope = "validation";
-
-    let name = match path.file_stem().and_then(|name| name.to_str()) {
-        Some(name) => match Hostname::from_str(name) {
-            Ok(name) => name,
-            Err(error) => {
-                error!(
-                    scope,
-                    source:% = path.display();
-                    "invalid file name: {}",
-                    error
+fn parse(
+    recursion: usize,
+    path: &PathBuf,
+    groups: &mut HashMap<Hostname, (Group, usize)>,
+    unresolved_clients: &mut HashMap<Hostname, client::unresolved::Client>,
+) -> Result<(), String> {
+    match fs::read_dir(path) {
+        Ok(entries) => {
+            if recursion > 10 {
+                warn!(
+                    "`{}`: reached recursion limit, ignoring directory",
+                    path.display()
                 );
-
-                return Err(Terminate);
+            } else {
+                for entry in entries {
+                    let entry =
+                        entry.map_err(|error| format!("`{}`: {}", path.display(), error))?;
+                    parse(recursion + 1, &entry.path(), groups, unresolved_clients)?
+                }
             }
-        },
-        None => {
-            error!(
-                scope,
-                source:% = path.display();
-                "file name must be valid Unicode",
-            );
-
-            return Err(Terminate);
         }
-    };
+        Err(error) if error.kind() == ErrorKind::NotADirectory => {
+            if path
+                .extension()
+                .is_some_and(|extension| extension == "yaml" || extension == "yml")
+            {
+                let contents = fs::read_to_string(&path)
+                    .map_err(|error| format!("`{}`: {}", path.display(), error))?;
 
-    let contents = match fs::read_to_string(path) {
-        Ok(c) => c,
-        Err(error) => {
-            error!(
-                scope,
-                source:% = path.display();
-                "{}",
-                error
-            );
+                let yaml = StrictYamlLoader::load_from_str(&contents)
+                    .map_err(|error| format!("`{}`: {}", path.display(), error))?;
 
-            return Err(Terminate);
+                for (index, document) in yaml.into_iter().enumerate() {
+                    let source = Source::new(path.clone(), "documents") + index;
+
+                    let mut hash = document
+                        .into_hash()
+                        .ok_or(format!("{}: node must be a hash", source))?;
+
+                    let key = "type";
+
+                    let kind = hash
+                        .remove(&StrictYaml::String(key.into()))
+                        .ok_or(format!(
+                            "{}: failed to find required key `{}`",
+                            source.clone(),
+                            key
+                        ))?
+                        .into_string()
+                        .ok_or(format!("{}: node must be a string", source.clone() + key))?;
+
+                    match kind.as_str() {
+                        "client" => {
+                            let client =
+                                client::unresolved::Client::try_from((source.clone(), hash))?;
+
+                            if unresolved_clients.contains_key(&client.name) {
+                                return Err(format!(
+                                    "{}: encountered duplicate client `{}`",
+                                    source, client.name
+                                ));
+                            } else {
+                                unresolved_clients.insert(client.name.clone(), client);
+                            }
+                        }
+                        "group" => {
+                            let group = Group::try_from((source.clone(), hash))?;
+
+                            if groups.contains_key(&group.name) {
+                                return Err(format!(
+                                    "{}: encountered duplicate group `{}`",
+                                    source, group.name
+                                ));
+                            } else {
+                                groups.insert(group.name.clone(), (group, 0));
+                            }
+                        }
+                        _ => {
+                            return Err(format!(
+                                "{}: encountered invalid value `{}`",
+                                source + key,
+                                kind
+                            ))
+                        }
+                    }
+                }
+            } else {
+                warn!(
+                    "`{}`: ignoring file as it does not end with a `yaml` or `yml` extension",
+                    path.display()
+                );
+            }
         }
-    };
-
-    match toml::from_str::<T>(&contents) {
-        Ok(value) => Ok((name, value)),
-        Err(error) => {
-            error!(
-                scope,
-                source:% = path.display();
-                "{}",
-                error.to_string().trim_end()
-            );
-
-            Err(Terminate)
-        }
+        Err(error) => return Err(format!("`{}`: {}", path.display(), error)),
     }
+
+    Ok(())
 }

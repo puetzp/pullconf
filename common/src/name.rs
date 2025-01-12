@@ -38,39 +38,4 @@ impl FromStr for Hostname {
     }
 }
 
-impl<'de> Deserialize<'de> for Hostname {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let v = String::deserialize(deserializer)?;
-
-        Hostname::from_str(&v).map_err(Error::custom)
-    }
-}
-
-impl From<&Hostname> for Hostname {
-    fn from(name: &Hostname) -> Self {
-        name.clone()
-    }
-}
-
-impl Deref for Hostname {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        self.0.as_str()
-    }
-}
-
-impl fmt::Display for Hostname {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&*self.0, f)
-    }
-}
-
-impl Hostname {
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-}
+crate::impl_string_newtype!(Hostname);

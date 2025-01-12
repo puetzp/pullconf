@@ -1,14 +1,14 @@
-use crate::types::resources::{
-    deserialize::{Dependency, VariableOrValue},
-    Resource,
+use crate::{
+    configuration::Source,
+    types::resources::{Resolvable, Resource, UnresolvedNode},
 };
 use common::{
-    resources::apt::package::{Ensure, Parameters, Relationships},
+    resources::apt::package::{Ensure, Name, Parameters, Relationships, Version},
     ResourceMetadata, ResourceType,
 };
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::collections::HashMap;
-use toml::Value;
+use strict_yaml_rust::{strict_yaml::Hash, StrictYaml};
 use uuid::Uuid;
 
 #[derive(Clone, Debug, Serialize)]
@@ -27,24 +27,24 @@ impl PartialEq for Package {
 
 impl Eq for Package {}
 
-impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Package {
+impl TryFrom<(UnresolvedParameters, &HashMap<String, StrictYaml>)> for Package {
     type Error = String;
 
     fn try_from(
-        (parameters, variables): (&de::Parameters, &HashMap<String, Value>),
+        (parameters, variables): (UnresolvedParameters, &HashMap<String, StrictYaml>),
     ) -> Result<Self, Self::Error> {
         let parameters = {
-            let ensure = match &parameters.ensure {
-                Some(parameter) => parameter.resolve("ensure", variables)?,
+            let ensure = match parameters.ensure {
+                Some(parameter) => Ensure::resolve(parameter, variables)?,
                 None => Ensure::default(),
             };
 
-            let name = parameters.name.resolve("name", variables)?;
+            let name = Name::resolve(parameters.name, variables)?;
 
-            let version = match &parameters.version {
-                Some(parameter) => parameter.resolve("version", variables)?,
-                None => None,
-            };
+            let version = parameters
+                .version
+                .map(|parameter| Version::resolve(parameter, variables))
+                .transpose()?;
 
             Parameters {
                 ensure,
@@ -82,7 +82,7 @@ impl Package {
     }
 
     pub fn repr(&self) -> String {
-        format!("{} `{}`", self.kind(), self.display())
+        format!("{}[{}]", self.kind(), self.display())
     }
 
     pub fn must_depend_on(&self, _resource: &Resource) -> bool {
@@ -98,23 +98,62 @@ impl Package {
     }
 }
 
-pub mod de {
-    use super::*;
+#[derive(Clone, Debug)]
+pub struct UnresolvedParameters {
+    pub ensure: Option<UnresolvedNode>,
+    pub name: UnresolvedNode,
+    pub version: Option<UnresolvedNode>,
+}
 
-    #[derive(Clone, Debug, Deserialize)]
-    #[serde(deny_unknown_fields)]
-    pub struct Parameters {
-        #[serde(default)]
-        pub ensure: Option<VariableOrValue>,
-        pub name: VariableOrValue,
-        pub version: Option<VariableOrValue>,
-        #[serde(default)]
-        pub requires: Vec<Dependency>,
+impl UnresolvedParameters {
+    pub fn kind(&self) -> ResourceType {
+        ResourceType::AptPackage
     }
+}
 
-    impl Parameters {
-        pub fn kind(&self) -> ResourceType {
-            ResourceType::AptPackage
+impl TryFrom<(Source, Hash)> for UnresolvedParameters {
+    type Error = String;
+
+    fn try_from((source, mut hash): (Source, Hash)) -> Result<Self, Self::Error> {
+        let ensure = {
+            let key = "ensure";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+        };
+
+        let name = {
+            let key = "name";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+                .ok_or(format!("{}: failed to find required key `{}`", source, key))?
+        };
+
+        let version = {
+            let key = "version";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+        };
+
+        if let Some(key) = hash.pop_back().and_then(|(key, _)| key.into_string()) {
+            return Err(format!("{}: encountered unexpected key `{}`", source, key));
         }
+
+        Ok(Self {
+            ensure,
+            name,
+            version,
+        })
     }
 }

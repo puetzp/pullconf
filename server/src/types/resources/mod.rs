@@ -1,11 +1,11 @@
 pub mod apt;
 pub mod cron;
-pub mod deserialize;
 pub mod directory;
 pub mod file;
 pub mod group;
 pub mod host;
 pub mod resolv_conf;
+mod resolve;
 pub mod symlink;
 pub mod user;
 
@@ -17,197 +17,135 @@ pub use file::File;
 pub use group::Group;
 pub use host::Host;
 pub use resolv_conf::ResolvConf;
+pub use resolve::{Resolvable, UnresolvedNode};
 pub use symlink::Symlink;
 pub use user::User;
 
-use common::{ResourceMetadata, ResourceType};
-use deserialize::Resource as DeResource;
+use crate::configuration::Source;
+use common::{
+    resources::{
+        apt::{package::Name as AptPackageName, preference::Name as AptPreferenceName},
+        cron::job::Name as CronJobName,
+        group::Name as GroupName,
+        user::Name as UserName,
+    },
+    ResourceMetadata, ResourceType, SafePathBuf,
+};
 use serde::Serialize;
-use std::collections::HashMap;
-use toml::Value;
+use std::{collections::HashMap, net::IpAddr, str::FromStr};
+use strict_yaml_rust::{strict_yaml::Hash, StrictYaml};
 use uuid::Uuid;
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(untagged)]
-pub enum Resource {
-    AptPackage(AptPackage),
-    AptPreference(AptPreference),
-    CronJob(CronJob),
-    Directory(Directory),
-    File(File),
-    Group(Group),
-    Host(Host),
-    ResolvConf(ResolvConf),
-    Symlink(Symlink),
-    User(User),
-}
+macro_rules! impl_resources {
+    ($( $resource:ident ),*) => {
+        #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+        #[serde(untagged)]
+        pub enum Resource {
+            $(
+                $resource($resource),
+            )*
+        }
 
-impl From<AptPackage> for Resource {
-    fn from(package: AptPackage) -> Self {
-        Self::AptPackage(package)
+        $(
+            impl From<$resource> for Resource {
+                fn from(resource: $resource) -> Self {
+                    Self::$resource(resource)
+                }
+            }
+        )*
+
+        impl Resource {
+            pub fn id(&self) -> Uuid {
+                match self {
+                    $(
+                        Self::$resource(resource) => resource.id(),
+                    )*
+                }
+            }
+
+            pub fn kind(&self) -> ResourceType {
+                match self {
+                    $(
+                        Self::$resource(resource) => resource.kind(),
+                    )*
+                }
+            }
+
+            pub fn repr(&self) -> String {
+                match self {
+                    $(
+                        Self::$resource(resource) => resource.repr(),
+                    )*
+                }
+            }
+
+            pub fn metadata(&self) -> &ResourceMetadata {
+                match self {
+                    $(
+                        Self::$resource(resource) => resource.metadata(),
+                    )*
+                }
+            }
+
+            pub fn may_depend_on(&self, other: &Self) -> bool {
+                match self {
+                    $(
+                        Self::$resource(resource) => resource.may_depend_on(other),
+                    )*
+                }
+            }
+
+            pub fn must_depend_on(&self, other: &Self) -> bool {
+                match self {
+                    $(
+                        Self::$resource(resource) => resource.must_depend_on(other),
+                    )*
+                }
+            }
+
+            pub fn push_requirement(&mut self, metadata: ResourceMetadata) {
+                match self {
+                    $(
+                        Self::$resource(resource) => resource.push_requirement(metadata),
+                    )*
+                }
+            }
+        }
+
+        impl TryFrom<(UnresolvedResource, &HashMap<String, StrictYaml>)> for Resource {
+            type Error = String;
+
+            fn try_from(
+                (resource, variables): (UnresolvedResource, &HashMap<String, StrictYaml>),
+            ) -> Result<Self, Self::Error> {
+                let resource = match resource {
+                    $(
+                        UnresolvedResource::$resource { parameters, .. } => {
+                            Self::$resource($resource::try_from((parameters, variables))?)
+                        }
+                    )*
+                };
+
+                Ok(resource)
+            }
+        }
     }
 }
 
-impl From<AptPreference> for Resource {
-    fn from(preference: AptPreference) -> Self {
-        Self::AptPreference(preference)
-    }
-}
-
-impl From<CronJob> for Resource {
-    fn from(job: CronJob) -> Self {
-        Self::CronJob(job)
-    }
-}
-
-impl From<Directory> for Resource {
-    fn from(directory: Directory) -> Self {
-        Self::Directory(directory)
-    }
-}
-
-impl From<File> for Resource {
-    fn from(file: File) -> Self {
-        Self::File(file)
-    }
-}
-
-impl From<Group> for Resource {
-    fn from(group: Group) -> Self {
-        Self::Group(group)
-    }
-}
-
-impl From<Host> for Resource {
-    fn from(host: Host) -> Self {
-        Self::Host(host)
-    }
-}
-
-impl From<ResolvConf> for Resource {
-    fn from(resolv_conf: ResolvConf) -> Self {
-        Self::ResolvConf(resolv_conf)
-    }
-}
-
-impl From<Symlink> for Resource {
-    fn from(symlink: Symlink) -> Self {
-        Self::Symlink(symlink)
-    }
-}
-
-impl From<User> for Resource {
-    fn from(user: User) -> Self {
-        Self::User(user)
-    }
-}
+impl_resources!(
+    AptPackage,
+    AptPreference,
+    CronJob,
+    Directory,
+    File,
+    Group,
+    Host,
+    ResolvConf,
+    Symlink,
+    User
+);
 
 impl Resource {
-    pub fn id(&self) -> Uuid {
-        match self {
-            Self::AptPackage(package) => package.id(),
-            Self::AptPreference(preference) => preference.id(),
-            Self::CronJob(job) => job.id(),
-            Self::Directory(directory) => directory.id(),
-            Self::File(file) => file.id(),
-            Self::Group(group) => group.id(),
-            Self::Host(host) => host.id(),
-            Self::ResolvConf(resolv_conf) => resolv_conf.id(),
-            Self::Symlink(symlink) => symlink.id(),
-            Self::User(user) => user.id(),
-        }
-    }
-
-    pub fn kind(&self) -> ResourceType {
-        match self {
-            Self::AptPackage(package) => package.kind(),
-            Self::AptPreference(preference) => preference.kind(),
-            Self::CronJob(job) => job.kind(),
-            Self::Directory(directory) => directory.kind(),
-            Self::File(file) => file.kind(),
-            Self::Group(group) => group.kind(),
-            Self::Host(host) => host.kind(),
-            Self::ResolvConf(resolv_conf) => resolv_conf.kind(),
-            Self::Symlink(symlink) => symlink.kind(),
-            Self::User(user) => user.kind(),
-        }
-    }
-
-    pub fn repr(&self) -> String {
-        match self {
-            Self::AptPackage(package) => package.repr(),
-            Self::AptPreference(preference) => preference.repr(),
-            Self::CronJob(job) => job.repr(),
-            Self::Directory(directory) => directory.repr(),
-            Self::File(file) => file.repr(),
-            Self::Group(group) => group.repr(),
-            Self::Host(host) => host.repr(),
-            Self::ResolvConf(resolv_conf) => resolv_conf.repr(),
-            Self::Symlink(symlink) => symlink.repr(),
-            Self::User(user) => user.repr(),
-        }
-    }
-
-    pub fn metadata(&self) -> &ResourceMetadata {
-        match self {
-            Self::AptPackage(package) => package.metadata(),
-            Self::AptPreference(preference) => preference.metadata(),
-            Self::CronJob(job) => job.metadata(),
-            Self::Directory(directory) => directory.metadata(),
-            Self::File(file) => file.metadata(),
-            Self::Group(group) => group.metadata(),
-            Self::Host(host) => host.metadata(),
-            Self::ResolvConf(resolv_conf) => resolv_conf.metadata(),
-            Self::Symlink(symlink) => symlink.metadata(),
-            Self::User(user) => user.metadata(),
-        }
-    }
-
-    pub fn may_depend_on(&self, other: &Self) -> bool {
-        match self {
-            Self::AptPackage(item) => item.may_depend_on(other),
-            Self::AptPreference(item) => item.may_depend_on(other),
-            Self::CronJob(item) => item.may_depend_on(other),
-            Self::Directory(item) => item.may_depend_on(other),
-            Self::File(item) => item.may_depend_on(other),
-            Self::Group(item) => item.may_depend_on(other),
-            Self::Host(item) => item.may_depend_on(other),
-            Self::ResolvConf(item) => item.may_depend_on(other),
-            Self::Symlink(item) => item.may_depend_on(other),
-            Self::User(item) => item.may_depend_on(other),
-        }
-    }
-
-    pub fn must_depend_on(&self, other: &Self) -> bool {
-        match self {
-            Self::AptPackage(item) => item.must_depend_on(other),
-            Self::AptPreference(item) => item.must_depend_on(other),
-            Self::CronJob(item) => item.must_depend_on(other),
-            Self::Directory(item) => item.must_depend_on(other),
-            Self::File(item) => item.must_depend_on(other),
-            Self::Group(item) => item.must_depend_on(other),
-            Self::Host(item) => item.must_depend_on(other),
-            Self::ResolvConf(item) => item.must_depend_on(other),
-            Self::Symlink(item) => item.must_depend_on(other),
-            Self::User(item) => item.must_depend_on(other),
-        }
-    }
-
-    pub fn push_requirement(&mut self, metadata: ResourceMetadata) {
-        match self {
-            Self::AptPackage(item) => item.push_requirement(metadata),
-            Self::AptPreference(item) => item.push_requirement(metadata),
-            Self::CronJob(item) => item.push_requirement(metadata),
-            Self::Directory(item) => item.push_requirement(metadata),
-            Self::File(item) => item.push_requirement(metadata),
-            Self::Group(item) => item.push_requirement(metadata),
-            Self::Host(item) => item.push_requirement(metadata),
-            Self::ResolvConf(item) => item.push_requirement(metadata),
-            Self::Symlink(item) => item.push_requirement(metadata),
-            Self::User(item) => item.push_requirement(metadata),
-        }
-    }
-
     pub fn as_apt_package(&self) -> Option<&AptPackage> {
         match self {
             Self::AptPackage(item) => Some(item),
@@ -279,30 +217,442 @@ impl Resource {
     }
 }
 
-impl TryFrom<(&DeResource, &HashMap<String, Value>)> for Resource {
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Dependency {
+    AptPackage { name: AptPackageName },
+    AptPreference { name: AptPreferenceName },
+    CronJob { name: CronJobName },
+    Directory { path: SafePathBuf },
+    File { path: SafePathBuf },
+    Group { name: GroupName },
+    Host { ip_address: IpAddr },
+    ResolvConf,
+    Symlink { path: SafePathBuf },
+    User { name: UserName },
+}
+
+impl Dependency {
+    pub fn repr(&self) -> String {
+        match self {
+            Self::AptPackage { name } => format!("apt::package[{}]", name),
+            Self::AptPreference { name } => format!("apt::preference[{}]", name),
+            Self::CronJob { name } => format!("cron::job[{}]", name),
+            Self::Directory { path } => format!("directory[{}]", path.display()),
+            Self::File { path } => format!("file[{}]", path.display()),
+            Self::Group { name } => format!("group[{}]", name),
+            Self::Host { ip_address } => format!("host[{}]", ip_address),
+            Self::ResolvConf => "resolv.conf[/etc/resolv.conf]".to_string(),
+            Self::Symlink { path } => format!("symlink[{}]", path.display()),
+            Self::User { name } => format!("user[{}]", name),
+        }
+    }
+}
+
+impl TryFrom<(Source, StrictYaml)> for Dependency {
     type Error = String;
 
-    fn try_from(
-        (resource, variables): (&DeResource, &HashMap<String, Value>),
-    ) -> Result<Self, Self::Error> {
-        let resource = match resource {
-            DeResource::AptPackage(item) => {
-                Self::AptPackage(AptPackage::try_from((item, variables))?)
-            }
-            DeResource::AptPreference(item) => {
-                Self::AptPreference(AptPreference::try_from((item, variables))?)
-            }
-            DeResource::CronJob(item) => Self::CronJob(CronJob::try_from((item, variables))?),
-            DeResource::Directory(item) => Self::Directory(Directory::try_from((item, variables))?),
-            DeResource::File(item) => Self::File(File::try_from((item, variables))?),
-            DeResource::Group(item) => Self::Group(Group::try_from((item, variables))?),
-            DeResource::Host(item) => Self::Host(Host::try_from((item, variables))?),
-            DeResource::ResolvConf(item) => {
-                Self::ResolvConf(ResolvConf::try_from((item, variables))?)
-            }
-            DeResource::Symlink(item) => Self::Symlink(Symlink::try_from((item, variables))?),
-            DeResource::User(item) => Self::User(User::try_from((item, variables))?),
+    fn try_from((source, node): (Source, StrictYaml)) -> Result<Self, Self::Error> {
+        let mut hash = node
+            .into_hash()
+            .ok_or(format!("{}: node must be a hash", source))?;
+
+        let kind = {
+            let key = "type";
+
+            hash.remove(&StrictYaml::String(key.into()))
+                .ok_or(format!("{}: failed to find required key `{}`", source, key))?
+                .into_string()
+                .ok_or(format!("{}: node must be a string", source.clone() + key))?
         };
+
+        let dependency = match kind.as_str() {
+            "apt::package" => {
+                let key = "name";
+
+                match hash.remove(&StrictYaml::String(key.into())) {
+                    Some(node) => match node.into_string() {
+                        Some(s) => {
+                            let name = AptPackageName::from_str(&s)
+                                .map_err(|error| format!("{}: {}", source.clone() + key, error))?;
+
+                            Ok(Dependency::AptPackage { name })
+                        }
+                        None => Err(format!("{}: node must be a string", source.clone() + key)),
+                    },
+                    None => Err(format!("{}: failed to find required key `{}`", source, key)),
+                }
+            }
+            "apt::preference" => {
+                let key = "name";
+
+                match hash.remove(&StrictYaml::String(key.into())) {
+                    Some(node) => match node.into_string() {
+                        Some(s) => {
+                            let name = AptPreferenceName::from_str(&s)
+                                .map_err(|error| format!("{}: {}", source.clone() + key, error))?;
+
+                            Ok(Dependency::AptPreference { name })
+                        }
+                        None => Err(format!("{}: node must be a string", source.clone() + key)),
+                    },
+                    None => Err(format!("{}: failed to find required key `{}`", source, key)),
+                }
+            }
+            "cron::job" => {
+                let key = "name";
+
+                match hash.remove(&StrictYaml::String(key.into())) {
+                    Some(node) => match node.into_string() {
+                        Some(s) => {
+                            let name = CronJobName::from_str(&s)
+                                .map_err(|error| format!("{}: {}", source.clone() + key, error))?;
+
+                            Ok(Dependency::CronJob { name })
+                        }
+                        None => Err(format!("{}: node must be a string", source.clone() + key)),
+                    },
+                    None => Err(format!("{}: failed to find required key `{}`", source, key)),
+                }
+            }
+            "directory" => {
+                let key = "path";
+
+                match hash.remove(&StrictYaml::String(key.into())) {
+                    Some(node) => match node.into_string() {
+                        Some(s) => {
+                            let path = SafePathBuf::from_str(&s)
+                                .map_err(|error| format!("{}: {}", source.clone() + key, error))?;
+
+                            Ok(Dependency::Directory { path })
+                        }
+                        None => Err(format!("{}: node must be a string", source.clone() + key)),
+                    },
+                    None => Err(format!("{}: failed to find required key `{}`", source, key)),
+                }
+            }
+            "file" => {
+                let key = "path";
+
+                match hash.remove(&StrictYaml::String(key.into())) {
+                    Some(node) => match node.into_string() {
+                        Some(s) => {
+                            let path = SafePathBuf::from_str(&s)
+                                .map_err(|error| format!("{}: {}", source.clone() + key, error))?;
+
+                            Ok(Dependency::File { path })
+                        }
+                        None => Err(format!("{}: node must be a string", source.clone() + key)),
+                    },
+                    None => Err(format!("{}: failed to find required key `{}`", source, key)),
+                }
+            }
+            "group" => {
+                let key = "name";
+
+                match hash.remove(&StrictYaml::String(key.into())) {
+                    Some(node) => match node.into_string() {
+                        Some(s) => {
+                            let name = GroupName::from_str(&s)
+                                .map_err(|error| format!("{}: {}", source.clone() + key, error))?;
+
+                            Ok(Dependency::Group { name })
+                        }
+                        None => Err(format!("{}: node must be a string", source.clone() + key)),
+                    },
+                    None => Err(format!("{}: failed to find required key `{}`", source, key)),
+                }
+            }
+            "host" => {
+                let key = "ip_address";
+
+                match hash.remove(&StrictYaml::String(key.into())) {
+                    Some(node) => match node.into_string() {
+                        Some(s) => {
+                            let ip_address = IpAddr::from_str(&s)
+                                .map_err(|error| format!("{}: {}", source.clone() + key, error))?;
+
+                            Ok(Dependency::Host { ip_address })
+                        }
+                        None => Err(format!("{}: node must be a string", source.clone() + key)),
+                    },
+                    None => Err(format!("{}: failed to find required key `{}`", source, key)),
+                }
+            }
+            "resolv.conf" => Ok(Dependency::ResolvConf),
+            "symlink" => {
+                let key = "path";
+
+                match hash.remove(&StrictYaml::String(key.into())) {
+                    Some(node) => match node.into_string() {
+                        Some(s) => {
+                            let path = SafePathBuf::from_str(&s)
+                                .map_err(|error| format!("{}: {}", source.clone() + key, error))?;
+
+                            Ok(Dependency::Symlink { path })
+                        }
+                        None => Err(format!("{}: node must be a string", source.clone() + key)),
+                    },
+                    None => Err(format!("{}: failed to find required key `{}`", source, key)),
+                }
+            }
+            "user" => {
+                let key = "name";
+
+                match hash.remove(&StrictYaml::String(key.into())) {
+                    Some(node) => match node.into_string() {
+                        Some(s) => {
+                            let name = UserName::from_str(&s)
+                                .map_err(|error| format!("{}: {}", source.clone() + key, error))?;
+
+                            Ok(Dependency::User { name })
+                        }
+                        None => Err(format!("{}: node must be a string", source.clone() + key)),
+                    },
+                    None => Err(format!("{}: failed to find required key `{}`", source, key)),
+                }
+            }
+            _ => {
+                return Err(format!(
+                    "{}: encountered invalid value `{}`",
+                    source + "type",
+                    kind
+                ))
+            }
+        };
+
+        if let Some(key) = hash.pop_back().and_then(|(key, _)| key.into_string()) {
+            return Err(format!("{}: encountered invalid key `{}`", source, key));
+        }
+
+        dependency
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum UnresolvedResource {
+    AptPackage {
+        parameters: apt::package::UnresolvedParameters,
+        requires: Vec<Dependency>,
+    },
+    AptPreference {
+        parameters: apt::preference::UnresolvedParameters,
+        requires: Vec<Dependency>,
+    },
+    CronJob {
+        parameters: cron::job::UnresolvedParameters,
+        requires: Vec<Dependency>,
+    },
+    Directory {
+        parameters: directory::UnresolvedParameters,
+        requires: Vec<Dependency>,
+    },
+    File {
+        parameters: file::UnresolvedParameters,
+        requires: Vec<Dependency>,
+    },
+    Group {
+        parameters: group::UnresolvedParameters,
+        requires: Vec<Dependency>,
+    },
+    Host {
+        parameters: host::UnresolvedParameters,
+        requires: Vec<Dependency>,
+    },
+    ResolvConf {
+        parameters: resolv_conf::UnresolvedParameters,
+        requires: Vec<Dependency>,
+    },
+    Symlink {
+        parameters: symlink::UnresolvedParameters,
+        requires: Vec<Dependency>,
+    },
+    User {
+        parameters: user::UnresolvedParameters,
+        requires: Vec<Dependency>,
+    },
+}
+
+impl UnresolvedResource {
+    pub fn requires(&self) -> &[Dependency] {
+        match self {
+            Self::AptPackage { requires, .. } => requires.as_slice(),
+            Self::AptPreference { requires, .. } => requires.as_slice(),
+            Self::CronJob { requires, .. } => requires.as_slice(),
+            Self::Directory { requires, .. } => requires.as_slice(),
+            Self::File { requires, .. } => requires.as_slice(),
+            Self::Group { requires, .. } => requires.as_slice(),
+            Self::Host { requires, .. } => requires.as_slice(),
+            Self::ResolvConf { requires, .. } => requires.as_slice(),
+            Self::Symlink { requires, .. } => requires.as_slice(),
+            Self::User { requires, .. } => requires.as_slice(),
+        }
+    }
+
+    pub fn kind(&self) -> ResourceType {
+        match self {
+            Self::AptPackage { parameters, .. } => parameters.kind(),
+            Self::AptPreference { parameters, .. } => parameters.kind(),
+            Self::CronJob { parameters, .. } => parameters.kind(),
+            Self::Directory { parameters, .. } => parameters.kind(),
+            Self::File { parameters, .. } => parameters.kind(),
+            Self::Group { parameters, .. } => parameters.kind(),
+            Self::Host { parameters, .. } => parameters.kind(),
+            Self::ResolvConf { parameters, .. } => parameters.kind(),
+            Self::Symlink { parameters, .. } => parameters.kind(),
+            Self::User { parameters, .. } => parameters.kind(),
+        }
+    }
+}
+
+impl TryFrom<(Source, Hash)> for UnresolvedResource {
+    type Error = String;
+
+    fn try_from((source, mut hash): (Source, Hash)) -> Result<Self, Self::Error> {
+        let kind = {
+            let key = "type";
+
+            hash.remove(&StrictYaml::String(key.into()))
+                .ok_or(format!("{}: failed to find required key `{}`", source, key))?
+                .into_string()
+                .ok_or(format!("{}: node must be a string", source.clone() + key))?
+        };
+
+        let requires = {
+            let key = "requires";
+            let source = source.clone() + key;
+
+            let mut array = vec![];
+
+            if let Some(node) = hash.remove(&StrictYaml::String(key.into())) {
+                for (index, item) in node
+                    .into_vec()
+                    .ok_or(format!("{}: node must be an array", source))?
+                    .into_iter()
+                    .enumerate()
+                {
+                    let source = source.clone() + index;
+
+                    array.push(Dependency::try_from((source, item))?);
+                }
+            }
+
+            array
+        };
+
+        let resource = {
+            let key = "parameters";
+
+            let hash = hash
+                .remove(&StrictYaml::String(key.into()))
+                .ok_or(format!("{}: failed to find required key `{}`", source, key))?
+                .into_hash()
+                .ok_or(format!("{}: node must be a hash", source.clone() + key))?;
+
+            match kind.as_str() {
+                "apt::package" => {
+                    let parameters =
+                        apt::package::UnresolvedParameters::try_from((source.clone() + key, hash))?;
+
+                    Self::AptPackage {
+                        parameters,
+                        requires,
+                    }
+                }
+                "apt::preference" => {
+                    let parameters = apt::preference::UnresolvedParameters::try_from((
+                        source.clone() + key,
+                        hash,
+                    ))?;
+
+                    Self::AptPreference {
+                        parameters,
+                        requires,
+                    }
+                }
+                "cron::job" => {
+                    let parameters =
+                        cron::job::UnresolvedParameters::try_from((source.clone() + key, hash))?;
+
+                    Self::CronJob {
+                        parameters,
+                        requires,
+                    }
+                }
+                "directory" => {
+                    let parameters =
+                        directory::UnresolvedParameters::try_from((source.clone() + key, hash))?;
+
+                    Self::Directory {
+                        parameters,
+                        requires,
+                    }
+                }
+                "file" => {
+                    let parameters =
+                        file::UnresolvedParameters::try_from((source.clone() + key, hash))?;
+
+                    Self::File {
+                        parameters,
+                        requires,
+                    }
+                }
+                "group" => {
+                    let parameters =
+                        group::UnresolvedParameters::try_from((source.clone() + key, hash))?;
+
+                    Self::Group {
+                        parameters,
+                        requires,
+                    }
+                }
+                "host" => {
+                    let parameters =
+                        host::UnresolvedParameters::try_from((source.clone() + key, hash))?;
+
+                    Self::Host {
+                        parameters,
+                        requires,
+                    }
+                }
+                "resolv.conf" => {
+                    let parameters =
+                        resolv_conf::UnresolvedParameters::try_from((source.clone() + key, hash))?;
+
+                    Self::ResolvConf {
+                        parameters,
+                        requires,
+                    }
+                }
+                "symlink" => {
+                    let parameters =
+                        symlink::UnresolvedParameters::try_from((source.clone() + key, hash))?;
+
+                    Self::Symlink {
+                        parameters,
+                        requires,
+                    }
+                }
+                "user" => {
+                    let parameters =
+                        user::UnresolvedParameters::try_from((source.clone() + key, hash))?;
+
+                    Self::User {
+                        parameters,
+                        requires,
+                    }
+                }
+                _ => {
+                    return Err(format!(
+                        "{}: encountered invalid value for key `type`: `{}`",
+                        source, kind
+                    ))
+                }
+            }
+        };
+
+        if let Some(key) = hash.pop_back().and_then(|(key, _)| key.into_string()) {
+            return Err(format!("{}: encountered unexpected key `{}`", source, key));
+        }
 
         Ok(resource)
     }

@@ -159,6 +159,10 @@ impl Configuration {
             }
         }
 
+        let _ = rustls::crypto::CryptoProvider::install_default(
+            rustls::crypto::aws_lc_rs::default_provider(),
+        );
+
         // Build a custom TLS configuration from the truststore that was created earlier.
         let tls_config = rustls::ClientConfig::builder()
             .with_root_certificates(roots)
@@ -304,7 +308,7 @@ impl Configuration {
                 }
                 // Log any unexpected errors as-is and terminate the program.
                 ureq::Error::Transport(error) => {
-                    error!(scope, pid, url:%; "{}", error.source().unwrap());
+                    error!(scope, pid, url:%; "failed to send request to pullconfd: {}: {}", error.message().unwrap(), error.source().unwrap());
                     return Err(Terminate);
                 }
             },

@@ -294,7 +294,7 @@ pub trait ResourceTrait {
     fn find_failed_dependency<'a>(
         &'a self,
         applied_resources: &'a HashMap<Uuid, Resource>,
-    ) -> Option<&Resource> {
+    ) -> Option<&'a Resource> {
         self.dependencies().iter().find_map(|dependency| {
             applied_resources
                 .get(&dependency.id)
@@ -307,7 +307,7 @@ pub trait ResourceTrait {
     fn find_skipped_dependency<'a>(
         &'a self,
         applied_resources: &'a HashMap<Uuid, Resource>,
-    ) -> Option<&Resource> {
+    ) -> Option<&'a Resource> {
         self.dependencies().iter().find_map(|dependency| {
             applied_resources
                 .get(&dependency.id)
@@ -320,7 +320,7 @@ pub trait ResourceTrait {
     fn find_absent_dependency<'a>(
         &'a self,
         applied_resources: &'a HashMap<Uuid, Resource>,
-    ) -> Option<&Resource> {
+    ) -> Option<&'a Resource> {
         self.dependencies().iter().find_map(|dependency| {
             applied_resources
                 .get(&dependency.id)

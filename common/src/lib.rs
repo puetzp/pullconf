@@ -7,70 +7,56 @@ pub use name::Hostname;
 pub use path::SafePathBuf;
 
 use serde::{Deserialize, Serialize};
-use std::fmt;
-use std::str::FromStr;
+use std::{fmt, str::FromStr};
 use uuid::Uuid;
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-pub enum ResourceType {
-    #[serde(rename = "apt::package")]
-    AptPackage,
-    #[serde(rename = "apt::preference")]
-    AptPreference,
-    #[serde(rename = "cron::job")]
-    CronJob,
-    #[serde(rename = "directory")]
-    Directory,
-    #[serde(rename = "file")]
-    File,
-    #[serde(rename = "group")]
-    Group,
-    #[serde(rename = "host")]
-    Host,
-    #[serde(rename = "resolv.conf")]
-    ResolvConf,
-    #[serde(rename = "symlink")]
-    Symlink,
-    #[serde(rename = "user")]
-    User,
-}
+macro_rules! impl_resource_types {
+    ($( ($variant:ident, $display:literal) ),*) => {
+        #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+        pub enum ResourceType {
+            $(
+                #[serde(rename = $display)]
+                $variant,
+            )*
+        }
 
-impl FromStr for ResourceType {
-    type Err = anyhow::Error;
+        impl FromStr for ResourceType {
+            type Err = anyhow::Error;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "apt::package" => Ok(Self::AptPackage),
-            "apt::preference" => Ok(Self::AptPreference),
-            "cron::job" => Ok(Self::CronJob),
-            "directory" => Ok(Self::Directory),
-            "file" => Ok(Self::File),
-            "group" => Ok(Self::Group),
-            "host" => Ok(Self::Host),
-            "resolv.conf" => Ok(Self::ResolvConf),
-            "symlink" => Ok(Self::Symlink),
-            "user" => Ok(Self::User),
-            _ => anyhow::bail!("invalid resource type: {}", s),
+            fn from_str(s: &str) -> Result<Self, Self::Err> {
+                match s {
+                    $(
+                        $display => Ok(Self::$variant),
+                    )*
+                    _ => anyhow::bail!("invalid resource type: {}", s),
+                }
+            }
+        }
+
+        impl fmt::Display for ResourceType {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                match self {
+                    $(
+                        Self::$variant => f.write_str($display),
+                    )*
+                }
+            }
         }
     }
 }
 
-impl fmt::Display for ResourceType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::AptPackage => f.write_str("apt::package"),
-            Self::AptPreference => f.write_str("apt::preference"),
-            Self::CronJob => f.write_str("cron::job"),
-            Self::Directory => f.write_str("directory"),
-            Self::File => f.write_str("file"),
-            Self::Group => f.write_str("group"),
-            Self::Host => f.write_str("host"),
-            Self::ResolvConf => f.write_str("resolv.conf"),
-            Self::Symlink => f.write_str("symlink"),
-            Self::User => f.write_str("user"),
-        }
-    }
-}
+impl_resource_types!(
+    (AptPackage, "apt::package"),
+    (AptPreference, "apt::preference"),
+    (CronJob, "cron::job"),
+    (Directory, "directory"),
+    (File, "file"),
+    (Group, "group"),
+    (Host, "host"),
+    (ResolvConf, "resolv.conf"),
+    (Symlink, "symlink"),
+    (User, "user")
+);
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Links {
@@ -138,3 +124,52 @@ impl Ensure {
         *self == Self::Absent
     }
 }
+
+impl FromStr for Ensure {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "present" => Ok(Self::Present),
+            "absent" => Ok(Self::Absent),
+            _ => anyhow::bail!("invalid `ensure` value: {}", s),
+        }
+    }
+}
+
+macro_rules! impl_string_newtype {
+    ($type:ty) => {
+        impl<'de> Deserialize<'de> for $type {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: Deserializer<'de>,
+            {
+                let v = String::deserialize(deserializer)?;
+
+                Self::from_str(&v).map_err(Error::custom)
+            }
+        }
+
+        impl Deref for $type {
+            type Target = str;
+
+            fn deref(&self) -> &Self::Target {
+                self.0.as_str()
+            }
+        }
+
+        impl fmt::Display for $type {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                fmt::Display::fmt(&*self.0, f)
+            }
+        }
+
+        impl $type {
+            pub fn as_str(&self) -> &str {
+                self.0.as_str()
+            }
+        }
+    };
+}
+
+pub(crate) use impl_string_newtype;

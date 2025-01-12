@@ -19,13 +19,9 @@ if [ "$1" = "configure" ]; then
     chown pullconf:pullconf /etc/pullconfd/assets
     chmod 750 /etc/pullconfd/assets
 
-    mkdir -p /etc/pullconfd/resources/clients
-    chmod 750 /etc/pullconfd/resources/clients
-
-    mkdir -p /etc/pullconfd/resources/groups
-    chmod 750 /etc/pullconfd/resources/groups
-
-    chown -R pullconf:pullconf /etc/pullconfd/resources
+    mkdir -p /etc/pullconfd/conf.d
+    chmod 750 /etc/pullconfd/conf.d
+    chown -R pullconf:pullconf /etc/pullconfd/conf.d
 
     mkdir -p /var/log/pullconfd
 

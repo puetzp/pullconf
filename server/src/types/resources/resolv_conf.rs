@@ -1,14 +1,12 @@
-use super::{
-    deserialize::{Dependency, VariableOrValue},
-    Resource,
-};
+use super::{Resolvable, Resource, UnresolvedNode};
+use crate::configuration::Source;
 use common::{
     resources::resolv_conf::{Parameters, Relationships, ResolverOption, SortlistPair},
     Ensure, Hostname, ResourceMetadata, ResourceType,
 };
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::{collections::HashMap, net::IpAddr, path::Path};
-use toml::Value;
+use strict_yaml_rust::{strict_yaml::Hash, StrictYaml};
 use uuid::Uuid;
 
 #[derive(Clone, Debug, Serialize)]
@@ -27,53 +25,41 @@ impl PartialEq for ResolvConf {
 
 impl Eq for ResolvConf {}
 
-impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for ResolvConf {
+impl TryFrom<(UnresolvedParameters, &HashMap<String, StrictYaml>)> for ResolvConf {
     type Error = String;
 
     fn try_from(
-        (parameters, variables): (&de::Parameters, &HashMap<String, Value>),
+        (parameters, variables): (UnresolvedParameters, &HashMap<String, StrictYaml>),
     ) -> Result<Self, Self::Error> {
         let parameters = {
-            let ensure = match &parameters.ensure {
-                Some(parameter) => parameter.resolve("ensure", variables)?,
+            let ensure = match parameters.ensure {
+                Some(parameter) => Ensure::resolve(parameter, variables)?,
                 None => Ensure::default(),
             };
 
-            let nameservers = match &parameters.nameservers {
-                Some(parameter) => parameter
-                    .resolve::<Vec<VariableOrValue>>("nameservers", variables)?
-                    .into_iter()
-                    .map(|item| item.resolve("nameservers", variables))
-                    .collect::<Result<Vec<IpAddr>, String>>()?,
-                None => vec![],
-            };
+            let nameservers = parameters
+                .nameservers
+                .map(|parameter| Vec::<IpAddr>::resolve(parameter, variables))
+                .transpose()?
+                .unwrap_or_default();
 
-            let search = match &parameters.search {
-                Some(parameter) => parameter
-                    .resolve::<Vec<VariableOrValue>>("search", variables)?
-                    .into_iter()
-                    .map(|item| item.resolve("search", variables))
-                    .collect::<Result<Vec<Hostname>, String>>()?,
-                None => vec![],
-            };
+            let search = parameters
+                .search
+                .map(|parameter| Vec::<Hostname>::resolve(parameter, variables))
+                .transpose()?
+                .unwrap_or_default();
 
-            let sortlist = match &parameters.sortlist {
-                Some(parameter) => parameter
-                    .resolve::<Vec<VariableOrValue>>("sortlist", variables)?
-                    .into_iter()
-                    .map(|item| item.resolve("sortlist", variables))
-                    .collect::<Result<Vec<SortlistPair>, String>>()?,
-                None => vec![],
-            };
+            let sortlist = parameters
+                .sortlist
+                .map(|parameter| Vec::<SortlistPair>::resolve(parameter, variables))
+                .transpose()?
+                .unwrap_or_default();
 
-            let options = match &parameters.options {
-                Some(parameter) => parameter
-                    .resolve::<Vec<VariableOrValue>>("options", variables)?
-                    .into_iter()
-                    .map(|item| item.resolve("options", variables))
-                    .collect::<Result<Vec<ResolverOption>, String>>()?,
-                None => vec![],
-            };
+            let options = parameters
+                .options
+                .map(|parameter| Vec::<ResolverOption>::resolve(parameter, variables))
+                .transpose()?
+                .unwrap_or_default();
 
             Parameters {
                 ensure,
@@ -110,7 +96,7 @@ impl ResolvConf {
     }
 
     pub fn repr(&self) -> String {
-        format!("{} `{}`", self.kind(), self.parameters.target.display())
+        format!("{}[{}]", self.kind(), self.parameters.target.display())
     }
 
     pub fn must_depend_on(&self, resource: &Resource) -> bool {
@@ -130,29 +116,85 @@ impl ResolvConf {
     }
 }
 
-pub mod de {
-    use super::*;
+#[derive(Clone, Debug)]
+pub struct UnresolvedParameters {
+    pub ensure: Option<UnresolvedNode>,
+    pub nameservers: Option<UnresolvedNode>,
+    pub search: Option<UnresolvedNode>,
+    pub sortlist: Option<UnresolvedNode>,
+    pub options: Option<UnresolvedNode>,
+}
 
-    #[derive(Clone, Debug, Deserialize)]
-    #[serde(deny_unknown_fields)]
-    pub struct Parameters {
-        #[serde(default)]
-        pub ensure: Option<VariableOrValue>,
-        #[serde(default)]
-        pub nameservers: Option<VariableOrValue>,
-        #[serde(default)]
-        pub search: Option<VariableOrValue>,
-        #[serde(default)]
-        pub sortlist: Option<VariableOrValue>,
-        #[serde(default)]
-        pub options: Option<VariableOrValue>,
-        #[serde(default)]
-        pub requires: Vec<Dependency>,
+impl UnresolvedParameters {
+    pub fn kind(&self) -> ResourceType {
+        ResourceType::ResolvConf
     }
+}
 
-    impl Parameters {
-        pub fn kind(&self) -> ResourceType {
-            ResourceType::ResolvConf
+impl TryFrom<(Source, Hash)> for UnresolvedParameters {
+    type Error = String;
+
+    fn try_from((source, mut hash): (Source, Hash)) -> Result<Self, Self::Error> {
+        let ensure = {
+            let key = "ensure";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+        };
+
+        let nameservers = {
+            let key = "nameservers";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+        };
+
+        let search = {
+            let key = "search";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+        };
+
+        let sortlist = {
+            let key = "sortlist";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+        };
+
+        let options = {
+            let key = "options";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+        };
+
+        if let Some(key) = hash.pop_back().and_then(|(key, _)| key.into_string()) {
+            return Err(format!("{}: encountered unexpected key `{}`", source, key));
         }
+
+        Ok(Self {
+            ensure,
+            nameservers,
+            search,
+            sortlist,
+            options,
+        })
     }
 }

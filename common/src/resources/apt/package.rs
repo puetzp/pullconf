@@ -17,7 +17,6 @@ pub struct Relationships {
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
 pub enum Ensure {
     #[default]
     #[serde(rename = "present")]
@@ -26,6 +25,19 @@ pub enum Ensure {
     Absent,
     #[serde(rename = "purged")]
     Purged,
+}
+
+impl FromStr for Ensure {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "present" => Ok(Self::Present),
+            "absent" => Ok(Self::Absent),
+            "purged" => Ok(Self::Purged),
+            _ => Err(format!("invalid value `{}`", s)),
+        }
+    }
 }
 
 impl Ensure {
@@ -80,42 +92,7 @@ impl FromStr for Name {
     }
 }
 
-impl<'de> Deserialize<'de> for Name {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let v = String::deserialize(deserializer)?;
-
-        Self::from_str(&v).map_err(Error::custom)
-    }
-}
-
-impl From<&Name> for Name {
-    fn from(name: &Name) -> Self {
-        name.clone()
-    }
-}
-
-impl Deref for Name {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        self.0.as_str()
-    }
-}
-
-impl fmt::Display for Name {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&*self.0, f)
-    }
-}
-
-impl Name {
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-}
+crate::impl_string_newtype!(Name);
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct Version(String);
@@ -171,42 +148,7 @@ impl FromStr for Version {
     }
 }
 
-impl<'de> Deserialize<'de> for Version {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let v = String::deserialize(deserializer)?;
-
-        Self::from_str(&v).map_err(Error::custom)
-    }
-}
-
-impl From<&Version> for Version {
-    fn from(name: &Version) -> Self {
-        name.clone()
-    }
-}
-
-impl Deref for Version {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        self.0.as_str()
-    }
-}
-
-impl fmt::Display for Version {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&*self.0, f)
-    }
-}
-
-impl Version {
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-}
+crate::impl_string_newtype!(Version);
 
 #[cfg(test)]
 mod tests {

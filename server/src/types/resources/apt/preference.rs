@@ -1,17 +1,17 @@
-use crate::types::resources::{
-    deserialize::{Dependency, VariableOrValue},
-    Resource,
+use crate::{
+    configuration::Source,
+    types::resources::{Resolvable, Resource, UnresolvedNode},
 };
 use common::{
     resources::{
-        apt::preference::{Parameters, Relationships},
+        apt::preference::{Name, Parameters, Relationships},
         directory::ChildNode,
     },
     Ensure, ResourceMetadata, ResourceType,
 };
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::{collections::HashMap, path::PathBuf};
-use toml::Value;
+use strict_yaml_rust::{strict_yaml::Hash, StrictYaml};
 use uuid::Uuid;
 
 #[derive(Clone, Debug, Serialize)]
@@ -30,35 +30,35 @@ impl PartialEq for Preference {
 
 impl Eq for Preference {}
 
-impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Preference {
+impl TryFrom<(UnresolvedParameters, &HashMap<String, StrictYaml>)> for Preference {
     type Error = String;
 
     fn try_from(
-        (parameters, variables): (&de::Parameters, &HashMap<String, Value>),
+        (parameters, variables): (UnresolvedParameters, &HashMap<String, StrictYaml>),
     ) -> Result<Self, Self::Error> {
         let parameters = {
-            let ensure = match &parameters.ensure {
-                Some(parameter) => parameter.resolve("ensure", variables)?,
+            let ensure = match parameters.ensure {
+                Some(parameter) => Ensure::resolve(parameter, variables)?,
                 None => Ensure::default(),
             };
 
-            let name = parameters.name.resolve("name", variables)?;
+            let name = Name::resolve(parameters.name, variables)?;
 
-            let order: Option<u8> = match &parameters.order {
-                Some(parameter) => parameter.resolve("order", variables)?,
-                None => None,
-            };
+            let order = parameters
+                .order
+                .map(|parameter| u8::resolve(parameter, variables))
+                .transpose()?;
 
-            let explanation = match &parameters.explanation {
-                Some(parameter) => parameter.resolve("explanation", variables)?,
-                None => None,
-            };
+            let explanation = parameters
+                .explanation
+                .map(|parameter| String::resolve(parameter, variables))
+                .transpose()?;
 
-            let package = parameters.package.resolve("package", variables)?;
+            let package = String::resolve(parameters.package, variables)?;
 
-            let pin = parameters.pin.resolve("pin", variables)?;
+            let pin = String::resolve(parameters.pin, variables)?;
 
-            let pin_priority = parameters.pin_priority.resolve("pin-priority", variables)?;
+            let pin_priority = i16::resolve(parameters.pin_priority, variables)?;
 
             let target = match order {
                 Some(order) => PathBuf::from(format!("/etc/apt/preferences.d/{}-{}", order, name)),
@@ -105,7 +105,7 @@ impl Preference {
     }
 
     pub fn repr(&self) -> String {
-        format!("{} `{}`", self.kind(), self.display())
+        format!("{}[{}]", self.kind(), self.display())
     }
 
     pub fn must_depend_on(&self, resource: &Resource) -> bool {
@@ -148,28 +148,113 @@ impl From<&Preference> for ChildNode {
     }
 }
 
-pub mod de {
-    use super::*;
+#[derive(Clone, Debug)]
+pub struct UnresolvedParameters {
+    pub ensure: Option<UnresolvedNode>,
+    pub name: UnresolvedNode,
+    pub order: Option<UnresolvedNode>,
+    pub explanation: Option<UnresolvedNode>,
+    pub package: UnresolvedNode,
+    pub pin: UnresolvedNode,
+    pub pin_priority: UnresolvedNode,
+}
 
-    #[derive(Clone, Debug, Deserialize)]
-    #[serde(deny_unknown_fields)]
-    pub struct Parameters {
-        #[serde(default)]
-        pub ensure: Option<VariableOrValue>,
-        pub name: VariableOrValue,
-        pub order: Option<VariableOrValue>,
-        pub explanation: Option<VariableOrValue>,
-        pub package: VariableOrValue,
-        pub pin: VariableOrValue,
-        #[serde(rename = "pin-priority")]
-        pub pin_priority: VariableOrValue,
-        #[serde(default)]
-        pub requires: Vec<Dependency>,
+impl UnresolvedParameters {
+    pub fn kind(&self) -> ResourceType {
+        ResourceType::AptPreference
     }
+}
 
-    impl Parameters {
-        pub fn kind(&self) -> ResourceType {
-            ResourceType::AptPreference
+impl TryFrom<(Source, Hash)> for UnresolvedParameters {
+    type Error = String;
+
+    fn try_from((source, mut hash): (Source, Hash)) -> Result<Self, Self::Error> {
+        let ensure = {
+            let key = "ensure";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+        };
+
+        let name = {
+            let key = "name";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+                .ok_or(format!("{}: failed to find required key `{}`", source, key))?
+        };
+
+        let order = {
+            let key = "order";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+        };
+
+        let explanation = {
+            let key = "explanation";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+        };
+
+        let package = {
+            let key = "package";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+                .ok_or(format!("{}: failed to find required key `{}`", source, key))?
+        };
+
+        let pin = {
+            let key = "pin";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+                .ok_or(format!("{}: failed to find required key `{}`", source, key))?
+        };
+
+        let pin_priority = {
+            let key = "pin_priority";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+                .ok_or(format!("{}: failed to find required key `{}`", source, key))?
+        };
+
+        if let Some(key) = hash.pop_back().and_then(|(key, _)| key.into_string()) {
+            return Err(format!("{}: encountered unexpected key `{}`", source, key));
         }
+
+        Ok(Self {
+            ensure,
+            name,
+            order,
+            explanation,
+            package,
+            pin,
+            pin_priority,
+        })
     }
 }

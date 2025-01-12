@@ -1,14 +1,12 @@
-use super::{
-    deserialize::{Dependency, VariableOrValue},
-    Resource,
-};
+use super::{Resolvable, Resource, UnresolvedNode};
+use crate::configuration::Source;
 use common::{
     resources::host::{Parameters, Relationships},
     Ensure, Hostname, ResourceMetadata, ResourceType,
 };
-use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, path::Path};
-use toml::Value;
+use serde::Serialize;
+use std::{collections::HashMap, net::IpAddr, path::Path};
+use strict_yaml_rust::{strict_yaml::Hash, StrictYaml};
 use uuid::Uuid;
 
 #[derive(Clone, Debug, Serialize)]
@@ -27,28 +25,24 @@ impl PartialEq for Host {
 
 impl Eq for Host {}
 
-impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for Host {
+impl TryFrom<(UnresolvedParameters, &HashMap<String, StrictYaml>)> for Host {
     type Error = String;
 
     fn try_from(
-        (parameters, variables): (&de::Parameters, &HashMap<String, Value>),
+        (parameters, variables): (UnresolvedParameters, &HashMap<String, StrictYaml>),
     ) -> Result<Self, Self::Error> {
         let parameters = {
-            let ensure = match &parameters.ensure {
-                Some(parameter) => parameter.resolve("ensure", variables)?,
+            let ensure = match parameters.ensure {
+                Some(parameter) => Ensure::resolve(parameter, variables)?,
                 None => Ensure::default(),
             };
 
-            let ip_address = parameters.ip_address.resolve("ip-address", variables)?;
+            let ip_address = IpAddr::resolve(parameters.ip_address, variables)?;
 
-            let hostname = parameters.hostname.resolve("hostname", variables)?;
+            let hostname = Hostname::resolve(parameters.hostname, variables)?;
 
-            let aliases = match &parameters.aliases {
-                Some(parameter) => parameter
-                    .resolve::<Vec<VariableOrValue>>("aliases", variables)?
-                    .into_iter()
-                    .map(|item| item.resolve("aliases", variables))
-                    .collect::<Result<Vec<Hostname>, String>>()?,
+            let aliases = match parameters.aliases {
+                Some(parameter) => Vec::<Hostname>::resolve(parameter, variables)?,
                 None => vec![],
             };
 
@@ -99,7 +93,7 @@ impl Host {
     }
 
     pub fn repr(&self) -> String {
-        format!("{} `{}`", self.kind(), self.display())
+        format!("{}[{}]", self.kind(), self.display())
     }
 
     pub fn must_depend_on(&self, resource: &Resource) -> bool {
@@ -122,26 +116,75 @@ impl Host {
     }
 }
 
-pub mod de {
-    use super::*;
+#[derive(Clone, Debug)]
+pub struct UnresolvedParameters {
+    pub ensure: Option<UnresolvedNode>,
+    pub ip_address: UnresolvedNode,
+    pub hostname: UnresolvedNode,
+    pub aliases: Option<UnresolvedNode>,
+}
 
-    #[derive(Clone, Debug, Deserialize)]
-    #[serde(deny_unknown_fields)]
-    pub struct Parameters {
-        #[serde(default)]
-        pub ensure: Option<VariableOrValue>,
-        #[serde(rename(deserialize = "ip-address"))]
-        pub ip_address: VariableOrValue,
-        pub hostname: VariableOrValue,
-        #[serde(default)]
-        pub aliases: Option<VariableOrValue>,
-        #[serde(default)]
-        pub requires: Vec<Dependency>,
+impl UnresolvedParameters {
+    pub fn kind(&self) -> ResourceType {
+        ResourceType::Host
     }
+}
 
-    impl Parameters {
-        pub fn kind(&self) -> ResourceType {
-            ResourceType::Host
+impl TryFrom<(Source, Hash)> for UnresolvedParameters {
+    type Error = String;
+
+    fn try_from((source, mut hash): (Source, Hash)) -> Result<Self, Self::Error> {
+        let ensure = {
+            let key = "ensure";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+        };
+
+        let ip_address = {
+            let key = "ip_address";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+                .ok_or(format!("{}: failed to find required key `{}`", source, key))?
+        };
+
+        let hostname = {
+            let key = "hostname";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+                .ok_or(format!("{}: failed to find required key `{}`", source, key))?
+        };
+
+        let aliases = {
+            let key = "aliases";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+        };
+
+        if let Some(key) = hash.pop_back().and_then(|(key, _)| key.into_string()) {
+            return Err(format!("{}: encountered unexpected key `{}`", source, key));
         }
+
+        Ok(Self {
+            ensure,
+            ip_address,
+            hostname,
+            aliases,
+        })
     }
 }

@@ -1,17 +1,15 @@
-use super::{
-    deserialize::{Dependency, VariableOrValue},
-    Resource,
-};
+use super::{Resolvable, Resource, UnresolvedNode};
+use crate::configuration::Source;
 use common::{
     resources::{
         group::Name as Groupname,
-        user::{Parameters, Password, Relationships},
+        user::{ExpiryDate, Name, Parameters, Password, Relationships},
     },
     Ensure, ResourceMetadata, ResourceType, SafePathBuf,
 };
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::{collections::HashMap, str::FromStr};
-use toml::Value;
+use strict_yaml_rust::{strict_yaml::Hash, StrictYaml};
 use uuid::Uuid;
 
 #[derive(Clone, Debug, Serialize)]
@@ -30,61 +28,57 @@ impl PartialEq for User {
 
 impl Eq for User {}
 
-impl TryFrom<(&de::Parameters, &HashMap<String, Value>)> for User {
+impl TryFrom<(UnresolvedParameters, &HashMap<String, StrictYaml>)> for User {
     type Error = String;
 
     fn try_from(
-        (parameters, variables): (&de::Parameters, &HashMap<String, Value>),
+        (parameters, variables): (UnresolvedParameters, &HashMap<String, StrictYaml>),
     ) -> Result<Self, Self::Error> {
         let parameters = {
-            let ensure = match &parameters.ensure {
-                Some(parameter) => parameter.resolve("ensure", variables)?,
+            let ensure = match parameters.ensure {
+                Some(parameter) => Ensure::resolve(parameter, variables)?,
                 None => Ensure::default(),
             };
 
-            let name = parameters.name.resolve("name", variables)?;
+            let name = Name::resolve(parameters.name, variables)?;
 
-            let system = match &parameters.system {
-                Some(parameter) => parameter.resolve("system", variables)?,
+            let system = match parameters.system {
+                Some(parameter) => bool::resolve(parameter, variables)?,
                 None => false,
             };
 
-            let comment = match &parameters.comment {
-                Some(parameter) => parameter.resolve("comment", variables)?,
-                None => None,
-            };
+            let comment = parameters
+                .comment
+                .map(|parameter| String::resolve(parameter, variables))
+                .transpose()?;
 
-            let shell = match &parameters.shell {
-                Some(parameter) => parameter.resolve("shell", variables)?,
-                None => None,
-            };
+            let shell = parameters
+                .shell
+                .map(|parameter| SafePathBuf::resolve(parameter, variables))
+                .transpose()?;
 
-            let home = match &parameters.home {
-                Some(parameter) => parameter.resolve("home", variables)?,
+            let home = match parameters.home {
+                Some(parameter) => SafePathBuf::resolve(parameter, variables)?,
                 None => SafePathBuf::from_str(&format!("/home/{}", name)).unwrap(),
             };
 
-            let password = match &parameters.password {
-                Some(parameter) => parameter.resolve("password", variables)?,
+            let password = match parameters.password {
+                Some(parameter) => Password::resolve(parameter, variables)?,
                 None => Password::Locked,
             };
 
-            let expiry_date = match &parameters.expiry_date {
-                Some(parameter) => parameter.resolve("expiry-date", variables)?,
-                None => None,
-            };
+            let expiry_date = parameters
+                .expiry_date
+                .map(|parameter| ExpiryDate::resolve(parameter, variables))
+                .transpose()?;
 
-            let group = match &parameters.group {
-                Some(parameter) => parameter.resolve("group", variables)?,
+            let group = match parameters.group {
+                Some(parameter) => Groupname::resolve(parameter, variables)?,
                 None => Groupname::from(&name),
             };
 
-            let mut groups = match &parameters.groups {
-                Some(parameter) => parameter
-                    .resolve::<Vec<VariableOrValue>>("groups", variables)?
-                    .into_iter()
-                    .map(|item| item.resolve("groups", variables))
-                    .collect::<Result<Vec<Groupname>, String>>()?,
+            let mut groups = match parameters.groups {
+                Some(parameter) => Vec::<Groupname>::resolve(parameter, variables)?,
                 None => vec![],
             };
 
@@ -139,7 +133,7 @@ impl User {
     }
 
     pub fn repr(&self) -> String {
-        format!("{} `{}`", self.kind(), self.display())
+        format!("{}[{}]", self.kind(), self.display())
     }
 
     pub fn must_depend_on(&self, resource: &Resource) -> bool {
@@ -166,38 +160,146 @@ impl User {
     }
 }
 
-pub mod de {
-    use super::*;
+#[derive(Clone, Debug)]
+pub struct UnresolvedParameters {
+    pub ensure: Option<UnresolvedNode>,
+    pub name: UnresolvedNode,
+    pub system: Option<UnresolvedNode>,
+    pub comment: Option<UnresolvedNode>,
+    pub shell: Option<UnresolvedNode>,
+    pub home: Option<UnresolvedNode>,
+    pub password: Option<UnresolvedNode>,
+    pub expiry_date: Option<UnresolvedNode>,
+    pub group: Option<UnresolvedNode>,
+    pub groups: Option<UnresolvedNode>,
+}
 
-    #[derive(Clone, Debug, Deserialize)]
-    #[serde(deny_unknown_fields)]
-    pub struct Parameters {
-        #[serde(default)]
-        pub ensure: Option<VariableOrValue>,
-        pub name: VariableOrValue,
-        #[serde(default)]
-        pub system: Option<VariableOrValue>,
-        #[serde(default)]
-        pub comment: Option<VariableOrValue>,
-        #[serde(default)]
-        pub shell: Option<VariableOrValue>,
-        #[serde(default)]
-        pub home: Option<VariableOrValue>,
-        #[serde(default)]
-        pub password: Option<VariableOrValue>,
-        #[serde(default, rename(deserialize = "expiry-date"))]
-        pub expiry_date: Option<VariableOrValue>,
-        #[serde(default)]
-        pub group: Option<VariableOrValue>,
-        #[serde(default)]
-        pub groups: Option<VariableOrValue>,
-        #[serde(default)]
-        pub requires: Vec<Dependency>,
+impl UnresolvedParameters {
+    pub fn kind(&self) -> ResourceType {
+        ResourceType::User
     }
+}
 
-    impl Parameters {
-        pub fn kind(&self) -> ResourceType {
-            ResourceType::User
+impl TryFrom<(Source, Hash)> for UnresolvedParameters {
+    type Error = String;
+
+    fn try_from((source, mut hash): (Source, Hash)) -> Result<Self, Self::Error> {
+        let ensure = {
+            let key = "ensure";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+        };
+
+        let name = {
+            let key = "name";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+                .ok_or(format!("{}: failed to find required key `{}`", source, key))?
+        };
+
+        let system = {
+            let key = "system";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+        };
+
+        let comment = {
+            let key = "comment";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+        };
+
+        let shell = {
+            let key = "shell";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+        };
+
+        let home = {
+            let key = "home";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+        };
+
+        let password = {
+            let key = "password";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+        };
+
+        let expiry_date = {
+            let key = "expiry_date";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+        };
+
+        let group = {
+            let key = "group";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+        };
+
+        let groups = {
+            let key = "groups";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+        };
+
+        if let Some(key) = hash.pop_back().and_then(|(key, _)| key.into_string()) {
+            return Err(format!("{}: encountered unexpected key `{}`", source, key));
         }
+
+        Ok(Self {
+            ensure,
+            name,
+            system,
+            comment,
+            shell,
+            home,
+            password,
+            expiry_date,
+            group,
+            groups,
+        })
     }
 }

@@ -1,13 +1,14 @@
-use crate::types::{
-    resources::{
-        apt, cron,
-        deserialize::{Dependency, Resource as DeResource},
-        directory, file, group, host, resolv_conf, symlink, user, Resource,
+use crate::{
+    configuration::Source,
+    types::{
+        resources::{
+            apt, cron, directory, file, group, host, resolv_conf, symlink, user, Dependency,
+            Resource, UnresolvedResource,
+        },
+        ApiKey, Group,
     },
-    ApiKey, Group,
 };
 use common::{
-    error::Terminate,
     resources::{
         apt::{package::Name as AptPackageName, preference::Name as AptPreferenceName},
         cron::job::Name as CronJobName,
@@ -16,13 +17,14 @@ use common::{
     },
     Hostname,
 };
-use log::error;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     hash::{Hash, Hasher},
     net::IpAddr,
     path::PathBuf,
+    str::FromStr,
 };
+use strict_yaml_rust::{strict_yaml::Hash as StrictYamlHash, StrictYaml};
 use uuid::Uuid;
 
 /// This struct contains temporary helper collections that are
@@ -81,7 +83,7 @@ pub struct Client {
     pub name: Hostname,
     pub api_key: ApiKey,
     pub assigned_groups: Vec<Hostname>,
-    pub variables: HashMap<String, toml::Value>,
+    pub variables: HashMap<String, StrictYaml>,
     pub temporary: ValidationHelpers,
     pub resources: VecDeque<Resource>,
 }
@@ -112,29 +114,17 @@ impl PartialEq for Client {
     }
 }
 
-impl
-    TryFrom<(
-        Hostname,
-        deserialize::Client,
-        &mut HashMap<Hostname, (Group, usize)>,
-    )> for Client
-{
-    type Error = Terminate;
+impl TryFrom<(unresolved::Client, &mut HashMap<Hostname, (Group, usize)>)> for Client {
+    type Error = String;
 
     fn try_from(
-        (name, intermediate, groups): (
-            Hostname,
-            deserialize::Client,
-            &mut HashMap<Hostname, (Group, usize)>,
-        ),
+        (intermediate, groups): (unresolved::Client, &mut HashMap<Hostname, (Group, usize)>),
     ) -> Result<Self, Self::Error> {
-        let scope = "validation";
-
         // Initialize the client and validate the client's own configuration,
         // substituting variables in the process.
         // This does not take resources from groups into account.
         let mut client = Self {
-            name,
+            name: intermediate.name,
             api_key: intermediate.api_key,
             assigned_groups: intermediate.assigned_groups,
             variables: intermediate.variables,
@@ -147,16 +137,10 @@ impl
 
             // Convert resource from the deserialized to the final form,
             // substituting variables in the process.
-            let resource = Resource::try_from((&item, &client.variables)).map_err(|error| {
-                error!(
-                    scope,
-                    client:% = client.name,
-                    resource:% = item.kind();
-                    "{}",
-                    error
-                );
-                Terminate
-            })?;
+            // ToDo: Remove call to `clone` after re-evaluating which keys
+            // should be appended to log output.
+            let resource = Resource::try_from((item, &client.variables))
+                .map_err(|error| format!("`{}`>{}", client.name, error))?;
 
             // Save dependencies as they appear in the deserialized resource.
             client.temporary.requires.insert(resource.id(), requires);
@@ -166,7 +150,9 @@ impl
 
         // Extend the client's resource catalog with resources from groups
         // that the client is a member of, substituting variables in the process.
-        client.extend_from_groups(groups)?;
+        client
+            .extend_from_groups(groups)
+            .map_err(|error| format!("`client[{}]`>{}", client.name, error))?;
 
         client.temporary.file_paths = client
             .resources
@@ -175,7 +161,9 @@ impl
             .map(|file| file.parameters.path.to_path_buf())
             .collect();
 
-        client.validate()?;
+        client
+            .validate()
+            .map_err(|error| format!("`client[{}]`>{}", client.name, error))?;
 
         client.temporary.clear();
 
@@ -232,6 +220,15 @@ impl Client {
                 .find(|resource| {
                     resource
                         .as_apt_preference()
+                        .is_some_and(|item| item.parameters.name == *name)
+                })
+                .cloned(),
+            Dependency::CronJob { name } => self
+                .resources
+                .iter()
+                .find(|resource| {
+                    resource
+                        .as_cron_job()
                         .is_some_and(|item| item.parameters.name == *name)
                 })
                 .cloned(),
@@ -310,14 +307,11 @@ impl Client {
     fn extend_from_groups(
         &mut self,
         groups: &mut HashMap<Hostname, (Group, usize)>,
-    ) -> Result<(), Terminate> {
-        let scope = "validation";
-
+    ) -> Result<(), String> {
         for group_name in &self.assigned_groups {
-            let (group, count) = groups.get_mut(group_name).ok_or_else(|| {
-                error!(scope, client:% = self.name, group:% = group_name; "unknown group `{}`", group_name);
-                Terminate
-            })?;
+            let (group, count) = groups
+                .get_mut(group_name)
+                .ok_or(format!("reference to unknown group `{}`", group_name))?;
 
             *count += 1;
 
@@ -326,17 +320,7 @@ impl Client {
 
                 // Convert resource from the deserialized to the final form,
                 // substituting variables in the process.
-                let resource = Resource::try_from((item, &self.variables)).map_err(|error| {
-                    error!(
-                        scope,
-                        client:% = self.name,
-                        group:% = group_name,
-                        resource:% = item.kind();
-                        "{}",
-                        error
-                    );
-                    Terminate
-                })?;
+                let resource = Resource::try_from((item.clone(), &self.variables))?;
 
                 // Save dependencies as they appear in the deserialized resource.
                 self.temporary.requires.insert(resource.id(), requires);
@@ -348,17 +332,11 @@ impl Client {
                     // because the saved resource originates from the client
                     // and takes precedence.
                     if let Some(origin) = self.temporary.origins.get(&duplicate.id()) {
-                        error!(
-                            scope,
-                            client:% = self.name,
-                            group:% = group_name,
-                            resource:% = resource.kind();
-                            //                            name:% = package.parameters.name;
-                            "duplicate resource defined in group `{}`",
+                        return Err(format!(
+                            "duplicate resource `{}` defined in group `{}`",
+                            duplicate.repr(),
                             origin,
-                        );
-
-                        return Err(Terminate);
+                        ));
                     } else {
                         continue;
                     }
@@ -384,9 +362,7 @@ impl Client {
     /// relationships are also validated and added to the resource.
     /// This function also ensures that relationships do not introduce a
     /// dependency loop which would cause the client to loop indefinitely.
-    fn validate(&mut self) -> Result<(), Terminate> {
-        let scope = "validation";
-
+    fn validate(&mut self) -> Result<(), String> {
         // Keep track of resources that have been processed.
         let mut validated = HashSet::new();
 
@@ -449,16 +425,11 @@ impl Client {
                             let other_metadata = other_resource.metadata().clone();
 
                             if self.dependency_introduces_loop(other_metadata.id, metadata.id) {
-                                error!(
-                                    scope,
-                                    client:% = self.name,
-                                    resource:% = resource.kind();
-                                    "{} cannot depend on {} as it would introduce a dependency loop",
+                                return Err(format!(
+                                    "`{}`: resource cannot depend on `{}` as it would introduce a dependency loop",
                                     resource.repr(),
                                     other_resource.repr()
-                                );
-
-                                return Err(Terminate);
+                                ));
                             } else if self
                                 .temporary
                                 .dependencies
@@ -469,29 +440,19 @@ impl Client {
                                 resource.push_requirement(other_metadata.clone());
                             }
                         } else {
-                            error!(
-                                scope,
-                                client:% = self.name,
-                                resource:% = resource.kind();
-                                "{} cannot depend on {}",
+                            return Err(format!(
+                                "`{}`: resource cannot depend on `{}`",
                                 resource.repr(),
                                 other_resource.repr()
-                            );
-
-                            return Err(Terminate);
+                            ));
                         }
                     }
                     None => {
-                        error!(
-                            scope,
-                            client:% = self.name,
-                            resource:% = resource.kind();
-                            "{} depends on {} which cannot be found",
+                        return Err(format!(
+                            "`{}`: resource depends on `{}` which is undefined",
                             resource.repr(),
                             dependency.repr()
-                        );
-
-                        return Err(Terminate);
+                        ));
                     }
                 }
             }
@@ -502,9 +463,7 @@ impl Client {
         Ok(())
     }
 
-    fn validate_file(&mut self, file: &mut file::File) -> Result<(), Terminate> {
-        let scope = "validation";
-
+    fn validate_file(&mut self, file: &mut file::File) -> Result<(), String> {
         let path = file.parameters.path.display().to_string();
 
         // Check for uniqueness of the path parameter.
@@ -513,42 +472,29 @@ impl Client {
             .paths
             .insert(file.parameters.path.to_path_buf())
         {
-            error!(
-                scope,
-                client:% = self.name,
-                resource:% = file.kind(),
-                path;
-                "path `{}` appears multiple times, must be unique among resources of type `file`, `symlink` and `directory`",
+            return Err(format!(
+                "`{}`: path `{}` appears in multiple resources, must be unique among resources of type `file`, `symlink` and `directory`",
+                file.repr(),
                 path
-            );
-
-            return Err(Terminate);
+            ));
         }
 
         // Files (their paths) cannot be parents to each other.
         // Check if any file conflicts with this file in that regard.
         if let Some(parent) = &file.parameters.path.parent() {
             if self.temporary.file_paths.contains(*parent) {
-                error!(
-                    scope,
-                    client:% = self.name,
-                    resource:% = file.kind(),
-                    path;
-                    "another file `{}` is found to be a parent of {}, but files cannot be parents to other files",
+                return Err(format!(
+                    "`{}`: another file `{}` is found to be a parent of this file, but files cannot be parents to other files",
                     file.repr(),
                     parent.display()
-                );
-
-                return Err(Terminate);
+                ));
             }
         }
 
         Ok(())
     }
 
-    fn validate_cron_job(&mut self, job: &mut cron::job::Job) -> Result<(), Terminate> {
-        let scope = "validation";
-
+    fn validate_cron_job(&mut self, job: &mut cron::job::Job) -> Result<(), String> {
         let name = job.parameters.name.to_string();
 
         // Check for uniqueness of the name parameter.
@@ -557,41 +503,26 @@ impl Client {
             .cron_job_names
             .insert(job.parameters.name.clone())
         {
-            error!(
-                scope,
-                client:% = self.name,
-                resource:% = job.kind(),
-                name;
-                "cron job name `{}` appears multiple times, names for cron jobs must be unique",
-                name
-            );
-
-            return Err(Terminate);
+            return Err(format!(
+                "`{}`: cron job name `{}` appears in multiple `{}` resources, cron job names must be unique",
+                job.repr(),
+                name,
+                job.kind(),
+            ));
         }
 
         if !self.temporary.paths.insert(job.parameters.target.clone()) {
-            error!(
-                scope,
-                client:% = self.name,
-                resource:% = job.kind(),
-                name;
-                "{} conflicts with another resource that manages the target path `{}`",
+            return Err(format!(
+                "`{}`: resource conflicts with another resource that manages the target path `{}`",
                 job.repr(),
                 job.parameters.target.display()
-            );
-
-            return Err(Terminate);
+            ));
         }
 
         Ok(())
     }
 
-    fn validate_directory(
-        &mut self,
-        directory: &mut directory::Directory,
-    ) -> Result<(), Terminate> {
-        let scope = "validation";
-
+    fn validate_directory(&mut self, directory: &mut directory::Directory) -> Result<(), String> {
         let path = directory.parameters.path.display().to_string();
 
         // Check for uniqueness of the path parameter.
@@ -600,32 +531,22 @@ impl Client {
             .paths
             .insert(directory.parameters.path.to_path_buf())
         {
-            error!(
-                scope,
-                client:% = self.name,
-                resource:% = directory.kind(),
-                path;
-                "path `{}` appears multiple times, must be unique among resources of type `file`, `symlink` and `directory`",
+            return Err(format!(
+                "`{}`: path `{}` appears in multiple resources, must be unique among resources of type `file`, `symlink` and `directory`",
+                directory.repr(),
                 path
-            );
-
-            return Err(Terminate);
+            ));
         }
 
         // Files (their paths) cannot be parents to directories.
         // Check if any file conflicts with this directory in that regard.
         if let Some(parent) = &directory.parameters.path.parent() {
             if self.temporary.file_paths.contains(*parent) {
-                error!(
-                    scope,
-                    client:% = self.name,
-                    resource:% = directory.kind(),
-                    path;
-                    "file `{}` is found to be a parent of this directory, but files cannot be parents to directories",
+                return Err(format!(
+                    "`{}`: file `{}` is found to be a parent of this directory, but files cannot be parents to directories",
+                    directory.repr(),
                     parent.display()
-                );
-
-                return Err(Terminate);
+                ));
             }
         }
 
@@ -691,9 +612,7 @@ impl Client {
         Ok(())
     }
 
-    fn validate_symlink(&mut self, symlink: &mut symlink::Symlink) -> Result<(), Terminate> {
-        let scope = "validation";
-
+    fn validate_symlink(&mut self, symlink: &mut symlink::Symlink) -> Result<(), String> {
         let path = symlink.parameters.path.display().to_string();
 
         // Check for uniqueness of the path parameter.
@@ -702,41 +621,29 @@ impl Client {
             .paths
             .insert(symlink.parameters.path.to_path_buf())
         {
-            error!(
-                scope,
-                client:% = self.name,
-                resource:% = symlink.kind(),
-                path;
-                "path `{}` appears multiple times, must be unique among resources of type `file`, `symlink` and `directory`",
+            return Err(format!(
+                "`{}`: path `{}` appears in multiple resources, must be unique among resources of type `file`, `symlink` and `directory`",
+                symlink.repr(),
                 path
-            );
-
-            return Err(Terminate);
+            ));
         }
 
         // Files (their paths) cannot be parents to symlinks.
         // Check if any file conflicts with this symlink in that regard.
         if let Some(parent) = &symlink.parameters.path.parent() {
             if self.temporary.file_paths.contains(*parent) {
-                error!(
-                    scope,
-                    client:% = self.name,
-                    resource:% = symlink.kind(),
-                    path;
-                    "file `{}` is found to be a parent of this symlink, but files cannot be parents to symlinks",
+                return Err(format!(
+                    "`{}`: file `{}` is found to be a parent of this symlink, but files cannot be parents to symlinks",
+                    symlink.repr(),
                     parent.display()
-                );
-
-                return Err(Terminate);
+                ));
             }
         }
 
         Ok(())
     }
 
-    fn validate_host(&mut self, host: &mut host::Host) -> Result<(), Terminate> {
-        let scope = "validation";
-
+    fn validate_host(&mut self, host: &mut host::Host) -> Result<(), String> {
         let ip_address = host.parameters.ip_address.to_string();
 
         // Check for uniqueness of the IP address parameter.
@@ -745,16 +652,12 @@ impl Client {
             .host_ip_addresses
             .insert(host.parameters.ip_address)
         {
-            error!(
-                scope,
-                client:% = self.name,
-                resource:% = host.kind(),
-                ip_address;
-                "IP address `{}` appears multiple times, must be unique among host entries",
-                ip_address
-            );
-
-            return Err(Terminate);
+            return Err(format!(
+                "`{}`: IP address `{}` appears in multiple `{}` resources, must be unique among host entries",
+                host.repr(),
+                ip_address,
+                host.kind(),
+            ));
         }
 
         // Check if there is also a file managing `/etc/hosts` whose `content`
@@ -767,26 +670,18 @@ impl Client {
             .find(|f| *f.parameters.path == host.parameters.target)
         {
             if file.parameters.content.is_some() || file.parameters.source.is_some() {
-                error!(
-                    scope,
-                    client:% = self.name,
-                    resource:% = host.kind(),
-                    ip_address;
-                    "there cannot be both a {} resource and a {} whose `content` or `source` parameters are set",
+                return Err(format!(
+                    "`{}`: resource conflicts with `{}` whose `content` or `source` parameters are set",
                     host.repr(),
                     file.repr()
-                );
-
-                return Err(Terminate);
+                ));
             }
         }
 
         Ok(())
     }
 
-    fn validate_group(&mut self, group: &mut group::Group) -> Result<(), Terminate> {
-        let scope = "validation";
-
+    fn validate_group(&mut self, group: &mut group::Group) -> Result<(), String> {
         let name = group.parameters.name.to_string();
 
         // Check for uniqueness of the name parameter.
@@ -795,24 +690,18 @@ impl Client {
             .group_names
             .insert(group.parameters.name.clone())
         {
-            error!(
-                scope,
-                client:% = self.name,
-                resource:% = group.kind(),
-                name;
-                "group name `{}` appears multiple times, group names must be unique",
-                name
-            );
-
-            return Err(Terminate);
+            return Err(format!(
+                "`{}`: group name `{}` appears in multiple `{}` resources, group names must be unique",
+                group.repr(),
+                name,
+                group.kind(),
+            ));
         }
 
         Ok(())
     }
 
-    fn validate_user(&mut self, user: &mut user::User) -> Result<(), Terminate> {
-        let scope = "validation";
-
+    fn validate_user(&mut self, user: &mut user::User) -> Result<(), String> {
         let name = user.parameters.name.to_string();
 
         // Check for uniqueness of the name parameter.
@@ -821,16 +710,12 @@ impl Client {
             .user_names
             .insert(user.parameters.name.clone())
         {
-            error!(
-                scope,
-                client:% = self.name,
-                resource:% = user.kind(),
-                name;
-                "user name `{}` appears multiple times, user names must be unique",
-                name
-            );
-
-            return Err(Terminate);
+            return Err(format!(
+                "`{}`: user name `{}` appears in multiple `{}` resources, user names must be unique",
+                user.repr(),
+                name,
+                user.kind(),
+            ));
         }
 
         Ok(())
@@ -839,24 +724,17 @@ impl Client {
     fn validate_resolv_conf(
         &mut self,
         resolv_conf: &mut resolv_conf::ResolvConf,
-    ) -> Result<(), Terminate> {
-        let scope = "validation";
-
+    ) -> Result<(), String> {
         // Ensure that there's only one `resolv.conf` resource.
         if self
             .resources
             .iter()
             .any(|item| item.as_resolv_conf().is_some())
         {
-            error!(
-                scope,
-                client:% = self.name,
-                resource:% = resolv_conf.kind();
-                "there cannot be more than one {}",
+            return Err(format!(
+                "`{}`: duplicate resource found",
                 resolv_conf.repr()
-            );
-
-            return Err(Terminate);
+            ));
         }
 
         // Check if there is also a file managing `/etc/resolv.conf` whose `content`
@@ -869,28 +747,18 @@ impl Client {
             .find(|f| *f.parameters.path == resolv_conf.parameters.target)
         {
             if file.parameters.content.is_some() || file.parameters.source.is_some() {
-                error!(
-                    scope,
-                    client:% = self.name,
-                    resource:% = resolv_conf.kind();
-                    "there cannot be both a {} resource and a {} whose `content` or `source` parameters are set",
+                return Err(format!(
+                    "`{}`: resource conflicts with `{}` whose `content` or `source` parameters are set",
                     resolv_conf.repr(),
                     file.repr()
-                );
-
-                return Err(Terminate);
+                ));
             }
         }
 
         Ok(())
     }
 
-    fn validate_apt_package(
-        &mut self,
-        package: &mut apt::package::Package,
-    ) -> Result<(), Terminate> {
-        let scope = "validation";
-
+    fn validate_apt_package(&mut self, package: &mut apt::package::Package) -> Result<(), String> {
         let name = package.parameters.name.to_string();
 
         // Check for uniqueness of the name parameter.
@@ -899,16 +767,12 @@ impl Client {
             .apt_package_names
             .insert(package.parameters.name.clone())
         {
-            error!(
-                scope,
-                client:% = self.name,
-                resource:% = package.kind(),
-                name;
-                "package name `{}` appears multiple times, package names must be unique",
-                name
-            );
-
-            return Err(Terminate);
+            return Err(format!(
+                "`{}`: package name `{}` appears in multiple `{}` resources, package names must be unique",
+                package.repr(),
+                name,
+                package.kind(),
+            ));
         }
 
         Ok(())
@@ -917,9 +781,7 @@ impl Client {
     fn validate_apt_preference(
         &mut self,
         preference: &mut apt::preference::Preference,
-    ) -> Result<(), Terminate> {
-        let scope = "validation";
-
+    ) -> Result<(), String> {
         let name = preference.parameters.name.to_string();
 
         // Check for uniqueness of the name parameter.
@@ -928,16 +790,12 @@ impl Client {
             .apt_preference_names
             .insert(preference.parameters.name.clone())
         {
-            error!(
-                scope,
-                client:% = self.name,
-                resource:% = preference.kind(),
-                name;
-                "preference name `{}` appears multiple times, preference names must be unique",
-                name
-            );
-
-            return Err(Terminate);
+            return Err(format!(
+                "`{}`: preference name `{}` appears in multiple `{}` resources, preference names must be unique",
+                preference.repr(),
+                name,
+                preference.kind(),
+            ));
         }
 
         if !self
@@ -945,37 +803,145 @@ impl Client {
             .paths
             .insert(preference.parameters.target.clone())
         {
-            error!(
-                scope,
-                client:% = self.name,
-                resource:% = preference.kind(),
-                name;
-                "{} conflicts with another resource that manages the target path `{}`",
+            return Err(format!(
+                "`{}`: resource conflicts with another resource that manages the target path `{}`",
                 preference.repr(),
                 preference.parameters.target.display()
-            );
-
-            return Err(Terminate);
+            ));
         }
 
         Ok(())
     }
 }
 
-pub mod deserialize {
+pub mod unresolved {
     use super::*;
-    use serde::Deserialize;
 
-    #[derive(Clone, Debug, Deserialize)]
-    #[serde(deny_unknown_fields)]
+    #[derive(Clone, Debug)]
     pub struct Client {
-        #[serde(rename(deserialize = "api-key"))]
+        pub name: Hostname,
         pub api_key: ApiKey,
-        #[serde(default, rename(deserialize = "groups"))]
         pub assigned_groups: Vec<Hostname>,
-        #[serde(default)]
-        pub variables: HashMap<String, toml::Value>,
-        #[serde(default)]
-        pub resources: Vec<DeResource>,
+        pub variables: HashMap<String, StrictYaml>,
+        pub resources: Vec<UnresolvedResource>,
+    }
+
+    impl TryFrom<(Source, StrictYamlHash)> for Client {
+        type Error = String;
+
+        fn try_from((source, mut hash): (Source, StrictYamlHash)) -> Result<Self, Self::Error> {
+            let mut assigned_groups = vec![];
+            let mut variables = HashMap::new();
+            let mut resources = vec![];
+
+            let name = {
+                let key = "name";
+
+                let s = hash
+                    .remove(&StrictYaml::String(key.into()))
+                    .ok_or(format!("{}: failed to find required key `{}`", source, key))?
+                    .into_string()
+                    .ok_or(format!("{}: node must be a string", source.clone() + key))?;
+
+                Hostname::from_str(&s)
+                    .map_err(|error| format!("{}: {}", source.clone() + key, error))?
+            };
+
+            let api_key = {
+                let key = "api_key";
+
+                let s = hash
+                    .remove(&StrictYaml::String(key.into()))
+                    .ok_or(format!("{}: failed to find required key `{}`", source, key))?
+                    .into_string()
+                    .ok_or(format!("{}: node must be a string", source.clone() + key))?;
+
+                ApiKey::from_str(&s)
+                    .map_err(|error| format!("{}: {}", source.clone() + key, error))?
+            };
+
+            {
+                let key = "resources";
+                let source = source.clone() + key;
+
+                if let Some(node) = hash.remove(&StrictYaml::String(key.into())) {
+                    for (index, item) in node
+                        .into_vec()
+                        .ok_or(format!("{}: node must be an array", source))?
+                        .into_iter()
+                        .enumerate()
+                    {
+                        let source = source.clone() + index;
+
+                        let hash = item
+                            .into_hash()
+                            .ok_or(format!("{}: node must be a hash", source))?;
+
+                        let resource = UnresolvedResource::try_from((source, hash))?;
+
+                        resources.push(resource);
+                    }
+                }
+            }
+
+            {
+                let key = "groups";
+                let source = source.clone() + key;
+
+                if let Some(node) = hash.remove(&StrictYaml::String(key.into())) {
+                    for (index, item) in node
+                        .into_vec()
+                        .ok_or(format!("{}: node must be an array", source))?
+                        .into_iter()
+                        .enumerate()
+                    {
+                        let source = source.clone() + index;
+
+                        let s = item
+                            .as_str()
+                            .ok_or(format!("{}: node must be a string", source))?;
+
+                        let group = Hostname::from_str(s)
+                            .map_err(|error| format!("{}: {}", source, error))?;
+
+                        assigned_groups.push(group);
+                    }
+                }
+            }
+
+            {
+                let key = "variables";
+                let source = source.clone() + key;
+
+                if let Some(node) = hash.remove(&StrictYaml::String(key.into())) {
+                    for (k, v) in node
+                        .into_hash()
+                        .ok_or(format!("{}: node must be a hash", source))?
+                        .into_iter()
+                    {
+                        let k = k
+                            .as_str()
+                            .ok_or(format!("{}: hash keys must be strings", source))?;
+
+                        variables.insert(k.to_string(), v);
+                    }
+                }
+            }
+
+            if let Some(key) = hash.pop_back().and_then(|(key, _)| key.into_string()) {
+                return Err(format!("{}: encountered unexpected key `{}`", source, key));
+            }
+
+            assigned_groups.sort();
+            assigned_groups.dedup();
+
+            Ok(Self {
+                name,
+                api_key,
+                assigned_groups,
+                variables,
+                resources,
+            })
+        }
     }
 }

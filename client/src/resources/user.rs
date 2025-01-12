@@ -340,7 +340,7 @@ impl User {
         }
 
         match (current_user.expiry_date, &self.parameters.expiry_date) {
-            (Some(current), Some(desired)) if current != *desired => {
+            (Some(current), Some(desired)) if current != **desired => {
                 usermod.arg("--expiredate");
                 usermod.arg(desired.format(&EXPIRY_DATE_FORMAT)?);
             }

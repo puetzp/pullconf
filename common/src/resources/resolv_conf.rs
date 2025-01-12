@@ -1,7 +1,7 @@
 use crate::{Ensure, Hostname, ResourceMetadata};
 use anyhow::bail;
-use serde::{de::Error as SerdeError, Deserialize, Deserializer, Serialize};
-use std::{net::IpAddr, path::PathBuf, str::FromStr};
+use serde::{de::Error, Deserialize, Deserializer, Serialize};
+use std::{fmt, net::IpAddr, ops::Deref, path::PathBuf, str::FromStr};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Parameters {
@@ -21,16 +21,7 @@ pub struct Relationships {
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
 pub struct SortlistPair(String);
 
-impl<'de> Deserialize<'de> for SortlistPair {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let v = String::deserialize(deserializer)?;
-
-        Self::from_str(&v).map_err(SerdeError::custom)
-    }
-}
+crate::impl_string_newtype!(SortlistPair);
 
 impl FromStr for SortlistPair {
     type Err = anyhow::Error;
@@ -58,25 +49,10 @@ impl FromStr for SortlistPair {
     }
 }
 
-impl SortlistPair {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
 pub struct ResolverOption(String);
 
-impl<'de> Deserialize<'de> for ResolverOption {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let v = String::deserialize(deserializer)?;
-
-        Self::from_str(&v).map_err(SerdeError::custom)
-    }
-}
+crate::impl_string_newtype!(ResolverOption);
 
 impl FromStr for ResolverOption {
     type Err = anyhow::Error;
@@ -154,11 +130,5 @@ impl FromStr for ResolverOption {
         } else {
             bail!("invalid resolver option `{}`", s)
         }
-    }
-}
-
-impl ResolverOption {
-    pub fn as_str(&self) -> &str {
-        &self.0
     }
 }

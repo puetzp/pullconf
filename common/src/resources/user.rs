@@ -1,9 +1,6 @@
 use super::group::Name as Groupname;
 use crate::{Ensure, ResourceMetadata, SafePathBuf};
-use serde::{
-    de::{Error as SerdeError, Unexpected},
-    Deserialize, Deserializer, Serialize, Serializer,
-};
+use serde::{de::Error, Deserialize, Deserializer, Serialize, Serializer};
 use std::{fmt, ops::Deref, str::FromStr};
 use time::{format_description::FormatItem, macros::format_description, Date};
 
@@ -16,11 +13,7 @@ pub struct Parameters {
     pub shell: Option<SafePathBuf>,
     pub home: SafePathBuf,
     pub password: Password,
-    #[serde(
-        deserialize_with = "deserialize_expiry_date",
-        serialize_with = "serialize_expiry_date"
-    )]
-    pub expiry_date: Option<Date>,
+    pub expiry_date: Option<ExpiryDate>,
     // Primary group name.
     pub group: Groupname,
     // Names of supplementary groups.
@@ -32,31 +25,47 @@ pub struct Relationships {
     pub requires: Vec<ResourceMetadata>,
 }
 
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct ExpiryDate(Date);
+
 pub const EXPIRY_DATE_FORMAT: &[FormatItem] = format_description!("[year]-[month]-[day]");
 
-pub fn deserialize_expiry_date<'de, D>(deserializer: D) -> Result<Option<Date>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    match Option::<String>::deserialize(deserializer)? {
-        Some(v) => match Date::parse(&v, EXPIRY_DATE_FORMAT) {
-            Ok(date) => Ok(Some(date)),
-            Err(_) => Err(SerdeError::invalid_value(
-                Unexpected::Str(&v),
-                &"a date in the format <YYYY-MM-DD>",
-            )),
-        },
-        None => Ok(None),
+impl FromStr for ExpiryDate {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match Date::parse(&s, EXPIRY_DATE_FORMAT) {
+            Ok(date) => Ok(Self(date)),
+            Err(error) => Err(anyhow::Error::new(error)),
+        }
     }
 }
 
-pub fn serialize_expiry_date<S>(date: &Option<Date>, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    match date {
-        Some(date) => serializer.serialize_some(&date.format(&EXPIRY_DATE_FORMAT).unwrap()),
-        None => serializer.serialize_none(),
+impl Deref for ExpiryDate {
+    type Target = Date;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<'de> Deserialize<'de> for ExpiryDate {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+
+        Self::from_str(&s).map_err(Error::custom)
+    }
+}
+
+impl Serialize for ExpiryDate {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.0.format(&EXPIRY_DATE_FORMAT).unwrap())
     }
 }
 
@@ -91,7 +100,7 @@ impl<'de> Deserialize<'de> for Password {
     {
         let s = String::deserialize(deserializer)?;
 
-        Password::from_str(&s).map_err(SerdeError::custom)
+        Password::from_str(&s).map_err(Error::custom)
     }
 }
 
@@ -128,36 +137,7 @@ impl FromStr for Name {
     }
 }
 
-impl<'de> Deserialize<'de> for Name {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let v = String::deserialize(deserializer)?;
-
-        Name::from_str(&v).map_err(SerdeError::custom)
-    }
-}
-
-impl From<&Name> for Name {
-    fn from(name: &Name) -> Self {
-        name.clone()
-    }
-}
-
-impl Deref for Name {
-    type Target = String;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl fmt::Display for Name {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&*self.0, f)
-    }
-}
+crate::impl_string_newtype!(Name);
 
 impl PartialEq<Groupname> for Name {
     fn eq(&self, other: &Groupname) -> bool {
@@ -168,9 +148,5 @@ impl PartialEq<Groupname> for Name {
 impl Name {
     pub fn root() -> Self {
         Self(String::from("root"))
-    }
-
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
     }
 }

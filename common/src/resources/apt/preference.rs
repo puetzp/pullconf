@@ -42,39 +42,4 @@ impl FromStr for Name {
     }
 }
 
-impl<'de> Deserialize<'de> for Name {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let v = String::deserialize(deserializer)?;
-
-        Self::from_str(&v).map_err(Error::custom)
-    }
-}
-
-impl From<&Name> for Name {
-    fn from(name: &Name) -> Self {
-        name.clone()
-    }
-}
-
-impl Deref for Name {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        self.0.as_str()
-    }
-}
-
-impl fmt::Display for Name {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&*self.0, f)
-    }
-}
-
-impl Name {
-    pub fn as_str(&self) -> &str {
-        self.0.as_str()
-    }
-}
+crate::impl_string_newtype!(Name);

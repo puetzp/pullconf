@@ -25,7 +25,7 @@ impl FromStr for ApiKey {
             .find(|c| !(c.is_ascii_lowercase() || c.is_ascii_hexdigit()))
         {
             return Err(format!(
-                "API key hash contains an unexpected character <{}>, sha256 hash must be formatted in lowercased hexdigits",
+                "API key hash contains an unexpected character `{}`, sha256 hash must be formatted in lowercased hexdigits",
                 c
             ));
         }

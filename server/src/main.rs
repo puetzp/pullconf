@@ -4,7 +4,6 @@ mod handlers;
 mod types;
 
 use crate::configuration::Configuration;
-use common::error::Terminate;
 use log::{debug, error, info, warn};
 use rouille::Server;
 use signal_hook::{consts::signal::*, iterator::Signals};
@@ -32,7 +31,7 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn initialize() -> Result<Self, Terminate> {
+    pub fn initialize() -> Result<Self, String> {
         let assets = env::parse_path(
             env::FileType::Directory,
             "PULLCONF_ASSET_DIR",
@@ -42,9 +41,10 @@ impl AppState {
         let resources = env::parse_path(
             env::FileType::Directory,
             "PULLCONF_RESOURCE_DIR",
-            "/etc/pullconfd/resources",
+            "/etc/pullconfd/conf.d",
         )?;
 
+        // Todo: Every function should return `String` to propagate errors.
         let configuration = Configuration::try_from(&resources)?;
 
         let state = AppState {
@@ -58,32 +58,19 @@ impl AppState {
 }
 
 fn main() -> ExitCode {
-    let scope = "main";
+    // Initialize logging.
+    env_logger::init();
 
-    // Initialize structured logging.
-    let log_format = std::env::var("PULLCONF_LOG_FORMAT")
-        .ok()
-        .unwrap_or("logfmt".to_string());
-    if log_format == "logfmt" {
-        std_logger::Config::logfmt()
-            .with_kvs(&[("application", APPLICATION), ("version", VERSION)])
-            .with_call_location(false)
-            .init()
-    } else if log_format == "json" {
-        std_logger::Config::json()
-            .with_kvs(&[("application", APPLICATION), ("version", VERSION)])
-            .with_call_location(false)
-            .init()
-    } else {
-        eprintln!("unknown log format {}", log_format);
-        return ExitCode::FAILURE;
-    }
+    info!("starting {} v{}", APPLICATION, VERSION);
 
     // Initialize the shared data structure.
     let state = {
         match AppState::initialize() {
             Ok(state) => Arc::new(RwLock::new(state)),
-            Err(error) => return error.into(),
+            Err(error) => {
+                error!("{}", error);
+                return ExitCode::FAILURE;
+            }
         }
     };
 
@@ -93,7 +80,10 @@ fn main() -> ExitCode {
 
         let socket = match env::parse_socket("PULLCONF_LISTEN_ON", "127.0.0.1:443") {
             Ok(path) => path,
-            Err(error) => return error.into(),
+            Err(error) => {
+                error!("{}", error);
+                return ExitCode::FAILURE;
+            }
         };
 
         let certificate = {
@@ -103,13 +93,20 @@ fn main() -> ExitCode {
                 "/etc/pullconfd/tls/server.crt",
             ) {
                 Ok(path) => path,
-                Err(error) => return error.into(),
+                Err(error) => {
+                    error!("{}", error);
+                    return ExitCode::FAILURE;
+                }
             };
 
-            match fs::read_to_string(path) {
+            match fs::read_to_string(&path) {
                 Ok(content) => content.as_bytes().to_vec(),
                 Err(error) => {
-                    error!(scope; "failed to read TLS certificate file: {}", error);
+                    error!(
+                        "`{}`: failed to read TLS certificate from file: {}",
+                        path.display(),
+                        error
+                    );
                     return ExitCode::FAILURE;
                 }
             }
@@ -122,13 +119,20 @@ fn main() -> ExitCode {
                 "/etc/pullconfd/tls/server.key",
             ) {
                 Ok(path) => path,
-                Err(error) => return error.into(),
+                Err(error) => {
+                    error!("{}", error);
+                    return ExitCode::FAILURE;
+                }
             };
 
-            match fs::read_to_string(path) {
+            match fs::read_to_string(&path) {
                 Ok(content) => content.as_bytes().to_vec(),
                 Err(error) => {
-                    error!(scope; "failed to read TLS private key file: {}", error);
+                    error!(
+                        "`{}`: failed to read TLS private key from file: {}",
+                        path.display(),
+                        error
+                    );
                     return ExitCode::FAILURE;
                 }
             }
@@ -141,22 +145,11 @@ fn main() -> ExitCode {
             key,
         ) {
             Ok(server) => {
-                info!(
-                    scope,
-                    socket:%;
-                    "server is accepting connections"
-                );
-
+                info!("server is accepting connections at `{}`", socket);
                 server
             }
             Err(error) => {
-                error!(
-                    scope,
-                    socket:%;
-                    "failed to start server: {}",
-                    error
-                );
-
+                error!("failed to start server: {}", error);
                 return ExitCode::FAILURE;
             }
         }
@@ -173,16 +166,17 @@ fn main() -> ExitCode {
     thread::spawn(move || {
         let mut signals = Signals::new([SIGTERM, SIGINT, SIGHUP]).unwrap();
 
-        let scope = "signals";
-
         'outer: loop {
             if let Some(signal) = signals.pending().next() {
-                debug!(scope, signal; "received signal");
+                debug!("received signal `{}`", signal);
 
                 match signal {
                     SIGTERM | SIGINT => {
                         if let Err(error) = sender.send(()) {
-                            error!(scope, signal; "failed to forward shutdown signal for graceful shutdown: {}", error);
+                            error!(
+                                "failed to forward shutdown signal `{}` for graceful shutdown: {}",
+                                signal, error
+                            );
                         }
 
                         break 'outer;
@@ -191,25 +185,20 @@ fn main() -> ExitCode {
                         let mut state = match _state.write() {
                             Ok(s) => s,
                             Err(error) => {
-                                error!(scope, signal; "failed to acquire write access to reload shared application state: {}", error);
+                                error!("failed to acquire write access to reload shared application state: {}", error);
                                 continue;
                             }
                         };
 
                         match Configuration::try_from(&state.resources) {
                             Ok(configuration) => {
-                                info!(
-                                    scope,
-                                    signal;
-                                    "successfully reloaded configuration",
-                                );
+                                info!("successfully reloaded configuration",);
                                 state.configuration = configuration;
                             }
-                            Err(_) => warn!(
-                                scope,
-                                signal;
-                                "keeping the current configuration as reload failed",
-                            ),
+                            Err(error) => {
+                                error!("{}", error);
+                                warn!("keeping the current configuration as reload failed",);
+                            }
                         }
                     }
                     _ => unreachable!(),
@@ -222,13 +211,12 @@ fn main() -> ExitCode {
 
     if let Err(error) = handle.join() {
         error!(
-            scope;
-            "failed to join thread after shutdown signal was received: {:?}",
+            "failed to join signal handler thread after shutdown signal was received: {:?}",
             error
         );
     }
 
-    info!(scope; "shutdown");
+    info!("shutting down gracefully");
 
     ExitCode::SUCCESS
 }
