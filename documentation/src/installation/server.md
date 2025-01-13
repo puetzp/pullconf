@@ -2,14 +2,23 @@
 
 The following steps guide you on how to install and configure the Pullconf server component **pullconfd**.
 
-Download and install the .deb package from GitHub:
+Download the .deb package from GitHub:
 
 ```sh
-wget https://github.com/puetzp/pullconf/releases/download/v0.1.0/pullconfd_0.1.0-1_amd64.deb
+wget https://github.com/puetzp/pullconf/releases/download/v0.2.0/pullconfd_0.2.0-1_amd64.deb
 ```
 
+*Or*: Install Rust, download the source code and build the package yourself:
+
 ```sh
-sudo dpkg -i pullconfd_0.1.0_amd64.deb
+cargo install cargo-deb
+cargo deb -p pullconfd
+```
+
+Install the package:
+
+```sh
+sudo dpkg -i pullconfd_0.2.0_amd64.deb
 ```
 
 The installation script sets up a systemd service unit and a configuration and data directory. Check the unit's status:
