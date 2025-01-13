@@ -1,6 +1,6 @@
 [package]
 name = "pullconf"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["Peter Sebastian Puetz <pullconf@proton.me>"]
 description = "Pull-based Linux configuration management system, client component"
