@@ -29,8 +29,7 @@ If this is your first installation the unit will likely be in the "failed" state
 | PULLCONF_TLS_PRIVATE_KEY | Path to the corresponding private key in PEM format. | yes | `/etc/pullconfd/tls/server.key` |
 | PULLCONF_RESOURCE_DIR | Directory containing StrictYAML files that define clients, groups, and their resources. Only files ending with `.yaml` or `.yml` will be parsed. Subdirectories may be nested up to ten levels. | yes | `/etc/pullconfd/conf.d` |
 | PULLCONF_ASSET_DIR | Directory containing static file assets. This directory is served by the web server to enable clients to download file contents. Subdirectories may be arbitrarily nested. | yes | `/etc/pullconfd/assets` |
-| PULLCONF_LOG_FORMAT | Determines the output format of structured logs. Either `logfmt` or `json` | no | `logfmt` |
-| LOG_LEVEL | This variable is read by the underlying logging library. Check their [documentation](https://docs.rs/std-logger/latest/std_logger/index.html#setting-severity) for a complete overview of valid values. | no | `info` |
+| RUST_LOG | This variable is read by the underlying logging library. Check their [documentation](https://docs.rs/env_logger/latest/env_logger/index.html#enabling-logging) for a complete overview of valid values. | no | `info` |
 
 After adding or changing environment variables you need to restart the unit:
 
