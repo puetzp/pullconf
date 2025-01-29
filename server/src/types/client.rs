@@ -132,6 +132,11 @@ impl TryFrom<(unresolved::Client, &mut HashMap<Hostname, (Group, usize)>)> for C
             resources: VecDeque::new(),
         };
 
+        client.variables.insert(
+            "hostname".to_string(),
+            StrictYaml::String(client.name.to_string()),
+        );
+
         for item in intermediate.resources {
             let requires = item.requires().to_vec();
 
