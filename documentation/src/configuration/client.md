@@ -117,8 +117,8 @@ resources:
   - type: host
     parameters:
 	  ensure: present
-	  ip_address: $pullconf::ip_address
-	  hostname: $pullconf::hostname
+	  ip_address: ${pullconf::ip_address}
+	  hostname: ${pullconf::hostname}
 	  aliases:
 	    - webserver
 	    - webserver.local
