@@ -46,9 +46,15 @@ resources:
 
 While variables can be nested (variables inside variables) they must eventually resolve to the same type that a resource expects as if no variable substitution took place.
 
-String literals (as opposed to arrays or hashes) are special in that they can be interspersed with variables at arbitrary positions within the string. Given a string literal `My name is ${pullconf::hostname}!` within the client configuration of a client named `blechkiste`, this string would resolve to `My name is blechkiste!`.
+Remember that StrictYAML knows three types:
 
-Whole arrays and hashes can only be substituted by variables that match their type. Using the example from the code block above, if `${pullconf::ip_address}` would be defined as an array instead of a string literal, parsing the [host](resources/host.md) resource type in the context of that client would result in an error, since [host](resources/host.md) expects a string literal for the `ip_address` parameter.
+* string literals
+* arrays
+* hashes
+
+Whole arrays and hashes can only be substituted by variables that match their type. So the `aliases` parameter of a [host](resources/host.md) can be substituted by a variable that resolves to an array, while the `ip_address` parameter must resolve to a string literal.
+
+Array members and hash values can themselves be variables. String literals (as opposed to arrays or hashes) are special in that they can be interspersed with variables at arbitrary positions within the string. Given a string literal `My name is ${pullconf::hostname}!` within the client configuration of a client named `blechkiste`, this string would resolve to `My name is blechkiste!`.
 
 Also note that Pullconf fails to validate the configuration if a client is assigned to a group that contains resource definitions with variables that are not available in the context of this client.
 
