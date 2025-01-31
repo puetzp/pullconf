@@ -388,10 +388,10 @@ impl File {
 
                 _content = _content.replace(&item.variable, &stdout);
             } else {
-                let stderr = String::from_utf8(output.stderr)?;
+                let stdout = String::from_utf8(output.stdout)?;
 
                 anyhow::bail!(
-                    "failed to execute command for content replacement, {:?} exited with status {}: {}",
+                    "failed to execute command for content replacement, {:?} exited with {}: {}",
                     command.get_program(),
                     output.status,
                     stderr
