@@ -2,7 +2,7 @@ use super::{Action, Resource, ResourceTrait};
 use crate::util::uid_and_gid;
 use anyhow::Context;
 use common::{
-    resources::file::{Parameters, Relationships},
+    resources::file::{Content, Parameters, Relationships},
     Ensure, ResourceMetadata,
 };
 use log::{debug, error, info};
@@ -13,6 +13,7 @@ use std::{
     fs,
     io::{self, Read, Write},
     os::unix::fs::{chown, MetadataExt, PermissionsExt},
+    process::Command,
 };
 use ureq::Agent;
 use url::Url;
@@ -246,6 +247,8 @@ impl File {
                 );
             }
         } else if let Some(content) = &self.parameters.content {
+            let content = self.maybe_replace_placeholders(content)?;
+
             if format!("{:x}", Sha256::digest(content.as_bytes())) != etag {
                 debug!(
                     "`{}`: remote file content has changed, writing new content to file",
@@ -329,6 +332,8 @@ impl File {
                 .write_all(&bytes)
                 .context("failed to write payload to file")?;
         } else if let Some(content) = &self.parameters.content {
+            let content = self.maybe_replace_placeholders(content)?;
+
             debug!("`{}`: writing content to file", self.repr(),);
 
             handle
@@ -350,5 +355,50 @@ impl File {
         }
 
         Ok(Action::Deleted)
+    }
+
+    fn maybe_replace_placeholders(&self, content: &Content) -> Result<String, anyhow::Error> {
+        let mut _content = content.value.clone();
+
+        if content.replace.is_empty() {
+            return Ok(_content);
+        }
+
+        for item in &content.replace {
+            let program = item.command.first().ok_or(anyhow::anyhow!(
+                "command for content replacement must contain at least the name of a program"
+            ))?;
+
+            let mut command = Command::new(program);
+            command.args(&item.command[1..]);
+
+            debug!(
+                "`{}`: executing {:?} with args {:?}",
+                self.repr(),
+                command.get_program(),
+                command.get_args()
+            );
+
+            let output = command
+                .output()
+                .context("failed to execute command for content replacement")?;
+
+            if output.status.success() {
+                let stdout = String::from_utf8(output.stdout)?;
+
+                _content = _content.replace(&item.variable, &stdout);
+            } else {
+                let stderr = String::from_utf8(output.stderr)?;
+
+                anyhow::bail!(
+                    "failed to execute command for content replacement, {:?} exited with status {}: {}",
+                    command.get_program(),
+                    output.status,
+                    stderr
+                );
+            }
+        }
+
+        Ok(_content)
     }
 }

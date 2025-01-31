@@ -3,7 +3,7 @@ use crate::configuration::Source;
 use common::{
     resources::{
         directory::ChildNode,
-        file::{Mode, Parameters, Relationships},
+        file::{Content, Mode, Parameters, Relationships},
         group::Name as Groupname,
         user::Name as Username,
     },
@@ -61,7 +61,7 @@ impl TryFrom<(UnresolvedParameters, &HashMap<String, StrictYaml>)> for File {
 
             let content = parameters
                 .content
-                .map(|parameter| String::resolve(parameter, variables))
+                .map(|parameter| Content::resolve(parameter, variables))
                 .transpose()?;
 
             let source = parameters
@@ -76,6 +76,16 @@ impl TryFrom<(UnresolvedParameters, &HashMap<String, StrictYaml>)> for File {
                 return Err(
                     "parameters `content` and `source` are mutually exclusive and cannot be defined both at the same time".to_string()
                 );
+            }
+
+            if let Some(content) = &content {
+                for item in &content.replace {
+                    if item.command.is_empty() {
+                        return Err(
+                            "command args in `content` must at least contain the name of a program to execute".to_string()
+                        );
+                    }
+                }
             }
 
             Parameters {

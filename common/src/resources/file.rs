@@ -11,13 +11,25 @@ pub struct Parameters {
     pub mode: Mode,
     pub owner: Username,
     pub group: Option<Groupname>,
-    pub content: Option<String>,
+    pub content: Option<Content>,
     pub source: Option<SafePathBuf>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Relationships {
     pub requires: Vec<ResourceMetadata>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Content {
+    pub value: String,
+    pub replace: Vec<Replacement>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Replacement {
+    pub variable: String,
+    pub command: Vec<String>,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
