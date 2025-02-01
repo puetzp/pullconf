@@ -372,6 +372,13 @@ impl File {
             let mut command = Command::new(program);
             command.args(&item.command[1..]);
 
+            for env in &item.environment {
+                command.env(
+                    &env.name,
+                    env.value.as_ref().map(|v| v.as_str()).unwrap_or_default(),
+                );
+            }
+
             debug!(
                 "`{}`: executing {:?} with args {:?}",
                 self.repr(),
@@ -383,18 +390,16 @@ impl File {
                 .output()
                 .context("failed to execute command for content replacement")?;
 
-            if output.status.success() {
-                let stdout = String::from_utf8(output.stdout)?;
+            let stdout = String::from_utf8(output.stdout)?;
 
+            if output.status.success() {
                 _content = _content.replace(&item.variable, &stdout);
             } else {
-                let stdout = String::from_utf8(output.stdout)?;
-
                 anyhow::bail!(
                     "failed to execute command for content replacement, {:?} exited with {}: {}",
                     command.get_program(),
                     output.status,
-                    stderr
+                    stdout
                 );
             }
         }

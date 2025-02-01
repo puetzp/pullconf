@@ -244,6 +244,64 @@ impl Resolvable for common::resources::cron::job::Environment {
     }
 }
 
+impl Resolvable for common::resources::file::Environment {
+    fn resolve(
+        node: UnresolvedNode,
+        variables: &HashMap<String, StrictYaml>,
+    ) -> Result<Self, String> {
+        match node.maybe_variable(0, variables)? {
+            Some(value) => {
+                let node = UnresolvedNode {
+                    source: node.source,
+                    inner: value,
+                };
+
+                Self::resolve(node, variables)
+            }
+            None => match node.inner.into_hash() {
+                Some(mut hash) => {
+                    let name = {
+                        let key = "name";
+
+                        hash.remove(&StrictYaml::String(key.into()))
+                            .ok_or(format!(
+                                "{}: failed to find required key `{}`",
+                                node.source, key
+                            ))
+                            .map(|_node| UnresolvedNode {
+                                source: node.source.clone() + key,
+                                inner: _node,
+                            })
+                            .and_then(|_node| String::resolve(_node, variables))?
+                    };
+
+                    let value = {
+                        let key = "value";
+
+                        hash.remove(&StrictYaml::String(key.into()))
+                            .map(|_node| UnresolvedNode {
+                                source: node.source.clone() + key,
+                                inner: _node,
+                            })
+                            .map(|_node| String::resolve(_node, variables))
+                            .transpose()?
+                    };
+
+                    if let Some(key) = hash.pop_back().and_then(|(key, _)| key.into_string()) {
+                        return Err(format!(
+                            "{}: encountered unexpected key `{}`",
+                            node.source, key
+                        ));
+                    }
+
+                    Ok(Self { name, value })
+                }
+                None => Err(format!("{}: node must be a hash", node.source)),
+            },
+        }
+    }
+}
+
 impl Resolvable for common::resources::file::Content {
     fn resolve(
         node: UnresolvedNode,
@@ -353,6 +411,23 @@ impl Resolvable for common::resources::file::Replacement {
                             .and_then(|_node| Vec::<String>::resolve(_node, variables))?
                     };
 
+                    let environment = {
+                        let key = "environment";
+
+                        hash.remove(&StrictYaml::String(key.into()))
+                            .map(|_node| UnresolvedNode {
+                                source: node.source.clone() + key,
+                                inner: _node,
+                            })
+                            .map(|_node| {
+                                Vec::<common::resources::file::Environment>::resolve(
+                                    _node, variables,
+                                )
+                            })
+                            .transpose()?
+                            .unwrap_or_default()
+                    };
+
                     if let Some(key) = hash.pop_back().and_then(|(key, _)| key.into_string()) {
                         return Err(format!(
                             "{}: encountered unexpected key `{}`",
@@ -360,7 +435,11 @@ impl Resolvable for common::resources::file::Replacement {
                         ));
                     }
 
-                    Ok(Self { variable, command })
+                    Ok(Self {
+                        variable,
+                        command,
+                        environment,
+                    })
                 }
                 None => Err(format!("{}: node must be a hash", node.source)),
             },

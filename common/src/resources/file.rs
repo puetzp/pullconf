@@ -30,6 +30,13 @@ pub struct Content {
 pub struct Replacement {
     pub variable: String,
     pub command: Vec<String>,
+    pub environment: Vec<Environment>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Environment {
+    pub name: String,
+    pub value: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize)]
