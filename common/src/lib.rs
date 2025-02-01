@@ -46,13 +46,10 @@ macro_rules! impl_resource_types {
 
 impl_resource_types!(
     (AptPackage, "apt::package"),
-    (AptPreference, "apt::preference"),
-    (CronJob, "cron::job"),
     (Directory, "directory"),
     (File, "file"),
     (Group, "group"),
     (Host, "host"),
-    (ResolvConf, "resolv.conf"),
     (Symlink, "symlink"),
     (User, "user")
 );

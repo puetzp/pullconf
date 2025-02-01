@@ -102,15 +102,9 @@ impl Symlink {
 
     pub fn may_depend_on(&self, resource: &Resource) -> bool {
         match resource {
-            Resource::AptPreference(preference) => {
-                preference.parameters.target != *self.parameters.path
-            }
             Resource::Directory(directory) => directory.parameters.path != self.parameters.target,
             Resource::File(file) => file.parameters.path != self.parameters.target,
             Resource::Host(host) => host.parameters.target != *self.parameters.path,
-            Resource::ResolvConf(resolv_conf) => {
-                resolv_conf.parameters.target != *self.parameters.path
-            }
             Resource::Symlink(symlink) => symlink.parameters.path != self.parameters.path,
             _ => true,
         }

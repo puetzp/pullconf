@@ -186,64 +186,6 @@ impl<T: Resolvable> Resolvable for Vec<T> {
     }
 }
 
-impl Resolvable for common::resources::cron::job::Environment {
-    fn resolve(
-        node: UnresolvedNode,
-        variables: &HashMap<String, StrictYaml>,
-    ) -> Result<Self, String> {
-        match node.maybe_variable(0, variables)? {
-            Some(value) => {
-                let node = UnresolvedNode {
-                    source: node.source,
-                    inner: value,
-                };
-
-                Self::resolve(node, variables)
-            }
-            None => match node.inner.into_hash() {
-                Some(mut hash) => {
-                    let name = {
-                        let key = "name";
-
-                        hash.remove(&StrictYaml::String(key.into()))
-                            .ok_or(format!(
-                                "{}: failed to find required key `{}`",
-                                node.source, key
-                            ))
-                            .map(|_node| UnresolvedNode {
-                                source: node.source.clone() + key,
-                                inner: _node,
-                            })
-                            .and_then(|_node| String::resolve(_node, variables))?
-                    };
-
-                    let value = {
-                        let key = "value";
-
-                        hash.remove(&StrictYaml::String(key.into()))
-                            .map(|_node| UnresolvedNode {
-                                source: node.source.clone() + key,
-                                inner: _node,
-                            })
-                            .map(|_node| String::resolve(_node, variables))
-                            .transpose()?
-                    };
-
-                    if let Some(key) = hash.pop_back().and_then(|(key, _)| key.into_string()) {
-                        return Err(format!(
-                            "{}: encountered unexpected key `{}`",
-                            node.source, key
-                        ));
-                    }
-
-                    Ok(Self { name, value })
-                }
-                None => Err(format!("{}: node must be a hash", node.source)),
-            },
-        }
-    }
-}
-
 impl Resolvable for common::resources::file::Environment {
     fn resolve(
         node: UnresolvedNode,
@@ -490,12 +432,8 @@ impl_resolvable_via_string!(
     common::resources::apt::package::Ensure,
     common::resources::apt::package::Name,
     common::resources::apt::package::Version,
-    common::resources::apt::preference::Name,
-    common::resources::cron::job::Name,
     common::resources::file::Mode,
     common::resources::group::Name,
-    common::resources::resolv_conf::ResolverOption,
-    common::resources::resolv_conf::SortlistPair,
     common::resources::user::ExpiryDate,
     common::resources::user::Name,
     common::resources::user::Password

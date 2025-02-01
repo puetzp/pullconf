@@ -1,22 +1,17 @@
 pub mod apt;
-pub mod cron;
 pub mod directory;
 pub mod file;
 pub mod group;
 pub mod host;
-pub mod resolv_conf;
 mod resolve;
 pub mod symlink;
 pub mod user;
 
 pub use apt::package::Package as AptPackage;
-pub use apt::preference::Preference as AptPreference;
-pub use cron::job::Job as CronJob;
 pub use directory::Directory;
 pub use file::File;
 pub use group::Group;
 pub use host::Host;
-pub use resolv_conf::ResolvConf;
 pub use resolve::{Resolvable, UnresolvedNode};
 pub use symlink::Symlink;
 pub use user::User;
@@ -24,10 +19,7 @@ pub use user::User;
 use crate::configuration::Source;
 use common::{
     resources::{
-        apt::{package::Name as AptPackageName, preference::Name as AptPreferenceName},
-        cron::job::Name as CronJobName,
-        group::Name as GroupName,
-        user::Name as UserName,
+        apt::package::Name as AptPackageName, group::Name as GroupName, user::Name as UserName,
     },
     ResourceMetadata, ResourceType, SafePathBuf,
 };
@@ -132,37 +124,12 @@ macro_rules! impl_resources {
     }
 }
 
-impl_resources!(
-    AptPackage,
-    AptPreference,
-    CronJob,
-    Directory,
-    File,
-    Group,
-    Host,
-    ResolvConf,
-    Symlink,
-    User
-);
+impl_resources!(AptPackage, Directory, File, Group, Host, Symlink, User);
 
 impl Resource {
     pub fn as_apt_package(&self) -> Option<&AptPackage> {
         match self {
             Self::AptPackage(item) => Some(item),
-            _ => None,
-        }
-    }
-
-    pub fn as_apt_preference(&self) -> Option<&AptPreference> {
-        match self {
-            Self::AptPreference(item) => Some(item),
-            _ => None,
-        }
-    }
-
-    pub fn as_cron_job(&self) -> Option<&CronJob> {
-        match self {
-            Self::CronJob(item) => Some(item),
             _ => None,
         }
     }
@@ -195,13 +162,6 @@ impl Resource {
         }
     }
 
-    pub fn as_resolv_conf(&self) -> Option<&ResolvConf> {
-        match self {
-            Self::ResolvConf(item) => Some(item),
-            _ => None,
-        }
-    }
-
     pub fn as_symlink(&self) -> Option<&Symlink> {
         match self {
             Self::Symlink(item) => Some(item),
@@ -220,13 +180,10 @@ impl Resource {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Dependency {
     AptPackage { name: AptPackageName },
-    AptPreference { name: AptPreferenceName },
-    CronJob { name: CronJobName },
     Directory { path: SafePathBuf },
     File { path: SafePathBuf },
     Group { name: GroupName },
     Host { ip_address: IpAddr },
-    ResolvConf,
     Symlink { path: SafePathBuf },
     User { name: UserName },
 }
@@ -235,13 +192,10 @@ impl Dependency {
     pub fn repr(&self) -> String {
         match self {
             Self::AptPackage { name } => format!("apt::package[{}]", name),
-            Self::AptPreference { name } => format!("apt::preference[{}]", name),
-            Self::CronJob { name } => format!("cron::job[{}]", name),
             Self::Directory { path } => format!("directory[{}]", path.display()),
             Self::File { path } => format!("file[{}]", path.display()),
             Self::Group { name } => format!("group[{}]", name),
             Self::Host { ip_address } => format!("host[{}]", ip_address),
-            Self::ResolvConf => "resolv.conf[/etc/resolv.conf]".to_string(),
             Self::Symlink { path } => format!("symlink[{}]", path.display()),
             Self::User { name } => format!("user[{}]", name),
         }
@@ -276,38 +230,6 @@ impl TryFrom<(Source, StrictYaml)> for Dependency {
                                 .map_err(|error| format!("{}: {}", source.clone() + key, error))?;
 
                             Ok(Dependency::AptPackage { name })
-                        }
-                        None => Err(format!("{}: node must be a string", source.clone() + key)),
-                    },
-                    None => Err(format!("{}: failed to find required key `{}`", source, key)),
-                }
-            }
-            "apt::preference" => {
-                let key = "name";
-
-                match hash.remove(&StrictYaml::String(key.into())) {
-                    Some(node) => match node.into_string() {
-                        Some(s) => {
-                            let name = AptPreferenceName::from_str(&s)
-                                .map_err(|error| format!("{}: {}", source.clone() + key, error))?;
-
-                            Ok(Dependency::AptPreference { name })
-                        }
-                        None => Err(format!("{}: node must be a string", source.clone() + key)),
-                    },
-                    None => Err(format!("{}: failed to find required key `{}`", source, key)),
-                }
-            }
-            "cron::job" => {
-                let key = "name";
-
-                match hash.remove(&StrictYaml::String(key.into())) {
-                    Some(node) => match node.into_string() {
-                        Some(s) => {
-                            let name = CronJobName::from_str(&s)
-                                .map_err(|error| format!("{}: {}", source.clone() + key, error))?;
-
-                            Ok(Dependency::CronJob { name })
                         }
                         None => Err(format!("{}: node must be a string", source.clone() + key)),
                     },
@@ -378,7 +300,6 @@ impl TryFrom<(Source, StrictYaml)> for Dependency {
                     None => Err(format!("{}: failed to find required key `{}`", source, key)),
                 }
             }
-            "resolv.conf" => Ok(Dependency::ResolvConf),
             "symlink" => {
                 let key = "path";
 
@@ -434,14 +355,6 @@ pub enum UnresolvedResource {
         parameters: apt::package::UnresolvedParameters,
         requires: Vec<Dependency>,
     },
-    AptPreference {
-        parameters: apt::preference::UnresolvedParameters,
-        requires: Vec<Dependency>,
-    },
-    CronJob {
-        parameters: cron::job::UnresolvedParameters,
-        requires: Vec<Dependency>,
-    },
     Directory {
         parameters: directory::UnresolvedParameters,
         requires: Vec<Dependency>,
@@ -458,10 +371,6 @@ pub enum UnresolvedResource {
         parameters: host::UnresolvedParameters,
         requires: Vec<Dependency>,
     },
-    ResolvConf {
-        parameters: resolv_conf::UnresolvedParameters,
-        requires: Vec<Dependency>,
-    },
     Symlink {
         parameters: symlink::UnresolvedParameters,
         requires: Vec<Dependency>,
@@ -476,13 +385,10 @@ impl UnresolvedResource {
     pub fn requires(&self) -> &[Dependency] {
         match self {
             Self::AptPackage { requires, .. } => requires.as_slice(),
-            Self::AptPreference { requires, .. } => requires.as_slice(),
-            Self::CronJob { requires, .. } => requires.as_slice(),
             Self::Directory { requires, .. } => requires.as_slice(),
             Self::File { requires, .. } => requires.as_slice(),
             Self::Group { requires, .. } => requires.as_slice(),
             Self::Host { requires, .. } => requires.as_slice(),
-            Self::ResolvConf { requires, .. } => requires.as_slice(),
             Self::Symlink { requires, .. } => requires.as_slice(),
             Self::User { requires, .. } => requires.as_slice(),
         }
@@ -491,13 +397,10 @@ impl UnresolvedResource {
     pub fn kind(&self) -> ResourceType {
         match self {
             Self::AptPackage { parameters, .. } => parameters.kind(),
-            Self::AptPreference { parameters, .. } => parameters.kind(),
-            Self::CronJob { parameters, .. } => parameters.kind(),
             Self::Directory { parameters, .. } => parameters.kind(),
             Self::File { parameters, .. } => parameters.kind(),
             Self::Group { parameters, .. } => parameters.kind(),
             Self::Host { parameters, .. } => parameters.kind(),
-            Self::ResolvConf { parameters, .. } => parameters.kind(),
             Self::Symlink { parameters, .. } => parameters.kind(),
             Self::User { parameters, .. } => parameters.kind(),
         }
@@ -558,26 +461,6 @@ impl TryFrom<(Source, Hash)> for UnresolvedResource {
                         requires,
                     }
                 }
-                "apt::preference" => {
-                    let parameters = apt::preference::UnresolvedParameters::try_from((
-                        source.clone() + key,
-                        hash,
-                    ))?;
-
-                    Self::AptPreference {
-                        parameters,
-                        requires,
-                    }
-                }
-                "cron::job" => {
-                    let parameters =
-                        cron::job::UnresolvedParameters::try_from((source.clone() + key, hash))?;
-
-                    Self::CronJob {
-                        parameters,
-                        requires,
-                    }
-                }
                 "directory" => {
                     let parameters =
                         directory::UnresolvedParameters::try_from((source.clone() + key, hash))?;
@@ -610,15 +493,6 @@ impl TryFrom<(Source, Hash)> for UnresolvedResource {
                         host::UnresolvedParameters::try_from((source.clone() + key, hash))?;
 
                     Self::Host {
-                        parameters,
-                        requires,
-                    }
-                }
-                "resolv.conf" => {
-                    let parameters =
-                        resolv_conf::UnresolvedParameters::try_from((source.clone() + key, hash))?;
-
-                    Self::ResolvConf {
                         parameters,
                         requires,
                     }

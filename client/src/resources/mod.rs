@@ -1,10 +1,8 @@
 pub mod apt;
-pub mod cron;
 pub mod directory;
 pub mod file;
 pub mod group;
 pub mod host;
-pub mod resolv_conf;
 pub mod symlink;
 pub mod user;
 
@@ -42,16 +40,10 @@ pub struct Resources {
 pub enum Resource {
     #[serde(rename = "apt::package")]
     AptPackage(apt::package::Package),
-    #[serde(rename = "apt::preference")]
-    AptPreference(apt::preference::Preference),
-    #[serde(rename = "cron::job")]
-    CronJob(cron::job::Job),
     Directory(directory::Directory),
     File(file::File),
     Group(group::Group),
     Host(host::Host),
-    #[serde(rename = "resolv.conf")]
-    ResolvConf(resolv_conf::ResolvConf),
     Symlink(symlink::Symlink),
     User(user::User),
 }
@@ -64,13 +56,10 @@ impl Resource {
     pub fn id(&self) -> Uuid {
         match self {
             Self::AptPackage(resource) => resource.id(),
-            Self::AptPreference(resource) => resource.id(),
-            Self::CronJob(resource) => resource.id(),
             Self::Directory(resource) => resource.id(),
             Self::File(resource) => resource.id(),
             Self::Group(resource) => resource.id(),
             Self::Host(resource) => resource.id(),
-            Self::ResolvConf(resource) => resource.id(),
             Self::Symlink(resource) => resource.id(),
             Self::User(resource) => resource.id(),
         }
@@ -83,13 +72,10 @@ impl Resource {
     pub fn repr(&self) -> String {
         match self {
             Self::AptPackage(resource) => resource.repr(),
-            Self::AptPreference(resource) => resource.repr(),
-            Self::CronJob(resource) => resource.repr(),
             Self::Directory(resource) => resource.repr(),
             Self::File(resource) => resource.repr(),
             Self::Group(resource) => resource.repr(),
             Self::Host(resource) => resource.repr(),
-            Self::ResolvConf(resource) => resource.repr(),
             Self::Symlink(resource) => resource.repr(),
             Self::User(resource) => resource.repr(),
         }
@@ -102,13 +88,10 @@ impl Resource {
     pub fn is_ready(&self, applied_resources: &HashMap<Uuid, Resource>) -> bool {
         match self {
             Self::AptPackage(resource) => resource.is_ready(applied_resources),
-            Self::AptPreference(resource) => resource.is_ready(applied_resources),
-            Self::CronJob(resource) => resource.is_ready(applied_resources),
             Self::Directory(resource) => resource.is_ready(applied_resources),
             Self::File(resource) => resource.is_ready(applied_resources),
             Self::Group(resource) => resource.is_ready(applied_resources),
             Self::Host(resource) => resource.is_ready(applied_resources),
-            Self::ResolvConf(resource) => resource.is_ready(applied_resources),
             Self::Symlink(resource) => resource.is_ready(applied_resources),
             Self::User(resource) => resource.is_ready(applied_resources),
         }
@@ -126,15 +109,12 @@ impl Resource {
     ) {
         match self {
             Self::AptPackage(ref mut resource) => resource.apply(applied_resources),
-            Self::AptPreference(ref mut resource) => resource.apply(applied_resources),
-            Self::CronJob(ref mut resource) => resource.apply(applied_resources),
             Self::Directory(ref mut resource) => resource.apply(applied_resources),
             Self::File(ref mut resource) => {
                 resource.apply(agent, base_url, api_key, applied_resources)
             }
             Self::Group(ref mut resource) => resource.apply(applied_resources),
             Self::Host(ref mut resource) => resource.apply(applied_resources),
-            Self::ResolvConf(ref mut resource) => resource.apply(applied_resources),
             Self::Symlink(ref mut resource) => resource.apply(applied_resources),
             Self::User(ref mut resource) => resource.apply(applied_resources),
         }
@@ -144,13 +124,10 @@ impl Resource {
     pub fn is_skipped(&self) -> bool {
         match self {
             Self::AptPackage(resource) => resource.action == Action::Skipped,
-            Self::AptPreference(resource) => resource.action == Action::Skipped,
-            Self::CronJob(resource) => resource.action == Action::Skipped,
             Self::Directory(resource) => resource.action == Action::Skipped,
             Self::File(resource) => resource.action == Action::Skipped,
             Self::Group(resource) => resource.action == Action::Skipped,
             Self::Host(resource) => resource.action == Action::Skipped,
-            Self::ResolvConf(resource) => resource.action == Action::Skipped,
             Self::Symlink(resource) => resource.action == Action::Skipped,
             Self::User(resource) => resource.action == Action::Skipped,
         }
@@ -160,13 +137,10 @@ impl Resource {
     pub fn is_failed(&self) -> bool {
         match self {
             Self::AptPackage(resource) => resource.action == Action::Failed,
-            Self::AptPreference(resource) => resource.action == Action::Failed,
-            Self::CronJob(resource) => resource.action == Action::Failed,
             Self::Directory(resource) => resource.action == Action::Failed,
             Self::File(resource) => resource.action == Action::Failed,
             Self::Group(resource) => resource.action == Action::Failed,
             Self::Host(resource) => resource.action == Action::Failed,
-            Self::ResolvConf(resource) => resource.action == Action::Failed,
             Self::Symlink(resource) => resource.action == Action::Failed,
             Self::User(resource) => resource.action == Action::Failed,
         }
@@ -178,13 +152,10 @@ impl Resource {
             Self::AptPackage(resource) => {
                 resource.parameters.ensure.is_absent() || resource.parameters.ensure.is_purged()
             }
-            Self::AptPreference(resource) => resource.parameters.ensure.is_absent(),
-            Self::CronJob(resource) => resource.parameters.ensure.is_absent(),
             Self::Directory(resource) => resource.parameters.ensure.is_absent(),
             Self::File(resource) => resource.parameters.ensure.is_absent(),
             Self::Group(resource) => resource.parameters.ensure.is_absent(),
             Self::Host(resource) => resource.parameters.ensure.is_absent(),
-            Self::ResolvConf(resource) => resource.parameters.ensure.is_absent(),
             Self::Symlink(resource) => resource.parameters.ensure.is_absent(),
             Self::User(resource) => resource.parameters.ensure.is_absent(),
         }

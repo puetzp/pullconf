@@ -2,18 +2,15 @@ use crate::{
     configuration::Source,
     types::{
         resources::{
-            apt, cron, directory, file, group, host, resolv_conf, symlink, user, Dependency,
-            Resource, UnresolvedResource,
+            apt, directory, file, group, host, symlink, user, Dependency, Resource,
+            UnresolvedResource,
         },
         ApiKey, Group,
     },
 };
 use common::{
     resources::{
-        apt::{package::Name as AptPackageName, preference::Name as AptPreferenceName},
-        cron::job::Name as CronJobName,
-        group::Name as GroupName,
-        user::Name as UserName,
+        apt::package::Name as AptPackageName, group::Name as GroupName, user::Name as UserName,
     },
     Hostname,
 };
@@ -62,8 +59,6 @@ pub struct ValidationHelpers {
     pub group_names: HashSet<GroupName>,
     pub user_names: HashSet<UserName>,
     pub apt_package_names: HashSet<AptPackageName>,
-    pub apt_preference_names: HashSet<AptPreferenceName>,
-    pub cron_job_names: HashSet<CronJobName>,
 }
 
 impl ValidationHelpers {
@@ -219,24 +214,6 @@ impl Client {
                         .is_some_and(|item| item.parameters.name == *name)
                 })
                 .cloned(),
-            Dependency::AptPreference { name } => self
-                .resources
-                .iter()
-                .find(|resource| {
-                    resource
-                        .as_apt_preference()
-                        .is_some_and(|item| item.parameters.name == *name)
-                })
-                .cloned(),
-            Dependency::CronJob { name } => self
-                .resources
-                .iter()
-                .find(|resource| {
-                    resource
-                        .as_cron_job()
-                        .is_some_and(|item| item.parameters.name == *name)
-                })
-                .cloned(),
             Dependency::Directory { path } => self
                 .resources
                 .iter()
@@ -272,11 +249,6 @@ impl Client {
                         .as_host()
                         .is_some_and(|item| item.parameters.ip_address == *ip_address)
                 })
-                .cloned(),
-            Dependency::ResolvConf => self
-                .resources
-                .iter()
-                .find(|resource| resource.as_resolv_conf().is_some())
                 .cloned(),
             Dependency::Symlink { path } => self
                 .resources
@@ -387,13 +359,10 @@ impl Client {
 
             match resource {
                 Resource::AptPackage(ref mut item) => self.validate_apt_package(item)?,
-                Resource::AptPreference(ref mut item) => self.validate_apt_preference(item)?,
-                Resource::CronJob(ref mut item) => self.validate_cron_job(item)?,
                 Resource::Directory(ref mut item) => self.validate_directory(item)?,
                 Resource::File(ref mut item) => self.validate_file(item)?,
                 Resource::Group(ref mut item) => self.validate_group(item)?,
                 Resource::Host(ref mut item) => self.validate_host(item)?,
-                Resource::ResolvConf(ref mut item) => self.validate_resolv_conf(item)?,
                 Resource::Symlink(ref mut item) => self.validate_symlink(item)?,
                 Resource::User(ref mut item) => self.validate_user(item)?,
             }
@@ -499,34 +468,6 @@ impl Client {
         Ok(())
     }
 
-    fn validate_cron_job(&mut self, job: &mut cron::job::Job) -> Result<(), String> {
-        let name = job.parameters.name.to_string();
-
-        // Check for uniqueness of the name parameter.
-        if !self
-            .temporary
-            .cron_job_names
-            .insert(job.parameters.name.clone())
-        {
-            return Err(format!(
-                "`{}`: cron job name `{}` appears in multiple `{}` resources, cron job names must be unique",
-                job.repr(),
-                name,
-                job.kind(),
-            ));
-        }
-
-        if !self.temporary.paths.insert(job.parameters.target.clone()) {
-            return Err(format!(
-                "`{}`: resource conflicts with another resource that manages the target path `{}`",
-                job.repr(),
-                job.parameters.target.display()
-            ));
-        }
-
-        Ok(())
-    }
-
     fn validate_directory(&mut self, directory: &mut directory::Directory) -> Result<(), String> {
         let path = directory.parameters.path.display().to_string();
 
@@ -593,20 +534,6 @@ impl Client {
             .filter(|s| {
                 s.parameters
                     .path
-                    .parent()
-                    .is_some_and(|path| path == *directory.parameters.path)
-            })
-        {
-            directory.relationships.children.push(child.into());
-        }
-
-        for child in self
-            .resources
-            .iter()
-            .filter_map(|item| item.as_apt_preference())
-            .filter(|p| {
-                p.parameters
-                    .target
                     .parent()
                     .is_some_and(|path| path == *directory.parameters.path)
             })
@@ -726,43 +653,6 @@ impl Client {
         Ok(())
     }
 
-    fn validate_resolv_conf(
-        &mut self,
-        resolv_conf: &mut resolv_conf::ResolvConf,
-    ) -> Result<(), String> {
-        // Ensure that there's only one `resolv.conf` resource.
-        if self
-            .resources
-            .iter()
-            .any(|item| item.as_resolv_conf().is_some())
-        {
-            return Err(format!(
-                "`{}`: duplicate resource found",
-                resolv_conf.repr()
-            ));
-        }
-
-        // Check if there is also a file managing `/etc/resolv.conf` whose `content`
-        // or `source` parameter are set. This combination is not supported if a
-        // `resolv.conf` resource exists.
-        if let Some(file) = self
-            .resources
-            .iter()
-            .filter_map(|item| item.as_file())
-            .find(|f| *f.parameters.path == resolv_conf.parameters.target)
-        {
-            if file.parameters.content.is_some() || file.parameters.source.is_some() {
-                return Err(format!(
-                    "`{}`: resource conflicts with `{}` whose `content` or `source` parameters are set",
-                    resolv_conf.repr(),
-                    file.repr()
-                ));
-            }
-        }
-
-        Ok(())
-    }
-
     fn validate_apt_package(&mut self, package: &mut apt::package::Package) -> Result<(), String> {
         let name = package.parameters.name.to_string();
 
@@ -777,41 +667,6 @@ impl Client {
                 package.repr(),
                 name,
                 package.kind(),
-            ));
-        }
-
-        Ok(())
-    }
-
-    fn validate_apt_preference(
-        &mut self,
-        preference: &mut apt::preference::Preference,
-    ) -> Result<(), String> {
-        let name = preference.parameters.name.to_string();
-
-        // Check for uniqueness of the name parameter.
-        if !self
-            .temporary
-            .apt_preference_names
-            .insert(preference.parameters.name.clone())
-        {
-            return Err(format!(
-                "`{}`: preference name `{}` appears in multiple `{}` resources, preference names must be unique",
-                preference.repr(),
-                name,
-                preference.kind(),
-            ));
-        }
-
-        if !self
-            .temporary
-            .paths
-            .insert(preference.parameters.target.clone())
-        {
-            return Err(format!(
-                "`{}`: resource conflicts with another resource that manages the target path `{}`",
-                preference.repr(),
-                preference.parameters.target.display()
             ));
         }
 
