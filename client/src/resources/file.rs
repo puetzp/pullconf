@@ -380,10 +380,11 @@ impl File {
             }
 
             debug!(
-                "`{}`: executing {:?} with args {:?}",
+                "`{}`: executing {:?} with args {:?} and environment variables {:?}",
                 self.repr(),
                 command.get_program(),
-                command.get_args()
+                command.get_args(),
+                command.get_envs()
             );
 
             let output = command
