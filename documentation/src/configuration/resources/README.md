@@ -15,19 +15,16 @@ Every resource is structured the same at the root and contains the following key
 Valid values for `type` are:
 
 - `apt::package`
-- `apt::preference`
-- `cron::job`
 - `directory`
 - `file`
 - `group`
 - `host`
-- `resolv.conf`
 - `symlink`
 - `user`
 
 The keys inside `parameters` differ between resources, so the respective resource documentation section should be consulted to see the available resource parameters.
 
-Also note that [variables](../variables.md) can only be used inside the `parameters` hash.
+Also note that [variables](../variables.md) can only be used to substitute values inside the `parameters` hash. Root-level keys such as `type` cannot be substituted.
 
 ## Example
 
@@ -68,12 +65,6 @@ resources:
 	  - type: apt::package
 	    name: some-package
 
-      - type: apt::preference
-	    name: some-preference
-
-      - type: cron::job
-	    name: some-job
-
       - type: directory
 	    path: /some/directory
 
@@ -85,8 +76,6 @@ resources:
 	  
 	  - type: host
 	    ip_address: 172.16.0.1
-	  
-	  - type: resolv.conf
 	  
 	  - type: symlink
 	    path: /some/symlink

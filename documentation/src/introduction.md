@@ -11,7 +11,16 @@ As the name implies Pullconf follows a **pull-based** approach to system configu
 
 **Resources** such as [file](configuration/resources/file.md), [directory](configuration/resources/directory.md) or [user](configuration/resources/user.md) are defined in configuration files on the server. These files follow the [StrictYAML](https://hitchdev.com/strictyaml) syntax.
 
-Scripting and the development of custom modules is *not* supported and out of scope of this project. It focuses instead on including all kinds of resources directly into the project source, thus prioritizing performance and correctness at the cost of flexibility and development speed. However it should ultimately be possible to create simple [file](configuration/resources/file.md)s but also install and manage the configuration of complex software, e.g. a Prometheus server, by defining them as resources.
+Scripting and the development of custom modules and resources is *not* supported and out of scope of this project. Unlike other configuration management software such as Puppet, Pullconf does *not* provide a DSL (domain-specific language), other than the specific syntax of the StrictYAML configuration and the fixed set of options that the system understands.
+
+Instead Pullconf provides a limited, but versatile set of resources to produce a certain state on the client system.
+
+Most notably the [file](configuration/resources/file.md) resource can be used to install a file on the client, set parts of its content based on commands that run on the client, and run other commands when the file changes, e.g. to restart a service. Since "everything is a file" in Linux, this resource alone does a lot of the heavy lifting.
+
+Pullconf encourages administrators to:
+
+* simply copy their battle-tested configuration (e.g. for services such as `rsyslog`) as-is into a Pullconf configuration file, instead of having to translate the configuration to another format that is specific to the configuration management system at hand.
+* use scripts that are local to the client to set file content dynamically, e.g. determine the client's primary IP address and add it as listen address to `/etc/ssh/sshd_config`. Since Pullconf simply takes the script output to replace placeholders, any scripting language can be used.
 
 The following is a basic example for a client configuration file to get a sense of the way StrictYAML is used to define resources:
 
@@ -29,6 +38,8 @@ groups:
 
 variables:
   ip_address: 172.16.5.6
+  primary-nameserver: 10.4.1.1
+  secondary-nameserver: 10.4.1.2
 
 resources:
   - type: host
@@ -46,36 +57,47 @@ resources:
 
   - type: file
     parameters:
+	  path: /etc/resolv.conf
+	  owner: root
+	  group: root
+	  content:
+	    value: |
+		  nameserver ${pullconf::primary-nameserver}
+		  nameserver ${pullconf::secondary-nameserver}
+
+  - type: file
+    parameters:
 	  path: /etc/logrotate.d/rsyslog
 	  owner: root
 	  group: root
 	  mode: 0644
-	  content: |
-	    /var/log/syslog
-		/var/log/mail.info
-		/var/log/mail.warn
-		/var/log/mail.err
-		/var/log/mail.log
-		/var/log/daemon.log
-		/var/log/kern.log
-		/var/log/auth.log
-		/var/log/user.log
-		/var/log/lpr.log
-		/var/log/cron.log
-		/var/log/debug
-		/var/log/messages
-		{
-			rotate 4
-			weekly
-			missingok
-			notifempty
-			compress
-			delaycompress
-			sharedscripts
-			postrotate
-			/usr/lib/rsyslog/rsyslog-rotate
-			endscript
-		}
+	  content:
+		value: |
+          /var/log/syslog
+          /var/log/mail.info
+          /var/log/mail.warn
+          /var/log/mail.err
+          /var/log/mail.log
+          /var/log/daemon.log
+          /var/log/kern.log
+          /var/log/auth.log
+          /var/log/user.log
+          /var/log/lpr.log
+          /var/log/cron.log
+          /var/log/debug
+          /var/log/messages
+          {
+            rotate 4
+            weekly
+            missingok
+            notifempty
+            compress
+            delaycompress
+            sharedscripts
+            postrotate
+              /usr/lib/rsyslog/rsyslog-rotate
+            endscript
+          }
 ```
 
 ## Use cases

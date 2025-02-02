@@ -112,6 +112,7 @@ groups:
 
 variables:
   ip_address: 192.168.1.55
+  logrotate-dir: /etc/logrotate.d
 
 resources:
   - type: host
@@ -126,21 +127,22 @@ resources:
   - type: file
     parameters:
 	  ensure: present
-	  path: /etc/logrotate.d/apt
-	  content: |
-	    /var/log/apt/term.log {
-		  rotate 12
-		  monthly
-		  compress
-		  missingok
-		  notifempty
-        }
+	  path: ${pullconf::logrotate-dir}/apt
+	  content:
+	    value: |
+          /var/log/apt/term.log {
+            rotate 12
+            monthly
+            compress
+            missingok
+            notifempty
+          }
 
-       /var/log/apt/history.log {
-         rotate 12
-         monthly
-         compress
-         missingok
-         notifempty
-       }
+          /var/log/apt/history.log {
+            rotate 12
+            monthly
+            compress
+            missingok
+            notifempty
+          }
 ```

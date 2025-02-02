@@ -59,9 +59,9 @@ variables:
 resources:
   - type: host
     parameters:
-      # `$pullconf::hostname` is a pre-defined variable that evaluates to `blechkiste.local`
-      hostname: $pullconf::hostname
-      ip_address: $pullconf::ip_address
+      # `${pullconf::hostname}` is a pre-defined variable that evaluates to `blechkiste.local`
+      hostname: ${pullconf::hostname}
+      ip_address: ${pullconf::ip_address}
 
   - type: host
     parameters:

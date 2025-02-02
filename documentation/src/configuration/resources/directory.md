@@ -10,7 +10,7 @@ A directory implicitly depends on other directory or [symlink](symlink.md) resou
 
 A directory also implicitly depends on [user](user.md) resources whose `home` parameter matches the directory's `path`. This is because the tools creating the user already create a home directory. So in most cases the home directory does not need to be managed by a directory resource. But when it is it will be applied after the user resource and operate on the existing home directory that was created by other means.
 
-A directory also forms a relationship with child nodes, that is directory, [file](file.md) and [symlink](symlink.md) resources who this directory is a parent to. A directory resource needs to keep track of managed child nodes, because if will remove unmanaged child nodes if the `purge` parameter is set to `true`.
+A directory also forms a relationship with child nodes, that is directory, [file](file.md) and [symlink](symlink.md) resources who this directory is a parent to. A directory resource needs to keep track of managed child nodes, because it will remove unmanaged child nodes if the `purge` parameter is set to `true`.
 
 ## Parameters
 
