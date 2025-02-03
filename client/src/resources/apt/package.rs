@@ -218,6 +218,10 @@ impl Package {
         let s = String::from_utf8_lossy(&output.stdout).to_owned();
 
         if output.status.success() {
+            if s == "''" {
+                return Ok(None);
+            }
+
             match Version::from_str(s.trim_start_matches('\'').trim_end_matches('\'')) {
                 Ok(version) => Ok(Some(version)),
                 Err(error) => anyhow::bail!(
