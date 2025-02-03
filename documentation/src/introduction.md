@@ -41,10 +41,10 @@ variables:
 resources:
   - type: host
     parameters:
-	  hostname: proxy
-	  ip_address: 172.16.10.5
-	  aliases:
-	    - proxy.local
+      hostname: proxy
+      ip_address: 172.16.10.5
+      aliases:
+        - proxy.local
 
   - type: apt::package
     parameters:
