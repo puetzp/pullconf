@@ -48,60 +48,57 @@ type: client
 name: blechkiste.local
 api_key: 20b5094257d70c8d126cf278510b6443d5139e86e18be1389b90a28d526c8236
 groups:
-  - sshd
   - postfix
   - nginx
   - hardening
 
 variables:
-  ip_address: 172.16.5.6
+  sshd-port: 22
 
 resources:
   - type: host
     parameters:
-      # `${pullconf::hostname}` is a pre-defined variable that evaluates to `blechkiste.local`
-      hostname: ${pullconf::hostname}
-      ip_address: ${pullconf::ip_address}
+	  hostname: proxy
+	  ip_address: 172.16.10.5
+	  aliases:
+	    - proxy.local
 
-  - type: host
+  - type: apt::package
     parameters:
-      hostname: proxy
-      ip_address: 172.16.10.5
-      aliases:
-        - proxy.local
+      ensure: present
+      name: openssh-server
 
   - type: file
     parameters:
-      path: /etc/logrotate.d/rsyslog
+      ensure: present
+      path: /usr/local/sbin/show-ip-address
+      mode: 0755
       owner: root
       group: root
-      mode: 0644
-      content: |
-        /var/log/syslog
-        /var/log/mail.info
-        /var/log/mail.warn
-        /var/log/mail.err
-        /var/log/mail.log
-        /var/log/daemon.log
-        /var/log/kern.log
-        /var/log/auth.log
-        /var/log/user.log
-        /var/log/lpr.log
-        /var/log/cron.log
-        /var/log/debug
-        /var/log/messages
-        {
-            rotate 4
-            weekly
-            missingok
-            notifempty
-            compress
-            delaycompress
-            sharedscripts
-            postrotate
-            /usr/lib/rsyslog/rsyslog-rotate
-            endscript
-        }
+      content:
+        value: |
+          #!/bin/bash
+          ip --json -4 address show dev $1 | jq --raw-output '.[0].addr_info[0].local'
+
+  - type: file
+    parameters:
+      ensure: present
+      path: /etc/ssh/sshd_config
+      mode: 0640
+      owner: root
+      group: root
+      content:
+        value: |
+          Port ${pullconf::sshd-port}
+          Listen <ip-address>
+        replace:
+          - variable: <ip-address>
+            command:
+              - /usr/local/sbin/show-ip-address
+              - wlxdc15c898c209
+    requires:
+      - type: apt::package
+        name: openssh-server
 ```
 
 ## Future development
