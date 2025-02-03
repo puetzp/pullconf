@@ -95,7 +95,7 @@ resources:
           - variable: <ip-address>
             command:
               - /usr/local/sbin/show-ip-address
-              - wlxdc15c898c209
+              - ens192
     requires:
       - type: apt::package
         name: openssh-server
