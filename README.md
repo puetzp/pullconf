@@ -23,7 +23,7 @@ More detailed information, installation instructions and configuration examples 
 
 This section could use a nice drawing, but the architecture can also be explained in a few sentences:
 
-A fleet of clients (Debian-based Linux servers) connects regularly with a central server to fetch their respective configuration/resource catalog. The configuration is stored on the server in a flat directory structure containing TOML files. Clients use their fully-qualified domain name/hostname and an API key to authenticate to the server.
+A fleet of clients (Debian-based Linux servers) connects regularly with a central server to fetch their respective configuration/resource catalog. The configuration is stored in a (possibly nested) directory on the server containing StrictYAML files. Clients use their fully-qualified domain name/hostname and an API key to authenticate to the server.
 
 ## Features
 
