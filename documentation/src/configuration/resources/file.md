@@ -31,7 +31,7 @@ The `replace` array must contain hashes with the following keys:
 
 | Name | Type | Description | Mandatory | Default |
 | --- | --- | --- | --- | --- |
-| `variable` | string | The placeholder to be substituted by the command output. | yes | |
+| `placeholder` | string | The placeholder to be substituted by the command output. | yes | |
 | `command` | array | The command and its arguments. | yes | |
 | `environment` | array | Environment variables that the process that executes the `command` should inherhit. | no | |
 

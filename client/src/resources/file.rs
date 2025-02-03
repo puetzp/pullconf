@@ -394,7 +394,7 @@ impl File {
             let stdout = String::from_utf8(output.stdout)?;
 
             if output.status.success() {
-                _content = _content.replace(&item.variable, &stdout);
+                _content = _content.replace(&item.placeholder, &stdout);
             } else {
                 anyhow::bail!(
                     "failed to execute command for content replacement, {:?} exited with {}: {}",

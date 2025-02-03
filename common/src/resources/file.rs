@@ -28,7 +28,7 @@ pub struct Content {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Replacement {
-    pub variable: String,
+    pub placeholder: String,
     pub command: Vec<String>,
     pub environment: Vec<Environment>,
 }

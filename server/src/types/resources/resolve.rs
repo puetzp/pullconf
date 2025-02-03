@@ -323,8 +323,8 @@ impl Resolvable for common::resources::file::Replacement {
             }
             None => match node.inner.into_hash() {
                 Some(mut hash) => {
-                    let variable = {
-                        let key = "variable";
+                    let placeholder = {
+                        let key = "placeholder";
 
                         hash.remove(&StrictYaml::String(key.into()))
                             .ok_or(format!(
@@ -378,7 +378,7 @@ impl Resolvable for common::resources::file::Replacement {
                     }
 
                     Ok(Self {
-                        variable,
+                        placeholder,
                         command,
                         environment,
                     })
