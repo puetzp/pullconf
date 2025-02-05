@@ -92,7 +92,7 @@ resources:
           Port ${pullconf::sshd-port}
           Listen <ip-address>
         replace:
-          - variable: <ip-address>
+          - placeholder: <ip-address>
             command:
               - /usr/local/sbin/show-ip-address
               - ens192
