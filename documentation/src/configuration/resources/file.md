@@ -85,7 +85,7 @@ resources:
 		  PubkeyAuthentication yes
 		  AllowTcpForwarding ${pullconf::sshd-allow-tcp-forwarding}
 		replace:
-		  placeholder: <ip>
-		  command:
-		    - /usr/local/sbin/determine-primary-ip-address.py
+		  - placeholder: <ip>
+            command:
+		      - /usr/local/sbin/determine-primary-ip-address.py
 ```
