@@ -32,7 +32,7 @@ The `replace` array must contain hashes with the following keys:
 | Name | Type | Description | Mandatory | Default |
 | --- | --- | --- | --- | --- |
 | `placeholder` | string | The placeholder to be substituted by the command output. | yes | |
-| `command` | array | The command and its arguments. | yes | |
+| `command` | array | The command and its arguments as strings. The program name and its arguments are each separate array items. | yes | |
 | `environment` | array | Environment variables that the process that executes the `command` should inherhit. | no | |
 
 The `environment` array must contain hashes with the following keys:
@@ -42,6 +42,7 @@ The `environment` array must contain hashes with the following keys:
 | `name` | string | The name of the environment variable. | yes | |
 | `value` | string | The value of the environment variable. If this parameter is omitted the variable will be set to an empty string. | no | |
 
+> Note that `command` is not passed through a shell. One way to use shell-specific features such as pipes is to install a script (e.g. via [file](file.md)) first and then execute this script in `command`.
 
 ## Examples
 

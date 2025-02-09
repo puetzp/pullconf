@@ -10,12 +10,14 @@ Every resource is structured the same at the root and contains the following key
 | --- | --- | --- | --- |
 | `type` | A string that determines how to parse this resource. Must match one of the supported resource type identifiers. See below for valid values. | yes | |
 | `parameters` | A hash of resource-specific parameters. | yes | |
-| `requires` | An array of dependencies between resources. See [dependencies](../dependencies.md). | no | `[]` |
+| `requires` | An array of dependencies in the form of references to other resources. See [dependencies](../dependencies.md). | no | `[]` |
+| `triggers` | An array of triggers in the form of references to `execute` resources. See [triggers](../triggers.md). | no | `[]` |
 
 Valid values for `type` are:
 
 - `apt::package`
 - `directory`
+- `execute`
 - `file`
 - `group`
 - `host`
@@ -43,6 +45,13 @@ resources:
 	  ensure: present
 	  path: /path/to/directory/somefile
 
+  - type: execute
+    parameters:
+	  name: reload
+	  command:
+	    - systemctl
+		- daemon-reload
+
   - type: file
     parameters:
 	  ensure: present
@@ -50,12 +59,15 @@ resources:
     requires:
 	  - type: file
 	    path: /path/to/directory/somefile
+	triggers:
+	  - type: execute
+	    name: reload
 ```
 
 ```yaml
 <...>
 
-# All kinds of requirements.
+# All kinds of dependencies.
 resources:
   - type: directory
     parameters:
@@ -67,6 +79,9 @@ resources:
 
       - type: directory
 	    path: /some/directory
+
+      - type: execute
+	    name: my-script
 
       - type: file
 	    path: /some/file

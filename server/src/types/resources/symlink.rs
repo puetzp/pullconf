@@ -113,6 +113,10 @@ impl Symlink {
     pub fn push_requirement(&mut self, metadata: ResourceMetadata) {
         self.relationships.requires.push(metadata)
     }
+
+    pub fn push_trigger(&mut self, metadata: ResourceMetadata) {
+        self.relationships.triggers.push(metadata)
+    }
 }
 
 impl From<&Symlink> for ChildNode {

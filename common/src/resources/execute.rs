@@ -1,11 +1,19 @@
-use crate::{Ensure, ResourceMetadata, SafePathBuf};
+use crate::{Ensure, ResourceMetadata};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Parameters {
-    pub path: SafePathBuf,
     pub ensure: Ensure,
-    pub target: SafePathBuf,
+    pub name: String,
+    pub command: Vec<String>,
+    pub environment: Vec<Environment>,
+    pub passive: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct Environment {
+    pub name: String,
+    pub value: Option<String>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]

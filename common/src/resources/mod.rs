@@ -1,5 +1,6 @@
 pub mod apt;
 pub mod directory;
+pub mod execute;
 pub mod file;
 pub mod group;
 pub mod host;

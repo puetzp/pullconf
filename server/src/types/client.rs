@@ -2,7 +2,7 @@ use crate::{
     configuration::Source,
     types::{
         resources::{
-            apt, directory, file, group, host, symlink, user, Dependency, Resource,
+            apt, directory, execute, file, group, host, symlink, user, Dependency, Resource,
             UnresolvedResource,
         },
         ApiKey, Group,
@@ -12,7 +12,7 @@ use common::{
     resources::{
         apt::package::Name as AptPackageName, group::Name as GroupName, user::Name as UserName,
     },
-    Hostname,
+    Hostname, ResourceType,
 };
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -44,6 +44,11 @@ pub struct ValidationHelpers {
     /// the actual resource metadata of a given dependency is added
     /// to the resource relationship data.
     pub requires: HashMap<Uuid, Vec<Dependency>>,
+    /// This collection stores explicit triggers per resource.
+    /// During validation these triggers are resolved and
+    /// the actual resource metadata of a given triggered resource
+    /// is added to the resource relationship data.
+    pub triggers: HashMap<Uuid, Vec<Dependency>>,
     /// Some resources manage filesystem nodes of different types.
     /// This collection helps to ensure during validation that a node
     /// at a given path is not managed by multiple resources of the same
@@ -54,6 +59,7 @@ pub struct ValidationHelpers {
     /// exists when the `path` of one `file` resource happens to be the
     /// parent node to the `path` of another`, since only directories
     /// and symlinks (pointing to a directory) can be parents to a file.
+    pub execute_names: HashSet<String>,
     pub file_paths: HashSet<PathBuf>,
     pub host_ip_addresses: HashSet<IpAddr>,
     pub group_names: HashSet<GroupName>,
@@ -134,16 +140,16 @@ impl TryFrom<(unresolved::Client, &mut HashMap<Hostname, (Group, usize)>)> for C
 
         for item in intermediate.resources {
             let requires = item.requires().to_vec();
+            let triggers = item.triggers().to_vec();
 
             // Convert resource from the deserialized to the final form,
             // substituting variables in the process.
-            // ToDo: Remove call to `clone` after re-evaluating which keys
-            // should be appended to log output.
             let resource = Resource::try_from((item, &client.variables))
                 .map_err(|error| format!("`{}`>{}", client.name, error))?;
 
-            // Save dependencies as they appear in the deserialized resource.
+            // Save triggers and dependencies as they appear in the deserialized resource.
             client.temporary.requires.insert(resource.id(), requires);
+            client.temporary.triggers.insert(resource.id(), triggers);
 
             client.resources.push_back(resource);
         }
@@ -223,6 +229,15 @@ impl Client {
                         .is_some_and(|item| item.parameters.path == *path)
                 })
                 .cloned(),
+            Dependency::Execute { name } => self
+                .resources
+                .iter()
+                .find(|resource| {
+                    resource
+                        .as_execute()
+                        .is_some_and(|item| item.parameters.name == *name)
+                })
+                .cloned(),
             Dependency::File { path } => self
                 .resources
                 .iter()
@@ -294,13 +309,15 @@ impl Client {
 
             for item in &group.resources {
                 let requires = item.requires().to_vec();
+                let triggers = item.triggers().to_vec();
 
                 // Convert resource from the deserialized to the final form,
                 // substituting variables in the process.
                 let resource = Resource::try_from((item.clone(), &self.variables))?;
 
-                // Save dependencies as they appear in the deserialized resource.
+                // Save triggers and dependencies as they appear in the deserialized resource.
                 self.temporary.requires.insert(resource.id(), requires);
+                self.temporary.triggers.insert(resource.id(), triggers);
 
                 // Check if a similar resource is already present ...
                 if let Some(duplicate) = self.resources.iter().find(|other| **other == resource) {
@@ -360,6 +377,7 @@ impl Client {
             match resource {
                 Resource::AptPackage(ref mut item) => self.validate_apt_package(item)?,
                 Resource::Directory(ref mut item) => self.validate_directory(item)?,
+                Resource::Execute(ref mut item) => self.validate_execute(item)?,
                 Resource::File(ref mut item) => self.validate_file(item)?,
                 Resource::Group(ref mut item) => self.validate_group(item)?,
                 Resource::Host(ref mut item) => self.validate_host(item)?,
@@ -370,14 +388,57 @@ impl Client {
             // Process implicit dependencies by saving the metadata of
             // other resources that this resource depends on.
             for other in &self.resources {
-                if resource.must_depend_on(other) {
-                    self.temporary
-                        .dependencies
-                        .entry(resource.metadata().id)
-                        .or_default()
-                        .insert(other.metadata().id);
+                let metadata = resource.metadata().clone();
+                let other_metadata = other.metadata().clone();
 
-                    resource.push_requirement(other.metadata().clone());
+                if resource.must_depend_on(other) {
+                    if self.dependency_introduces_loop(other_metadata.id, metadata.id) {
+                        return Err(format!(
+                            "`{}`: resource must depend on `{}`, but it would introduce a dependency loop",
+                            resource.repr(),
+                            other.repr()
+                        ));
+                    } else if self
+                        .temporary
+                        .dependencies
+                        .entry(metadata.id)
+                        .or_default()
+                        .insert(other_metadata.id)
+                    {
+                        resource.push_requirement(other_metadata.clone());
+                    }
+                }
+
+                // The `execute` resource is special in that it must
+                // implicitly depend on other resources based on their
+                // `trigger` meta-parameter as opposed to some other
+                // resource-specific parameter.
+                // `Resource::must_depend_on` cannot solve this use
+                // case since the other resource might not have been
+                // processed before the `execute` resource and thus
+                // did not form a relationship with it via
+                // `Resource::push_trigger`. To avoid any problems
+                // arising from the order in which resources are
+                // processed, the temporary trigger metadata is
+                // used to form relationships between an `execute`
+                // and other resources.
+                if resource.kind() == ResourceType::Execute {
+                    if self
+                        .temporary
+                        .triggers
+                        .get(&other_metadata.id)
+                        .is_some_and(|list| list.iter().any(|item| *item == resource))
+                    {
+                        if self
+                            .temporary
+                            .dependencies
+                            .entry(metadata.id)
+                            .or_default()
+                            .insert(other_metadata.id)
+                        {
+                            resource.push_requirement(other_metadata.clone());
+                        }
+                    }
                 }
             }
 
@@ -392,6 +453,13 @@ impl Client {
                 .map(|c| c.as_slice())
                 .unwrap_or_default()
             {
+                if *dependency == resource {
+                    return Err(format!(
+                        "`{}`: resource cannot depend in itself",
+                        resource.repr(),
+                    ));
+                }
+
                 match self.resolve_dependency(dependency) {
                     Some(other_resource) => {
                         if resource.may_depend_on(&other_resource) {
@@ -426,6 +494,45 @@ impl Client {
                             "`{}`: resource depends on `{}` which is undefined",
                             resource.repr(),
                             dependency.repr()
+                        ));
+                    }
+                }
+            }
+
+            // Process explicit triggers by saving the metadata of
+            // triggered resources per the `triggers` meta-parameter
+            // found in the configuration.
+            for trigger in self
+                .temporary
+                .triggers
+                .get(&resource.id())
+                .map(|c| c.as_slice())
+                .unwrap_or_default()
+            {
+                if *trigger == resource {
+                    return Err(format!(
+                        "`{}`: resource cannot trigger itself",
+                        resource.repr(),
+                    ));
+                }
+
+                match self.resolve_dependency(trigger) {
+                    Some(other_resource) => {
+                        if let Some(execute) = other_resource.as_execute() {
+                            resource.push_trigger(execute.metadata().clone());
+                        } else {
+                            return Err(format!(
+                                "`{}`: resource can only trigger resources of type `execute`, found `{}`",
+                                resource.repr(),
+                                other_resource.repr()
+                            ));
+                        }
+                    }
+                    None => {
+                        return Err(format!(
+                            "`{}`: resource triggers `{}` which is undefined",
+                            resource.repr(),
+                            trigger.repr()
                         ));
                     }
                 }
@@ -667,6 +774,22 @@ impl Client {
                 package.repr(),
                 name,
                 package.kind(),
+            ));
+        }
+
+        Ok(())
+    }
+
+    fn validate_execute(&mut self, execute: &mut execute::Execute) -> Result<(), String> {
+        let name = &execute.parameters.name;
+
+        // Check for uniqueness of the name parameter.
+        if !self.temporary.execute_names.insert(name.clone()) {
+            return Err(format!(
+                "`{}`: name `{}` appears in multiple `{}` resources, resource names must be unique",
+                execute.repr(),
+                name,
+                execute.kind(),
             ));
         }
 

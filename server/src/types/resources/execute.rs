@@ -1,7 +1,7 @@
 use super::{Resolvable, Resource, UnresolvedNode};
 use crate::configuration::Source;
 use common::{
-    resources::group::{Name, Parameters, Relationships},
+    resources::execute::{Environment, Parameters, Relationships},
     Ensure, ResourceMetadata, ResourceType,
 };
 use serde::Serialize;
@@ -10,22 +10,22 @@ use strict_yaml_rust::{strict_yaml::Hash, StrictYaml};
 use uuid::Uuid;
 
 #[derive(Clone, Debug, Serialize)]
-pub struct Group {
+pub struct Execute {
     #[serde(flatten)]
     pub metadata: ResourceMetadata,
     pub parameters: Parameters,
     pub relationships: Relationships,
 }
 
-impl PartialEq for Group {
+impl PartialEq for Execute {
     fn eq(&self, other: &Self) -> bool {
         self.parameters.name == other.parameters.name
     }
 }
 
-impl Eq for Group {}
+impl Eq for Execute {}
 
-impl TryFrom<(UnresolvedParameters, &HashMap<String, StrictYaml>)> for Group {
+impl TryFrom<(UnresolvedParameters, &HashMap<String, StrictYaml>)> for Execute {
     type Error = String;
 
     fn try_from(
@@ -37,23 +37,34 @@ impl TryFrom<(UnresolvedParameters, &HashMap<String, StrictYaml>)> for Group {
                 None => Ensure::default(),
             };
 
-            let name = Name::resolve(parameters.name, variables)?;
+            let name = String::resolve(parameters.name, variables)?;
 
-            let system = match parameters.system {
-                Some(parameter) => bool::resolve(parameter, variables)?,
-                None => false,
+            let command = Vec::<String>::resolve(parameters.command, variables)?;
+
+            if command.is_empty() {
+                return Err(format!(
+                    "command array in execute resource `{}` cannot be empty",
+                    name,
+                ));
+            }
+
+            let environment = match parameters.environment {
+                Some(parameter) => Vec::<Environment>::resolve(parameter, variables)?,
+                None => vec![],
             };
 
             Parameters {
                 ensure,
                 name,
-                system,
+                command,
+                environment,
+                passive: true,
             }
         };
 
         Ok(Self {
             metadata: ResourceMetadata {
-                kind: ResourceType::Group,
+                kind: ResourceType::Execute,
                 id: Uuid::new_v4(),
             },
             parameters,
@@ -62,7 +73,7 @@ impl TryFrom<(UnresolvedParameters, &HashMap<String, StrictYaml>)> for Group {
     }
 }
 
-impl Group {
+impl Execute {
     pub fn kind(&self) -> ResourceType {
         self.metadata.kind
     }
@@ -83,19 +94,13 @@ impl Group {
         format!("{}[{}]", self.kind(), self.display())
     }
 
-    pub fn must_depend_on(&self, resource: &Resource) -> bool {
-        match resource {
-            // Primary groups must be handled after users as user creation
-            // usually involves creating the primary group as well.
-            Resource::User(user) => user.parameters.group == self.parameters.name,
-            _ => false,
-        }
+    pub fn must_depend_on(&self, _resource: &Resource) -> bool {
+        false
     }
 
     pub fn may_depend_on(&self, resource: &Resource) -> bool {
         match resource {
-            Resource::Group(group) => group.parameters.name != self.parameters.name,
-            Resource::User(user) => user.parameters.group != self.parameters.name,
+            Resource::Execute(execute) => execute.parameters.name != self.parameters.name,
             _ => true,
         }
     }
@@ -113,12 +118,13 @@ impl Group {
 pub struct UnresolvedParameters {
     pub ensure: Option<UnresolvedNode>,
     pub name: UnresolvedNode,
-    pub system: Option<UnresolvedNode>,
+    pub command: UnresolvedNode,
+    pub environment: Option<UnresolvedNode>,
 }
 
 impl UnresolvedParameters {
     pub fn kind(&self) -> ResourceType {
-        ResourceType::Group
+        ResourceType::Execute
     }
 }
 
@@ -147,8 +153,19 @@ impl TryFrom<(Source, Hash)> for UnresolvedParameters {
                 .ok_or(format!("{}: failed to find required key `{}`", source, key))?
         };
 
-        let system = {
-            let key = "system";
+        let command = {
+            let key = "command";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+                .ok_or(format!("{}: failed to find required key `{}`", source, key))?
+        };
+
+        let environment = {
+            let key = "environment";
 
             hash.remove(&StrictYaml::String(key.to_string()))
                 .map(|node| UnresolvedNode {
@@ -164,7 +181,8 @@ impl TryFrom<(Source, Hash)> for UnresolvedParameters {
         Ok(Self {
             ensure,
             name,
-            system,
+            command,
+            environment,
         })
     }
 }

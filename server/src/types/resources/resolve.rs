@@ -389,6 +389,64 @@ impl Resolvable for common::resources::file::Replacement {
     }
 }
 
+impl Resolvable for common::resources::execute::Environment {
+    fn resolve(
+        node: UnresolvedNode,
+        variables: &HashMap<String, StrictYaml>,
+    ) -> Result<Self, String> {
+        match node.maybe_variable(0, variables)? {
+            Some(value) => {
+                let node = UnresolvedNode {
+                    source: node.source,
+                    inner: value,
+                };
+
+                Self::resolve(node, variables)
+            }
+            None => match node.inner.into_hash() {
+                Some(mut hash) => {
+                    let name = {
+                        let key = "name";
+
+                        hash.remove(&StrictYaml::String(key.into()))
+                            .ok_or(format!(
+                                "{}: failed to find required key `{}`",
+                                node.source, key
+                            ))
+                            .map(|_node| UnresolvedNode {
+                                source: node.source.clone() + key,
+                                inner: _node,
+                            })
+                            .and_then(|_node| String::resolve(_node, variables))?
+                    };
+
+                    let value = {
+                        let key = "value";
+
+                        hash.remove(&StrictYaml::String(key.into()))
+                            .map(|_node| UnresolvedNode {
+                                source: node.source.clone() + key,
+                                inner: _node,
+                            })
+                            .map(|_node| String::resolve(_node, variables))
+                            .transpose()?
+                    };
+
+                    if let Some(key) = hash.pop_back().and_then(|(key, _)| key.into_string()) {
+                        return Err(format!(
+                            "{}: encountered unexpected key `{}`",
+                            node.source, key
+                        ));
+                    }
+
+                    Ok(Self { name, value })
+                }
+                None => Err(format!("{}: node must be a hash", node.source)),
+            },
+        }
+    }
+}
+
 macro_rules! impl_resolvable_via_string {
     ($( $type:ty ),*) => {
         $(

@@ -6,4 +6,5 @@ The following sections describe how to define clients, groups and the most impor
 - [Group](group.md)
 - [Variables](variables.md)
 - [Dependencies](dependencies.md)
+- [Triggers](trigger.md)
 - [Resources](resources/index.md)

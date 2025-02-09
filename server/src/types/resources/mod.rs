@@ -1,5 +1,6 @@
 pub mod apt;
 pub mod directory;
+pub mod execute;
 pub mod file;
 pub mod group;
 pub mod host;
@@ -9,6 +10,7 @@ pub mod user;
 
 pub use apt::package::Package as AptPackage;
 pub use directory::Directory;
+pub use execute::Execute;
 pub use file::File;
 pub use group::Group;
 pub use host::Host;
@@ -102,6 +104,14 @@ macro_rules! impl_resources {
                     )*
                 }
             }
+
+            pub fn push_trigger(&mut self, metadata: ResourceMetadata) {
+                match self {
+                    $(
+                        Self::$resource(resource) => resource.push_trigger(metadata),
+                    )*
+                }
+            }
         }
 
         impl TryFrom<(UnresolvedResource, &HashMap<String, StrictYaml>)> for Resource {
@@ -124,7 +134,7 @@ macro_rules! impl_resources {
     }
 }
 
-impl_resources!(AptPackage, Directory, File, Group, Host, Symlink, User);
+impl_resources!(AptPackage, Directory, Execute, File, Group, Host, Symlink, User);
 
 impl Resource {
     pub fn as_apt_package(&self) -> Option<&AptPackage> {
@@ -137,6 +147,13 @@ impl Resource {
     pub fn as_directory(&self) -> Option<&Directory> {
         match self {
             Self::Directory(item) => Some(item),
+            _ => None,
+        }
+    }
+
+    pub fn as_execute(&self) -> Option<&Execute> {
+        match self {
+            Self::Execute(item) => Some(item),
             _ => None,
         }
     }
@@ -181,6 +198,7 @@ impl Resource {
 pub enum Dependency {
     AptPackage { name: AptPackageName },
     Directory { path: SafePathBuf },
+    Execute { name: String },
     File { path: SafePathBuf },
     Group { name: GroupName },
     Host { ip_address: IpAddr },
@@ -193,11 +211,43 @@ impl Dependency {
         match self {
             Self::AptPackage { name } => format!("apt::package[{}]", name),
             Self::Directory { path } => format!("directory[{}]", path.display()),
+            Self::Execute { name } => format!("execute[{}]", name),
             Self::File { path } => format!("file[{}]", path.display()),
             Self::Group { name } => format!("group[{}]", name),
             Self::Host { ip_address } => format!("host[{}]", ip_address),
             Self::Symlink { path } => format!("symlink[{}]", path.display()),
             Self::User { name } => format!("user[{}]", name),
+        }
+    }
+}
+
+impl PartialEq<Resource> for Dependency {
+    fn eq(&self, resource: &Resource) -> bool {
+        match resource {
+            Resource::AptPackage(package) => {
+                matches!(self, Self::AptPackage { name } if *name == package.parameters.name)
+            }
+            Resource::Directory(directory) => {
+                matches!(self, Self::Directory { path } if *path == directory.parameters.path)
+            }
+            Resource::Execute(execute) => {
+                matches!(self, Self::Execute { name } if *name == execute.parameters.name)
+            }
+            Resource::File(file) => {
+                matches!(self, Self::File { path } if *path == file.parameters.path)
+            }
+            Resource::Group(group) => {
+                matches!(self, Self::Group { name } if *name == group.parameters.name)
+            }
+            Resource::Host(host) => {
+                matches!(self, Self::Host { ip_address } if *ip_address == host.parameters.ip_address)
+            }
+            Resource::Symlink(symlink) => {
+                matches!(self, Self::Symlink { path } if *path == symlink.parameters.path)
+            }
+            Resource::User(user) => {
+                matches!(self, Self::User { name } if *name == user.parameters.name)
+            }
         }
     }
 }
@@ -247,6 +297,19 @@ impl TryFrom<(Source, StrictYaml)> for Dependency {
 
                             Ok(Dependency::Directory { path })
                         }
+                        None => Err(format!("{}: node must be a string", source.clone() + key)),
+                    },
+                    None => Err(format!("{}: failed to find required key `{}`", source, key)),
+                }
+            }
+            "execute" => {
+                let key = "name";
+
+                match hash.remove(&StrictYaml::String(key.into())) {
+                    Some(node) => match node.into_string() {
+                        Some(s) => Ok(Dependency::Execute {
+                            name: s.to_string(),
+                        }),
                         None => Err(format!("{}: node must be a string", source.clone() + key)),
                     },
                     None => Err(format!("{}: failed to find required key `{}`", source, key)),
@@ -354,30 +417,42 @@ pub enum UnresolvedResource {
     AptPackage {
         parameters: apt::package::UnresolvedParameters,
         requires: Vec<Dependency>,
+        triggers: Vec<Dependency>,
     },
     Directory {
         parameters: directory::UnresolvedParameters,
         requires: Vec<Dependency>,
+        triggers: Vec<Dependency>,
+    },
+    Execute {
+        parameters: execute::UnresolvedParameters,
+        requires: Vec<Dependency>,
+        triggers: Vec<Dependency>,
     },
     File {
         parameters: file::UnresolvedParameters,
         requires: Vec<Dependency>,
+        triggers: Vec<Dependency>,
     },
     Group {
         parameters: group::UnresolvedParameters,
         requires: Vec<Dependency>,
+        triggers: Vec<Dependency>,
     },
     Host {
         parameters: host::UnresolvedParameters,
         requires: Vec<Dependency>,
+        triggers: Vec<Dependency>,
     },
     Symlink {
         parameters: symlink::UnresolvedParameters,
         requires: Vec<Dependency>,
+        triggers: Vec<Dependency>,
     },
     User {
         parameters: user::UnresolvedParameters,
         requires: Vec<Dependency>,
+        triggers: Vec<Dependency>,
     },
 }
 
@@ -386,6 +461,7 @@ impl UnresolvedResource {
         match self {
             Self::AptPackage { requires, .. } => requires.as_slice(),
             Self::Directory { requires, .. } => requires.as_slice(),
+            Self::Execute { requires, .. } => requires.as_slice(),
             Self::File { requires, .. } => requires.as_slice(),
             Self::Group { requires, .. } => requires.as_slice(),
             Self::Host { requires, .. } => requires.as_slice(),
@@ -394,10 +470,24 @@ impl UnresolvedResource {
         }
     }
 
+    pub fn triggers(&self) -> &[Dependency] {
+        match self {
+            Self::AptPackage { triggers, .. } => triggers.as_slice(),
+            Self::Directory { triggers, .. } => triggers.as_slice(),
+            Self::Execute { triggers, .. } => triggers.as_slice(),
+            Self::File { triggers, .. } => triggers.as_slice(),
+            Self::Group { triggers, .. } => triggers.as_slice(),
+            Self::Host { triggers, .. } => triggers.as_slice(),
+            Self::Symlink { triggers, .. } => triggers.as_slice(),
+            Self::User { triggers, .. } => triggers.as_slice(),
+        }
+    }
+
     pub fn kind(&self) -> ResourceType {
         match self {
             Self::AptPackage { parameters, .. } => parameters.kind(),
             Self::Directory { parameters, .. } => parameters.kind(),
+            Self::Execute { parameters, .. } => parameters.kind(),
             Self::File { parameters, .. } => parameters.kind(),
             Self::Group { parameters, .. } => parameters.kind(),
             Self::Host { parameters, .. } => parameters.kind(),
@@ -442,6 +532,38 @@ impl TryFrom<(Source, Hash)> for UnresolvedResource {
             array
         };
 
+        let triggers = {
+            let key = "triggers";
+            let source = source.clone() + key;
+
+            let mut array = vec![];
+
+            if let Some(node) = hash.remove(&StrictYaml::String(key.into())) {
+                for (index, item) in node
+                    .into_vec()
+                    .ok_or(format!("{}: node must be an array", source))?
+                    .into_iter()
+                    .enumerate()
+                {
+                    let source = source.clone() + index;
+
+                    let reference = Dependency::try_from((source.clone(), item))?;
+
+                    if !matches!(reference, Dependency::Execute { .. }) {
+                        return Err(format!(
+                            "{}: array item must reference a resource of type `execute`, found `{}`",
+                            source,
+                            reference.repr()
+                        ));
+                    }
+
+                    array.push(reference);
+                }
+            }
+
+            array
+        };
+
         let resource = {
             let key = "parameters";
 
@@ -459,6 +581,7 @@ impl TryFrom<(Source, Hash)> for UnresolvedResource {
                     Self::AptPackage {
                         parameters,
                         requires,
+                        triggers,
                     }
                 }
                 "directory" => {
@@ -468,6 +591,17 @@ impl TryFrom<(Source, Hash)> for UnresolvedResource {
                     Self::Directory {
                         parameters,
                         requires,
+                        triggers,
+                    }
+                }
+                "execute" => {
+                    let parameters =
+                        execute::UnresolvedParameters::try_from((source.clone() + key, hash))?;
+
+                    Self::Execute {
+                        parameters,
+                        requires,
+                        triggers,
                     }
                 }
                 "file" => {
@@ -477,6 +611,7 @@ impl TryFrom<(Source, Hash)> for UnresolvedResource {
                     Self::File {
                         parameters,
                         requires,
+                        triggers,
                     }
                 }
                 "group" => {
@@ -486,6 +621,7 @@ impl TryFrom<(Source, Hash)> for UnresolvedResource {
                     Self::Group {
                         parameters,
                         requires,
+                        triggers,
                     }
                 }
                 "host" => {
@@ -495,6 +631,7 @@ impl TryFrom<(Source, Hash)> for UnresolvedResource {
                     Self::Host {
                         parameters,
                         requires,
+                        triggers,
                     }
                 }
                 "symlink" => {
@@ -504,6 +641,7 @@ impl TryFrom<(Source, Hash)> for UnresolvedResource {
                     Self::Symlink {
                         parameters,
                         requires,
+                        triggers,
                     }
                 }
                 "user" => {
@@ -513,6 +651,7 @@ impl TryFrom<(Source, Hash)> for UnresolvedResource {
                     Self::User {
                         parameters,
                         requires,
+                        triggers,
                     }
                 }
                 _ => {

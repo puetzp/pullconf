@@ -82,6 +82,18 @@ resources:
     requires:
       - type: apt::package
         name: openssh-server
+	triggers:
+	  - type: execute
+	    name: reload-sshd
+
+  - type: execute
+    parameters:
+	  ensure: present
+      name: reload-sshd
+	  command:
+	    - systemctl
+	    - reload
+		- sshd.service
 ```
 
 ## Use cases

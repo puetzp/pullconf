@@ -1,5 +1,6 @@
 pub mod apt;
 pub mod directory;
+pub mod execute;
 pub mod file;
 pub mod group;
 pub mod host;
@@ -41,6 +42,7 @@ pub enum Resource {
     #[serde(rename = "apt::package")]
     AptPackage(apt::package::Package),
     Directory(directory::Directory),
+    Execute(execute::Execute),
     File(file::File),
     Group(group::Group),
     Host(host::Host),
@@ -57,6 +59,7 @@ impl Resource {
         match self {
             Self::AptPackage(resource) => resource.id(),
             Self::Directory(resource) => resource.id(),
+            Self::Execute(resource) => resource.id(),
             Self::File(resource) => resource.id(),
             Self::Group(resource) => resource.id(),
             Self::Host(resource) => resource.id(),
@@ -73,6 +76,7 @@ impl Resource {
         match self {
             Self::AptPackage(resource) => resource.repr(),
             Self::Directory(resource) => resource.repr(),
+            Self::Execute(resource) => resource.repr(),
             Self::File(resource) => resource.repr(),
             Self::Group(resource) => resource.repr(),
             Self::Host(resource) => resource.repr(),
@@ -89,6 +93,7 @@ impl Resource {
         match self {
             Self::AptPackage(resource) => resource.is_ready(applied_resources),
             Self::Directory(resource) => resource.is_ready(applied_resources),
+            Self::Execute(resource) => resource.is_ready(applied_resources),
             Self::File(resource) => resource.is_ready(applied_resources),
             Self::Group(resource) => resource.is_ready(applied_resources),
             Self::Host(resource) => resource.is_ready(applied_resources),
@@ -110,6 +115,7 @@ impl Resource {
         match self {
             Self::AptPackage(ref mut resource) => resource.apply(applied_resources),
             Self::Directory(ref mut resource) => resource.apply(applied_resources),
+            Self::Execute(ref mut resource) => resource.apply(applied_resources),
             Self::File(ref mut resource) => {
                 resource.apply(agent, base_url, api_key, applied_resources)
             }
@@ -125,6 +131,7 @@ impl Resource {
         match self {
             Self::AptPackage(resource) => resource.action == Action::Skipped,
             Self::Directory(resource) => resource.action == Action::Skipped,
+            Self::Execute(resource) => resource.action == Action::Skipped,
             Self::File(resource) => resource.action == Action::Skipped,
             Self::Group(resource) => resource.action == Action::Skipped,
             Self::Host(resource) => resource.action == Action::Skipped,
@@ -138,6 +145,7 @@ impl Resource {
         match self {
             Self::AptPackage(resource) => resource.action == Action::Failed,
             Self::Directory(resource) => resource.action == Action::Failed,
+            Self::Execute(resource) => resource.action == Action::Failed,
             Self::File(resource) => resource.action == Action::Failed,
             Self::Group(resource) => resource.action == Action::Failed,
             Self::Host(resource) => resource.action == Action::Failed,
@@ -153,11 +161,69 @@ impl Resource {
                 resource.parameters.ensure.is_absent() || resource.parameters.ensure.is_purged()
             }
             Self::Directory(resource) => resource.parameters.ensure.is_absent(),
+            Self::Execute(resource) => resource.parameters.ensure.is_absent(),
             Self::File(resource) => resource.parameters.ensure.is_absent(),
             Self::Group(resource) => resource.parameters.ensure.is_absent(),
             Self::Host(resource) => resource.parameters.ensure.is_absent(),
             Self::Symlink(resource) => resource.parameters.ensure.is_absent(),
             Self::User(resource) => resource.parameters.ensure.is_absent(),
+        }
+    }
+
+    /// Check whether the resource was created.
+    pub fn is_created(&self) -> bool {
+        match self {
+            Self::AptPackage(resource) => resource.action == Action::Created,
+            Self::Directory(resource) => resource.action == Action::Created,
+            Self::Execute(resource) => resource.action == Action::Created,
+            Self::File(resource) => resource.action == Action::Created,
+            Self::Group(resource) => resource.action == Action::Created,
+            Self::Host(resource) => resource.action == Action::Created,
+            Self::Symlink(resource) => resource.action == Action::Created,
+            Self::User(resource) => resource.action == Action::Created,
+        }
+    }
+
+    /// Check whether the resource was deleted.
+    pub fn is_deleted(&self) -> bool {
+        match self {
+            Self::AptPackage(resource) => resource.action == Action::Deleted,
+            Self::Directory(resource) => resource.action == Action::Deleted,
+            Self::Execute(resource) => resource.action == Action::Deleted,
+            Self::File(resource) => resource.action == Action::Deleted,
+            Self::Group(resource) => resource.action == Action::Deleted,
+            Self::Host(resource) => resource.action == Action::Deleted,
+            Self::Symlink(resource) => resource.action == Action::Deleted,
+            Self::User(resource) => resource.action == Action::Deleted,
+        }
+    }
+
+    /// Check whether the resource was changed.
+    pub fn is_changed(&self) -> bool {
+        match self {
+            Self::AptPackage(resource) => resource.action == Action::Changed,
+            Self::Directory(resource) => resource.action == Action::Changed,
+            Self::Execute(resource) => resource.action == Action::Changed,
+            Self::File(resource) => resource.action == Action::Changed,
+            Self::Group(resource) => resource.action == Action::Changed,
+            Self::Host(resource) => resource.action == Action::Changed,
+            Self::Symlink(resource) => resource.action == Action::Changed,
+            Self::User(resource) => resource.action == Action::Changed,
+        }
+    }
+
+    /// This is a shortcut to the list of metadata of resources
+    /// that are triggered by this resource.
+    pub fn triggers(&self) -> &[ResourceMetadata] {
+        match self {
+            Self::AptPackage(resource) => resource.triggers(),
+            Self::Directory(resource) => resource.triggers(),
+            Self::Execute(resource) => resource.triggers(),
+            Self::File(resource) => resource.triggers(),
+            Self::Group(resource) => resource.triggers(),
+            Self::Host(resource) => resource.triggers(),
+            Self::Symlink(resource) => resource.triggers(),
+            Self::User(resource) => resource.triggers(),
         }
     }
 }
@@ -280,6 +346,10 @@ pub trait ResourceTrait {
     /// Return a collection of resource metadata that points at
     /// resources that the implementing resource depends on.
     fn dependencies(&self) -> &[ResourceMetadata];
+
+    /// Return a collection of resource metadata that points at
+    /// resources that are triggered by the implementing resource.
+    fn triggers(&self) -> &[ResourceMetadata];
 
     /// Determine if this resource is ready to be applied by checking if each of
     /// its dependencies has been applied.

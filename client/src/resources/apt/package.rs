@@ -37,6 +37,10 @@ impl ResourceTrait for Package {
         self.relationships.requires.as_slice()
     }
 
+    fn triggers(&self) -> &[ResourceMetadata] {
+        self.relationships.triggers.as_slice()
+    }
+
     fn is_present(&self) -> bool {
         self.parameters.ensure.is_present()
     }

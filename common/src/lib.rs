@@ -47,6 +47,7 @@ macro_rules! impl_resource_types {
 impl_resource_types!(
     (AptPackage, "apt::package"),
     (Directory, "directory"),
+    (Execute, "execute"),
     (File, "file"),
     (Group, "group"),
     (Host, "host"),
