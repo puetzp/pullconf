@@ -111,6 +111,7 @@ resources:
         - systemctl
         - reload
         - sshd.service
+      passive: true
 ```
 
 ## Future development

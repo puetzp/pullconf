@@ -1,14 +1,12 @@
 # execute
 
-This resource executes a command when triggered by other resources through the `trigger` meta-parameter. See [triggers](../triggers.md) for more information.
+This resource executes a command. The `unless` parameter can be used to apply this resource according to a condition. Furthermore when `passive` is set to `true` the resource is only applied when triggered by other resources through the `trigger` meta-parameter. See [triggers](../triggers.md) for more information.
 
 ## Relationship to other resources
 
 An `execute` resource implicitly depends on every resource that references this resource through the `trigger` meta-parameter. This ensures that the `execute` resource runs after those resources.
 
 For instance when a [file](file.md) resource specifies an `execute` resource through `trigger` and the primary `name` parameter of the `execute` resource, the resource will be triggered when the [file](file.md) resource is either created, deleted or changed. When other resources trigger the same `execute` resource, the resource is ensured to run only once after each of those resources were applied.
-
-> Right now this resource is limited in that it runs only when triggerd by other resources.
 
 ## Parameters
 
@@ -17,7 +15,9 @@ For instance when a [file](file.md) resource specifies an `execute` resource thr
 | `ensure` | string | Determines the desired state of the resource. One of `present` or `absent`. | yes | `present` |
 | `name` | string | *Primary parameter*: The resource name. | yes | |
 | `command` | array | The command and its arguments as strings. The program name and its arguments are each separate array items. | yes | |
-| `environment` | array | Environment variables that the process that executes the `command` should inherhit. | no | |
+| `unless` | array | Similar to `command`, a program name and any number of arguments. If this is specified it runs before `command`. If it returns zero, `command` is not executed. Any other exit code will cause `command` to be executed normally. | no | | 
+| `environment` | array | Environment variables that the processes that execute `command` and `unless` should inherhit. | no | |
+| `passive` | string | Either `true` or `false`. If this is `true` the resource is applied only when triggered by other resources via the `trigger` meta-parameter. | no | `false` |
 
 The `environment` array must contain hashes with the following keys:
 
@@ -26,7 +26,7 @@ The `environment` array must contain hashes with the following keys:
 | `name` | string | The name of the environment variable. | yes | |
 | `value` | string | The value of the environment variable. If this parameter is omitted the variable will be set to an empty string. | no | |
 
-> Note that `command` is not passed through a shell. One way to use shell-specific features such as pipes is to install a script (e.g. via [file](file.md)) first and then execute this script in `command`.
+> Note that neither `command` nor `unless` are passed through a shell. One way to use shell-specific features such as pipes is to install a script (e.g. via [file](file.md)) first and then execute this script in `command` or `unless`.
 
 ## Examples
 
@@ -39,6 +39,7 @@ resources:
 	  command:
 	    - systemctl
 	    - daemon-reload
+	passive: true
 ```
 
 ```yaml
@@ -53,6 +54,7 @@ resources:
 	    - systemctl
 	    - reload
 		- sshd.service
+      passive: true
 
   - type: file
     parameters:

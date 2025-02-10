@@ -94,6 +94,7 @@ resources:
 	    - systemctl
 	    - reload
 		- sshd.service
+	  passive: true
 ```
 
 ## Use cases

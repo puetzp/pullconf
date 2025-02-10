@@ -51,6 +51,7 @@ resources:
 	  command:
 	    - systemctl
 		- daemon-reload
+	  passive: true
 
   - type: file
     parameters:

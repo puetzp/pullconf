@@ -2,11 +2,11 @@
 
 Triggers are closely tied to the [execute](resources/execute.md) resource. Every resource has the ability to trigger an [execute](resources/execute.md) resource through the `triggers` meta-parameter. Just like `requires` this meta-parameter is available to all resources by default.
 
-An [execute](resources/execute.md) resource that is triggered by other resources is only applied when at least one of those resources is applied successfully:
+When the `passive` parameter of an [execute](resources/execute.md) resource is set to `true`, the resource only applies when triggered by other resources and at least one of those resources has been applied successfully:
 
-* when the resource is successfully created
-* when the resource is successfully deleted
-* when the resource is successfully updated
+* when the triggering resource is successfully created
+* when the triggering resource is successfully deleted
+* when the triggering resource is successfully updated
 
 When multiple resources are configured to trigger the same [execute](resources/execute.md) resource, the latter is applied only once, after each of those resources have run to completion.
 
@@ -26,6 +26,7 @@ resources:
 	    - systemctl
 	    - reload
 		- sshd.service
+	  passive: true
 
   - type: file
     parameters:

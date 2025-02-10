@@ -84,6 +84,43 @@ impl Execute {
             return;
         }
 
+        if let Some(program) = self.parameters.unless.first() {
+            let mut command = Command::new(program);
+            command.args(&self.parameters.unless[1..]);
+
+            for env in &self.parameters.environment {
+                command.env(
+                    &env.name,
+                    env.value.as_ref().map(|v| v.as_str()).unwrap_or_default(),
+                );
+            }
+
+            let output = match command.output() {
+                Ok(output) => output,
+                Err(error) => {
+                    error!("`{}`: failed to apply resource: {:#}", self.repr(), error);
+                    self.action = Action::Failed;
+                    return;
+                }
+            };
+
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+
+            debug!(
+                "`{}`: `unless` command {:?} exited with {}: \"{}\"",
+                self.repr(),
+                command.get_program(),
+                output.status,
+                stdout.is_empty().then_some(stderr).unwrap_or(stdout)
+            );
+
+            if output.status.success() {
+                self.action = Action::Unchanged;
+                return;
+            }
+        }
+
         debug!("`{}`: applying resource", self.repr(),);
 
         match self._apply() {

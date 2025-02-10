@@ -48,17 +48,28 @@ impl TryFrom<(UnresolvedParameters, &HashMap<String, StrictYaml>)> for Execute {
                 ));
             }
 
+            let unless = match parameters.unless {
+                Some(parameter) => Vec::<String>::resolve(parameter, variables)?,
+                None => vec![],
+            };
+
             let environment = match parameters.environment {
                 Some(parameter) => Vec::<Environment>::resolve(parameter, variables)?,
                 None => vec![],
+            };
+
+            let passive = match parameters.passive {
+                Some(parameter) => bool::resolve(parameter, variables)?,
+                None => false,
             };
 
             Parameters {
                 ensure,
                 name,
                 command,
+                unless,
                 environment,
-                passive: true,
+                passive,
             }
         };
 
@@ -119,7 +130,9 @@ pub struct UnresolvedParameters {
     pub ensure: Option<UnresolvedNode>,
     pub name: UnresolvedNode,
     pub command: UnresolvedNode,
+    pub unless: Option<UnresolvedNode>,
     pub environment: Option<UnresolvedNode>,
+    pub passive: Option<UnresolvedNode>,
 }
 
 impl UnresolvedParameters {
@@ -164,8 +177,28 @@ impl TryFrom<(Source, Hash)> for UnresolvedParameters {
                 .ok_or(format!("{}: failed to find required key `{}`", source, key))?
         };
 
+        let unless = {
+            let key = "unless";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+        };
+
         let environment = {
             let key = "environment";
+
+            hash.remove(&StrictYaml::String(key.to_string()))
+                .map(|node| UnresolvedNode {
+                    source: source.clone() + key,
+                    inner: node,
+                })
+        };
+
+        let passive = {
+            let key = "passive";
 
             hash.remove(&StrictYaml::String(key.to_string()))
                 .map(|node| UnresolvedNode {
@@ -182,7 +215,9 @@ impl TryFrom<(Source, Hash)> for UnresolvedParameters {
             ensure,
             name,
             command,
+            unless,
             environment,
+            passive,
         })
     }
 }

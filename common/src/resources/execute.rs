@@ -6,6 +6,7 @@ pub struct Parameters {
     pub ensure: Ensure,
     pub name: String,
     pub command: Vec<String>,
+    pub unless: Vec<String>,
     pub environment: Vec<Environment>,
     pub passive: bool,
 }
