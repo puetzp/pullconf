@@ -10,7 +10,7 @@ When the `passive` parameter of an [execute](resources/execute.md) resource is s
 
 When multiple resources are configured to trigger the same [execute](resources/execute.md) resource, the latter is applied only once, after each of those resources have run to completion.
 
-Since only [execute](resources/execute.md) resources can be triggered, the `trigger` meta-parameter accepts only references to [execute](resources/execute.md) resources.
+Since only [execute](resources/execute.md) resources can be triggered, the `triggers` meta-parameter accepts only references to [execute](resources/execute.md) resources.
 
 ## Example
 

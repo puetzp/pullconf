@@ -1,12 +1,12 @@
 # execute
 
-This resource executes a command. The `unless` parameter can be used to apply this resource according to a condition. Furthermore when `passive` is set to `true` the resource is only applied when triggered by other resources through the `trigger` meta-parameter. See [triggers](../triggers.md) for more information.
+This resource executes a command. The `unless` parameter can be used to apply this resource according to a condition. Furthermore when `passive` is set to `true` the resource is only applied when triggered by other resources through the `triggers` meta-parameter. See [triggers](../triggers.md) for more information.
 
 ## Relationship to other resources
 
-An `execute` resource implicitly depends on every resource that references this resource through the `trigger` meta-parameter. This ensures that the `execute` resource runs after those resources.
+An `execute` resource implicitly depends on every resource that references this resource through the `triggers` meta-parameter. This ensures that the `execute` resource runs after those resources.
 
-For instance when a [file](file.md) resource specifies an `execute` resource through `trigger` and the primary `name` parameter of the `execute` resource, the resource will be triggered when the [file](file.md) resource is either created, deleted or changed. When other resources trigger the same `execute` resource, the resource is ensured to run only once after each of those resources were applied.
+For instance when a [file](file.md) resource specifies an `execute` resource through `triggers` and the primary `name` parameter of the `execute` resource, the resource will be triggered when the [file](file.md) resource is either created, deleted or changed. When other resources trigger the same `execute` resource, the resource is ensured to run only once after each of those resources were applied.
 
 ## Parameters
 
@@ -17,7 +17,7 @@ For instance when a [file](file.md) resource specifies an `execute` resource thr
 | `command` | array | The command and its arguments as strings. The program name and its arguments are each separate array items. | yes | |
 | `unless` | array | Similar to `command`, a program name and any number of arguments. If this is specified it runs before `command`. If it returns zero, `command` is not executed. Any other exit code will cause `command` to be executed normally. | no | | 
 | `environment` | array | Environment variables that the processes that execute `command` and `unless` should inherhit. | no | |
-| `passive` | string | Either `true` or `false`. If this is `true` the resource is applied only when triggered by other resources via the `trigger` meta-parameter. | no | `false` |
+| `passive` | string | Either `true` or `false`. If this is `true` the resource is applied only when triggered by other resources via the `triggers` meta-parameter. | no | `false` |
 
 The `environment` array must contain hashes with the following keys:
 
