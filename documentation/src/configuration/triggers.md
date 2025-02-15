@@ -93,7 +93,7 @@ resources:
     triggers:
       - type: execute
         name: daemon-reload
-		# Thie is the default behavior and the same as if `when` is omitted altogether.
+		# This is the default behavior and the same as if `when` is omitted.
 		when:
 		  - created
 		  - changed
