@@ -268,11 +268,11 @@ impl FromStr for Action {
         match s {
             "unchanged" => Ok(Self::Unchanged),
             "created" => Ok(Self::Created),
-            "Changed" => Ok(Self::Changed),
-            "Deleted" => Ok(Self::Deleted),
-            "Skipped" => Ok(Self::Skipped),
-            "Failed" => Ok(Self::Failed),
-            _ => anyhow::bail!("invalid `action` value: {}", s),
+            "changed" => Ok(Self::Changed),
+            "deleted" => Ok(Self::Deleted),
+            "skipped" => Ok(Self::Skipped),
+            "failed" => Ok(Self::Failed),
+            _ => anyhow::bail!("value is not a valid state: `{}`", s),
         }
     }
 }

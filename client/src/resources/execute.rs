@@ -46,6 +46,30 @@ impl ResourceTrait for Execute {
     fn is_present(&self) -> bool {
         self.parameters.ensure.is_present()
     }
+
+    fn maybe_return_early(&self, applied_resources: &HashMap<Uuid, Resource>) -> Option<Action> {
+        if let Some(dependency) = self.find_failed_dependency(applied_resources) {
+            log::warn!(
+                "`{}`: skipping resource as dependency `{}` has failed to apply",
+                self.repr(),
+                dependency.repr()
+            );
+
+            return Some(Action::Skipped);
+        }
+
+        if let Some(dependency) = self.find_skipped_dependency(applied_resources) {
+            log::warn!(
+                "`{}`: skipping resource as dependency `{}` has been skipped",
+                self.repr(),
+                dependency.repr()
+            );
+
+            return Some(Action::Skipped);
+        }
+
+        None
+    }
 }
 
 impl Execute {
