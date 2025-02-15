@@ -16,6 +16,16 @@ When multiple resources are configured to trigger the same [execute](resources/e
 
 Since only [execute](resources/execute.md) resources can be triggered, the `triggers` meta-parameter accepts only references to [execute](resources/execute.md) resources.
 
+## Parameters
+
+For each item in the `triggers` array (see also [Resources](resources/index.html)) the following parameters are available:
+
+| Name | Type | Description | Mandatory | Default |
+| --- | --- | --- | --- | --- |
+| `type` | string | At this time the only valid value for this parameter is `execute`, since this is the only type of resource that can be triggered by others. | yes | |
+| `name` | string | The name of the `execute` resource. | yes | |
+| `when` | array | Determines the condition on which to trigger the `execute` resource. Items in this array must be one of `created`, `deleted` or `changed`. | no | `[created, changed, deleted]` |
+
 ## Example
 
 ```yaml
