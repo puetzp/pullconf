@@ -104,7 +104,7 @@ resources:
         name: reload-sshd
         when:
           - created
-		  - changed
+          - changed
 
   - type: execute
     parameters:
