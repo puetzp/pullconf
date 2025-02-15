@@ -102,6 +102,9 @@ resources:
     triggers:
       - type: execute
         name: reload-sshd
+        when:
+          - created
+		  - changed
 
   - type: execute
     parameters:
