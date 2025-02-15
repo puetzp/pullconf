@@ -1,4 +1,4 @@
-use crate::ResourceMetadata;
+use crate::{ResourceMetadata, TriggerMetadata};
 use serde::{de::Error, Deserialize, Deserializer, Serialize};
 use std::fmt;
 use std::ops::Deref;
@@ -14,7 +14,7 @@ pub struct Parameters {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Relationships {
     pub requires: Vec<ResourceMetadata>,
-    pub triggers: Vec<ResourceMetadata>,
+    pub triggers: Vec<TriggerMetadata>,
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]

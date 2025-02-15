@@ -3,7 +3,7 @@ use crate::{
     types::{
         resources::{
             apt, directory, execute, file, group, host, symlink, user, Dependency, Resource,
-            UnresolvedResource,
+            Trigger, UnresolvedResource,
         },
         ApiKey, Group,
     },
@@ -12,7 +12,7 @@ use common::{
     resources::{
         apt::package::Name as AptPackageName, group::Name as GroupName, user::Name as UserName,
     },
-    Hostname, ResourceType,
+    Action, Hostname, ResourceType, TriggerMetadata,
 };
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -48,7 +48,7 @@ pub struct ValidationHelpers {
     /// During validation these triggers are resolved and
     /// the actual resource metadata of a given triggered resource
     /// is added to the resource relationship data.
-    pub triggers: HashMap<Uuid, Vec<Dependency>>,
+    pub triggers: HashMap<Uuid, Vec<Trigger>>,
     /// Some resources manage filesystem nodes of different types.
     /// This collection helps to ensure during validation that a node
     /// at a given path is not managed by multiple resources of the same
@@ -286,6 +286,28 @@ impl Client {
         }
     }
 
+    /// Return the resource corresponding to a trigger reference.
+    /// Triggers are always references to resources of type `execute` which
+    /// are uniquely identifiable by their `name` attribute.
+    /// If the configuration references a trigger that does not correspond
+    /// to a known `execute` resource, `None` is returned.
+    fn resolve_trigger<'a>(
+        &self,
+        trigger: &'a Trigger,
+    ) -> Option<(execute::Execute, &'a [Action])> {
+        match trigger {
+            Trigger::Execute { name, when } => match self
+                .resources
+                .iter()
+                .filter_map(|resource| resource.as_execute())
+                .find(|execute| execute.parameters.name == *name)
+            {
+                Some(execute) => Some((execute.clone(), when.as_slice())),
+                None => None,
+            },
+        }
+    }
+
     /// Iterate and validate every resource from each group that this client
     /// is a member of. Variables are substituted in the process.
     /// Then add the resources originating from a group to the client's own
@@ -516,17 +538,10 @@ impl Client {
                     ));
                 }
 
-                match self.resolve_dependency(trigger) {
-                    Some(other_resource) => {
-                        if let Some(execute) = other_resource.as_execute() {
-                            resource.push_trigger(execute.metadata().clone());
-                        } else {
-                            return Err(format!(
-                                "`{}`: resource can only trigger resources of type `execute`, found `{}`",
-                                resource.repr(),
-                                other_resource.repr()
-                            ));
-                        }
+                match self.resolve_trigger(trigger) {
+                    Some((execute, when)) => {
+                        let metadata = TriggerMetadata::from(execute.metadata(), when);
+                        resource.push_trigger(metadata);
                     }
                     None => {
                         return Err(format!(

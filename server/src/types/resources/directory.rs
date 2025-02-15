@@ -6,7 +6,7 @@ use common::{
         group::Name as Groupname,
         user::Name as Username,
     },
-    Ensure, ResourceMetadata, ResourceType, SafePathBuf,
+    Ensure, ResourceMetadata, ResourceType, SafePathBuf, TriggerMetadata,
 };
 use serde::Serialize;
 use std::collections::HashMap;
@@ -158,7 +158,7 @@ impl Directory {
         self.relationships.requires.push(metadata)
     }
 
-    pub fn push_trigger(&mut self, metadata: ResourceMetadata) {
+    pub fn push_trigger(&mut self, metadata: TriggerMetadata) {
         self.relationships.triggers.push(metadata)
     }
 }

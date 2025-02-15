@@ -4,7 +4,7 @@ use crate::{
 };
 use common::{
     resources::apt::package::{Ensure, Name, Parameters, Relationships, Version},
-    ResourceMetadata, ResourceType,
+    ResourceMetadata, ResourceType, TriggerMetadata,
 };
 use serde::Serialize;
 use std::collections::HashMap;
@@ -97,7 +97,7 @@ impl Package {
         self.relationships.requires.push(metadata)
     }
 
-    pub fn push_trigger(&mut self, metadata: ResourceMetadata) {
+    pub fn push_trigger(&mut self, metadata: TriggerMetadata) {
         self.relationships.triggers.push(metadata)
     }
 }

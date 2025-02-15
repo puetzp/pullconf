@@ -1,8 +1,8 @@
-use super::{Action, Resource, ResourceTrait};
+use super::{Resource, ResourceTrait};
 use anyhow::Context;
 use common::{
     resources::execute::{Parameters, Relationships},
-    Ensure, ResourceMetadata,
+    Action, Ensure, ResourceMetadata, TriggerMetadata,
 };
 use log::{debug, error, info};
 use serde::Deserialize;
@@ -31,11 +31,15 @@ impl ResourceTrait for Execute {
         self.id
     }
 
+    fn action(&self) -> Action {
+        self.action
+    }
+
     fn dependencies(&self) -> &[ResourceMetadata] {
         self.relationships.requires.as_slice()
     }
 
-    fn triggers(&self) -> &[ResourceMetadata] {
+    fn triggers(&self) -> &[TriggerMetadata] {
         self.relationships.triggers.as_slice()
     }
 
@@ -70,13 +74,9 @@ impl Execute {
                 applied_resources
                     .get(&dependency.id)
                     .is_some_and(|resource| {
-                        resource
-                            .triggers()
-                            .iter()
-                            .any(|trigger| trigger.id() == self.id())
-                            && (resource.is_created()
-                                || resource.is_deleted()
-                                || resource.is_changed())
+                        resource.triggers().iter().any(|trigger| {
+                            trigger.id() == self.id() && trigger.when().contains(&resource.action())
+                        })
                     })
             })
         {

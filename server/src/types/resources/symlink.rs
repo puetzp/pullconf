@@ -3,7 +3,7 @@ use crate::configuration::Source;
 use common::{
     resources::directory::ChildNode,
     resources::symlink::{Parameters, Relationships},
-    Ensure, ResourceMetadata, ResourceType, SafePathBuf,
+    Ensure, ResourceMetadata, ResourceType, SafePathBuf, TriggerMetadata,
 };
 use serde::Serialize;
 use std::collections::HashMap;
@@ -114,7 +114,7 @@ impl Symlink {
         self.relationships.requires.push(metadata)
     }
 
-    pub fn push_trigger(&mut self, metadata: ResourceMetadata) {
+    pub fn push_trigger(&mut self, metadata: TriggerMetadata) {
         self.relationships.triggers.push(metadata)
     }
 }

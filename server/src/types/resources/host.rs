@@ -2,7 +2,7 @@ use super::{Resolvable, Resource, UnresolvedNode};
 use crate::configuration::Source;
 use common::{
     resources::host::{Parameters, Relationships},
-    Ensure, Hostname, ResourceMetadata, ResourceType,
+    Ensure, Hostname, ResourceMetadata, ResourceType, TriggerMetadata,
 };
 use serde::Serialize;
 use std::{collections::HashMap, net::IpAddr, path::Path};
@@ -115,7 +115,7 @@ impl Host {
         self.relationships.requires.push(metadata)
     }
 
-    pub fn push_trigger(&mut self, metadata: ResourceMetadata) {
+    pub fn push_trigger(&mut self, metadata: TriggerMetadata) {
         self.relationships.triggers.push(metadata)
     }
 }

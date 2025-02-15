@@ -1,7 +1,7 @@
-use super::{Action, Resource, ResourceTrait};
+use super::{Resource, ResourceTrait};
 use common::{
     resources::group::{Name, Parameters, Relationships},
-    Ensure, ResourceMetadata,
+    Action, Ensure, ResourceMetadata, TriggerMetadata,
 };
 use log::{debug, error, info};
 use serde::Deserialize;
@@ -37,11 +37,15 @@ impl ResourceTrait for Group {
         self.id
     }
 
+    fn action(&self) -> Action {
+        self.action
+    }
+
     fn dependencies(&self) -> &[ResourceMetadata] {
         self.relationships.requires.as_slice()
     }
 
-    fn triggers(&self) -> &[ResourceMetadata] {
+    fn triggers(&self) -> &[TriggerMetadata] {
         self.relationships.triggers.as_slice()
     }
 

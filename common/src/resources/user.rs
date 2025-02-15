@@ -1,5 +1,5 @@
 use super::group::Name as Groupname;
-use crate::{Ensure, ResourceMetadata, SafePathBuf};
+use crate::{Ensure, ResourceMetadata, SafePathBuf, TriggerMetadata};
 use serde::{de::Error, Deserialize, Deserializer, Serialize, Serializer};
 use std::{fmt, ops::Deref, str::FromStr};
 use time::{format_description::FormatItem, macros::format_description, Date};
@@ -23,7 +23,7 @@ pub struct Parameters {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Relationships {
     pub requires: Vec<ResourceMetadata>,
-    pub triggers: Vec<ResourceMetadata>,
+    pub triggers: Vec<TriggerMetadata>,
 }
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]

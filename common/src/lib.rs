@@ -102,6 +102,54 @@ impl ResourceMetadata {
     }
 }
 
+#[derive(Clone, Debug, Deserialize, Eq, Serialize)]
+pub struct TriggerMetadata {
+    #[serde(rename = "type")]
+    pub kind: ResourceType,
+    pub id: Uuid,
+    pub when: Vec<Action>,
+}
+
+impl PartialOrd for TriggerMetadata {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for TriggerMetadata {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.id.cmp(&other.id)
+    }
+}
+
+impl PartialEq for TriggerMetadata {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+impl TriggerMetadata {
+    pub fn kind(&self) -> String {
+        self.kind.to_string()
+    }
+
+    pub fn id(&self) -> Uuid {
+        self.id
+    }
+
+    pub fn when(&self) -> &[Action] {
+        self.when.as_slice()
+    }
+
+    pub fn from(resource_metadata: &ResourceMetadata, when: &[Action]) -> Self {
+        Self {
+            kind: resource_metadata.kind,
+            id: resource_metadata.id,
+            when: when.to_vec(),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub enum Ensure {
@@ -170,3 +218,61 @@ macro_rules! impl_string_newtype {
 }
 
 pub(crate) use impl_string_newtype;
+
+/// This enum describes possible states that are the result of
+/// applying a resource.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Action {
+    // This variant applies when a resource remains unchanged,
+    // either present or absent.
+    #[default]
+    Unchanged,
+    // This variant applies when a resource needed to be created
+    // because it did not exist before.
+    Created,
+    // This variant applies when a resource exists but needed to
+    // be changed in order to reach the desired state.
+    Changed,
+    // This variant applies when a resource has been deleted.
+    Deleted,
+    // This variant applies whenever any preconditions hinder the
+    // resource from being applied.
+    // This is usually the case when a dependency of this resource
+    // failed to apply or has been skipped itself.
+    Skipped,
+    // This variant applies when a resource could not successfully
+    // be configured according to its desired state.
+    // It also applies when certain preconditions fail, e.g. when
+    // a dependency of this resource is absent.
+    Failed,
+}
+
+impl fmt::Display for Action {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Unchanged => f.write_str("unchanged"),
+            Self::Created => f.write_str("created"),
+            Self::Changed => f.write_str("changed"),
+            Self::Deleted => f.write_str("deleted"),
+            Self::Skipped => f.write_str("skipped"),
+            Self::Failed => f.write_str("failed"),
+        }
+    }
+}
+
+impl FromStr for Action {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "unchanged" => Ok(Self::Unchanged),
+            "created" => Ok(Self::Created),
+            "Changed" => Ok(Self::Changed),
+            "Deleted" => Ok(Self::Deleted),
+            "Skipped" => Ok(Self::Skipped),
+            "Failed" => Ok(Self::Failed),
+            _ => anyhow::bail!("invalid `action` value: {}", s),
+        }
+    }
+}

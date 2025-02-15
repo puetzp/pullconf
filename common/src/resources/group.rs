@@ -1,5 +1,5 @@
 use super::user::Name as Username;
-use crate::{Ensure, ResourceMetadata};
+use crate::{Ensure, ResourceMetadata, TriggerMetadata};
 use serde::{de::Error, Deserialize, Deserializer, Serialize};
 use std::{fmt, ops::Deref, str::FromStr};
 
@@ -13,7 +13,7 @@ pub struct Parameters {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Relationships {
     pub requires: Vec<ResourceMetadata>,
-    pub triggers: Vec<ResourceMetadata>,
+    pub triggers: Vec<TriggerMetadata>,
 }
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]

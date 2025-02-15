@@ -23,10 +23,14 @@ use common::{
     resources::{
         apt::package::Name as AptPackageName, group::Name as GroupName, user::Name as UserName,
     },
-    ResourceMetadata, ResourceType, SafePathBuf,
+    Action, ResourceMetadata, ResourceType, SafePathBuf, TriggerMetadata,
 };
 use serde::Serialize;
-use std::{collections::HashMap, net::IpAddr, str::FromStr};
+use std::{
+    collections::{HashMap, HashSet},
+    net::IpAddr,
+    str::FromStr,
+};
 use strict_yaml_rust::{strict_yaml::Hash, StrictYaml};
 use uuid::Uuid;
 
@@ -105,7 +109,7 @@ macro_rules! impl_resources {
                 }
             }
 
-            pub fn push_trigger(&mut self, metadata: ResourceMetadata) {
+            pub fn push_trigger(&mut self, metadata: TriggerMetadata) {
                 match self {
                     $(
                         Self::$resource(resource) => resource.push_trigger(metadata),
@@ -412,47 +416,163 @@ impl TryFrom<(Source, StrictYaml)> for Dependency {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum Trigger {
+    Execute { name: String, when: Vec<Action> },
+}
+
+impl Trigger {
+    pub fn repr(&self) -> String {
+        match self {
+            Self::Execute { name, .. } => format!("execute[{}]", name),
+        }
+    }
+}
+
+impl PartialEq<Resource> for Trigger {
+    fn eq(&self, resource: &Resource) -> bool {
+        match resource {
+            Resource::Execute(execute) => {
+                matches!(self, Self::Execute { name, .. } if *name == execute.parameters.name)
+            }
+            _ => false,
+        }
+    }
+}
+
+impl TryFrom<(Source, StrictYaml)> for Trigger {
+    type Error = String;
+
+    fn try_from((source, node): (Source, StrictYaml)) -> Result<Self, Self::Error> {
+        let mut hash = node
+            .into_hash()
+            .ok_or(format!("{}: node must be a hash", source))?;
+
+        let kind = {
+            let key = "type";
+
+            hash.remove(&StrictYaml::String(key.into()))
+                .ok_or(format!("{}: failed to find required key `{}`", source, key))?
+                .into_string()
+                .ok_or(format!("{}: node must be a string", source.clone() + key))?
+        };
+
+        let trigger = match kind.as_str() {
+            "execute" => {
+                let key = "name";
+
+                let name = match hash.remove(&StrictYaml::String(key.into())) {
+                    Some(node) => match node.into_string() {
+                        Some(s) => s,
+                        None => {
+                            return Err(format!("{}: node must be a string", source.clone() + key))
+                        }
+                    },
+                    None => {
+                        return Err(format!("{}: failed to find required key `{}`", source, key))
+                    }
+                };
+
+                let key = "when";
+
+                let when = match hash.remove(&StrictYaml::String(key.into())) {
+                    Some(node) => match node.into_vec() {
+                        Some(v) => {
+                            let mut actions = HashSet::new();
+
+                            for (index, item) in v.into_iter().enumerate() {
+                                let source = source.clone() + key + index;
+
+                                let s = item
+                                    .into_string()
+                                    .ok_or(format!("{}: node must be a string", source))?;
+
+                                let action = Action::from_str(&s)
+                                    .map_err(|error| format!("{}: {}", source, error))?;
+
+                                if ![Action::Created, Action::Deleted, Action::Changed]
+                                    .contains(&action)
+                                {
+                                    return Err(format!(
+                                        "{}: value must be one of `created`, `deleted`, `changed`",
+                                        source
+                                    ));
+                                }
+
+                                if !actions.insert(action) {
+                                    return Err(format!("{}: found duplicate value", source));
+                                }
+                            }
+
+                            Vec::from_iter(actions)
+                        }
+                        None => {
+                            return Err(format!("{}: node must be an array", source.clone() + key))
+                        }
+                    },
+                    None => vec![Action::Created, Action::Deleted, Action::Changed],
+                };
+
+                Ok(Trigger::Execute { name, when })
+            }
+            _ => {
+                return Err(format!(
+                    "{}: encountered invalid value `{}`",
+                    source + "type",
+                    kind
+                ))
+            }
+        };
+
+        if let Some(key) = hash.pop_back().and_then(|(key, _)| key.into_string()) {
+            return Err(format!("{}: encountered invalid key `{}`", source, key));
+        }
+
+        trigger
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum UnresolvedResource {
     AptPackage {
         parameters: apt::package::UnresolvedParameters,
         requires: Vec<Dependency>,
-        triggers: Vec<Dependency>,
+        triggers: Vec<Trigger>,
     },
     Directory {
         parameters: directory::UnresolvedParameters,
         requires: Vec<Dependency>,
-        triggers: Vec<Dependency>,
+        triggers: Vec<Trigger>,
     },
     Execute {
         parameters: execute::UnresolvedParameters,
         requires: Vec<Dependency>,
-        triggers: Vec<Dependency>,
+        triggers: Vec<Trigger>,
     },
     File {
         parameters: file::UnresolvedParameters,
         requires: Vec<Dependency>,
-        triggers: Vec<Dependency>,
+        triggers: Vec<Trigger>,
     },
     Group {
         parameters: group::UnresolvedParameters,
         requires: Vec<Dependency>,
-        triggers: Vec<Dependency>,
+        triggers: Vec<Trigger>,
     },
     Host {
         parameters: host::UnresolvedParameters,
         requires: Vec<Dependency>,
-        triggers: Vec<Dependency>,
+        triggers: Vec<Trigger>,
     },
     Symlink {
         parameters: symlink::UnresolvedParameters,
         requires: Vec<Dependency>,
-        triggers: Vec<Dependency>,
+        triggers: Vec<Trigger>,
     },
     User {
         parameters: user::UnresolvedParameters,
         requires: Vec<Dependency>,
-        triggers: Vec<Dependency>,
+        triggers: Vec<Trigger>,
     },
 }
 
@@ -470,7 +590,7 @@ impl UnresolvedResource {
         }
     }
 
-    pub fn triggers(&self) -> &[Dependency] {
+    pub fn triggers(&self) -> &[Trigger] {
         match self {
             Self::AptPackage { triggers, .. } => triggers.as_slice(),
             Self::Directory { triggers, .. } => triggers.as_slice(),
@@ -547,17 +667,7 @@ impl TryFrom<(Source, Hash)> for UnresolvedResource {
                 {
                     let source = source.clone() + index;
 
-                    let reference = Dependency::try_from((source.clone(), item))?;
-
-                    if !matches!(reference, Dependency::Execute { .. }) {
-                        return Err(format!(
-                            "{}: array item must reference a resource of type `execute`, found `{}`",
-                            source,
-                            reference.repr()
-                        ));
-                    }
-
-                    array.push(reference);
+                    array.push(Trigger::try_from((source.clone(), item))?);
                 }
             }
 

@@ -1,7 +1,7 @@
-use crate::resources::{Action, Resource, ResourceTrait};
+use crate::resources::{Resource, ResourceTrait};
 use common::{
     resources::apt::package::{Ensure, Parameters, Relationships, Version},
-    ResourceMetadata,
+    Action, ResourceMetadata, TriggerMetadata,
 };
 use log::{debug, error, info};
 use serde::Deserialize;
@@ -33,11 +33,15 @@ impl ResourceTrait for Package {
         self.id
     }
 
+    fn action(&self) -> Action {
+        self.action
+    }
+
     fn dependencies(&self) -> &[ResourceMetadata] {
         self.relationships.requires.as_slice()
     }
 
-    fn triggers(&self) -> &[ResourceMetadata] {
+    fn triggers(&self) -> &[TriggerMetadata] {
         self.relationships.triggers.as_slice()
     }
 

@@ -7,12 +7,9 @@ pub mod host;
 pub mod symlink;
 pub mod user;
 
-use common::ResourceMetadata;
+use common::{Action, ResourceMetadata, TriggerMetadata};
 use serde::Deserialize;
-use std::{
-    collections::{HashMap, VecDeque},
-    fmt,
-};
+use std::collections::{HashMap, VecDeque};
 use ureq::Agent;
 use url::Url;
 use uuid::Uuid;
@@ -170,51 +167,9 @@ impl Resource {
         }
     }
 
-    /// Check whether the resource was created.
-    pub fn is_created(&self) -> bool {
-        match self {
-            Self::AptPackage(resource) => resource.action == Action::Created,
-            Self::Directory(resource) => resource.action == Action::Created,
-            Self::Execute(resource) => resource.action == Action::Created,
-            Self::File(resource) => resource.action == Action::Created,
-            Self::Group(resource) => resource.action == Action::Created,
-            Self::Host(resource) => resource.action == Action::Created,
-            Self::Symlink(resource) => resource.action == Action::Created,
-            Self::User(resource) => resource.action == Action::Created,
-        }
-    }
-
-    /// Check whether the resource was deleted.
-    pub fn is_deleted(&self) -> bool {
-        match self {
-            Self::AptPackage(resource) => resource.action == Action::Deleted,
-            Self::Directory(resource) => resource.action == Action::Deleted,
-            Self::Execute(resource) => resource.action == Action::Deleted,
-            Self::File(resource) => resource.action == Action::Deleted,
-            Self::Group(resource) => resource.action == Action::Deleted,
-            Self::Host(resource) => resource.action == Action::Deleted,
-            Self::Symlink(resource) => resource.action == Action::Deleted,
-            Self::User(resource) => resource.action == Action::Deleted,
-        }
-    }
-
-    /// Check whether the resource was changed.
-    pub fn is_changed(&self) -> bool {
-        match self {
-            Self::AptPackage(resource) => resource.action == Action::Changed,
-            Self::Directory(resource) => resource.action == Action::Changed,
-            Self::Execute(resource) => resource.action == Action::Changed,
-            Self::File(resource) => resource.action == Action::Changed,
-            Self::Group(resource) => resource.action == Action::Changed,
-            Self::Host(resource) => resource.action == Action::Changed,
-            Self::Symlink(resource) => resource.action == Action::Changed,
-            Self::User(resource) => resource.action == Action::Changed,
-        }
-    }
-
     /// This is a shortcut to the list of metadata of resources
     /// that are triggered by this resource.
-    pub fn triggers(&self) -> &[ResourceMetadata] {
+    pub fn triggers(&self) -> &[TriggerMetadata] {
         match self {
             Self::AptPackage(resource) => resource.triggers(),
             Self::Directory(resource) => resource.triggers(),
@@ -226,45 +181,18 @@ impl Resource {
             Self::User(resource) => resource.triggers(),
         }
     }
-}
 
-/// This enum describes possible actions that are the result of
-/// applying a resource.
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
-pub enum Action {
-    // This variant applies when a resource remains unchanged,
-    // either present or absent.
-    #[default]
-    Unchanged,
-    // This variant applies when a resource needed to be created
-    // because it did not exist before.
-    Created,
-    // This variant applies when a resource exists but needed to
-    // be changed in order to reach the desired state.
-    Changed,
-    // This variant applies when a resource has been deleted.
-    Deleted,
-    // This variant applies whenever any preconditions hinder the
-    // resource from being applied.
-    // This is usually the case when a dependency of this resource
-    // failed to apply or has been skipped itself.
-    Skipped,
-    // This variant applies when a resource could not successfully
-    // be configured according to its desired state.
-    // It also applies when certain preconditions fail, e.g. when
-    // a dependency of this resource is absent.
-    Failed,
-}
-
-impl fmt::Display for Action {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    /// Return the state of the resource.
+    pub fn action(&self) -> Action {
         match self {
-            Self::Unchanged => f.write_str("unchanged"),
-            Self::Created => f.write_str("created"),
-            Self::Changed => f.write_str("changed"),
-            Self::Deleted => f.write_str("deleted"),
-            Self::Skipped => f.write_str("skipped"),
-            Self::Failed => f.write_str("failed"),
+            Self::AptPackage(resource) => resource.action(),
+            Self::Directory(resource) => resource.action(),
+            Self::Execute(resource) => resource.action(),
+            Self::File(resource) => resource.action(),
+            Self::Group(resource) => resource.action(),
+            Self::Host(resource) => resource.action(),
+            Self::Symlink(resource) => resource.action(),
+            Self::User(resource) => resource.action(),
         }
     }
 }
@@ -288,6 +216,9 @@ pub trait ResourceTrait {
 
     /// Return the UUID of this resource as assigned by pullconfd.
     fn id(&self) -> Uuid;
+
+    /// Return the state of the resource.
+    fn action(&self) -> Action;
 
     /// Check if this resource must in fact be applied, which depends on its
     /// dependencies. If they returned certain values, this resource can be
@@ -349,7 +280,7 @@ pub trait ResourceTrait {
 
     /// Return a collection of resource metadata that points at
     /// resources that are triggered by the implementing resource.
-    fn triggers(&self) -> &[ResourceMetadata];
+    fn triggers(&self) -> &[TriggerMetadata];
 
     /// Determine if this resource is ready to be applied by checking if each of
     /// its dependencies has been applied.

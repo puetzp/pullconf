@@ -1,4 +1,4 @@
-use crate::{Ensure, Hostname, ResourceMetadata};
+use crate::{Ensure, Hostname, ResourceMetadata, TriggerMetadata};
 use serde::{Deserialize, Serialize};
 use std::{net::IpAddr, path::PathBuf};
 
@@ -14,5 +14,5 @@ pub struct Parameters {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Relationships {
     pub requires: Vec<ResourceMetadata>,
-    pub triggers: Vec<ResourceMetadata>,
+    pub triggers: Vec<TriggerMetadata>,
 }

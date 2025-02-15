@@ -1,7 +1,7 @@
-use super::{group, Action, Resource, ResourceTrait};
+use super::{group, Resource, ResourceTrait};
 use common::{
     resources::user::{Name, Parameters, Password, Relationships, EXPIRY_DATE_FORMAT},
-    Ensure, ResourceMetadata, SafePathBuf,
+    Action, Ensure, ResourceMetadata, SafePathBuf, TriggerMetadata,
 };
 use log::{debug, error, info};
 use serde::Deserialize;
@@ -43,11 +43,15 @@ impl ResourceTrait for User {
         self.id
     }
 
+    fn action(&self) -> Action {
+        self.action
+    }
+
     fn dependencies(&self) -> &[ResourceMetadata] {
         self.relationships.requires.as_slice()
     }
 
-    fn triggers(&self) -> &[ResourceMetadata] {
+    fn triggers(&self) -> &[TriggerMetadata] {
         self.relationships.triggers.as_slice()
     }
 

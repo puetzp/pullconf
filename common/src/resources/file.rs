@@ -1,6 +1,6 @@
 use super::group::Name as Groupname;
 use super::user::Name as Username;
-use crate::{Ensure, ResourceMetadata, SafePathBuf};
+use crate::{Ensure, ResourceMetadata, SafePathBuf, TriggerMetadata};
 use serde::{de::Error, Deserialize, Deserializer, Serialize};
 use std::{fmt, ops::Deref, str::FromStr};
 
@@ -18,7 +18,7 @@ pub struct Parameters {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Relationships {
     pub requires: Vec<ResourceMetadata>,
-    pub triggers: Vec<ResourceMetadata>,
+    pub triggers: Vec<TriggerMetadata>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

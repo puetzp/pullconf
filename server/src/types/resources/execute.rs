@@ -2,7 +2,7 @@ use super::{Resolvable, Resource, UnresolvedNode};
 use crate::configuration::Source;
 use common::{
     resources::execute::{Environment, Parameters, Relationships},
-    Ensure, ResourceMetadata, ResourceType,
+    Ensure, ResourceMetadata, ResourceType, TriggerMetadata,
 };
 use serde::Serialize;
 use std::collections::HashMap;
@@ -120,7 +120,7 @@ impl Execute {
         self.relationships.requires.push(metadata)
     }
 
-    pub fn push_trigger(&mut self, metadata: ResourceMetadata) {
+    pub fn push_trigger(&mut self, metadata: TriggerMetadata) {
         self.relationships.triggers.push(metadata)
     }
 }
