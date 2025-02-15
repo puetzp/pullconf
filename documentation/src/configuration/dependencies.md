@@ -14,8 +14,14 @@ Explicit dependencies are validated with additional care to avoid dependency loo
 
 For example a [directory](resources/directory.md) resource at `/my/example` cannot depend on another directory resource at `/my/example/further/down`, because the former *must* be processed before the latter.
 
-When one resource requires another, it is ensured that the required resource is applied first. However should the required resource fail to apply (e.g. because a file cannot be written due to missing permissions), other resources that depend on this resource via `requires` will be skipped.
+Dependencies between resources determine the order in which they are applied. They also determine if a resource is applied at all, based on the state of other resources that a resource depends on. In regard to the latter the following rules apply:
 
+* When a resource depends on another resource that failed to apply, the resource is skipped.
+* When a resource depends on another resource that was skipped, the resource is skipped as well.
+* When a resource's `ensure` parameter is set to `present` or an equivalent value, but it also depends on a resource that is `absent` (or equivalent), the resource fails[^note].
+
+[^note]: There is one exception to this rule: an `execute` resource can still be applied when it depends on an `absent` resource. This enables use cases such as reloading the system manager via (`systemctl daemon-reload`) when a unit [file](resources/file.md) is deleted by setting it to `absent`.
+  
 Within the `requires` array other resources are usually referred to by their `type` (e.g. `file`) and their *primary parameter*. For example a [directory](resources/directory.md) is primarily identified by its `path` parameter.
 
 The primary parameter of a resource is marked in each resource's documentation section.
