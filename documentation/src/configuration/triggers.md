@@ -50,11 +50,10 @@ resources:
     triggers:
       - type: execute
         name: reload-sshd
-		# This is the default behavior and the same as omitting `when` altogether.
+        # Reload sshd only when the file is created or changed.
 		when:
 		  - created
 		  - changed
-		  - deleted
 
 <...>
 ```
@@ -66,34 +65,29 @@ resources:
   - type: execute
     parameters:
 	  ensure: present
-      name: reload-sshd
+      name: daemon-reload
 	  command:
 	    - systemctl
-	    - reload
-		- sshd.service
+	    - daemon-reload
 	  passive: true
 
   - type: file
     parameters:
       ensure: present
-      path: /etc/ssh/sshd_config
+      path: /etc/systemd/system/some-unit.service
 	  owner: root
 	  group: root
 	  content:
 	    value: |
-          Port 22
-		  Listen 0.0.0.0
-		  
-		  PermitRootLogin no
-		  PasswordAuthentication no
-		  PubkeyAuthentication yes
-		  AllowTcpForwarding yes
+          ...
     triggers:
       - type: execute
-        name: reload-sshd
-		# Reload sshd only once, after the file has been created.
+        name: daemon-reload
+		# Thie is the default behavior and the same as if `when` is omitted altogether.
 		when:
 		  - created
+		  - changed
+		  - deleted
 
 <...>
 ```
