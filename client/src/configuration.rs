@@ -5,16 +5,13 @@ use common::Hostname;
 use log::{debug, info};
 use std::{
     collections::{HashMap, VecDeque},
-    env,
-    error::Error as StdError,
-    fs,
-    io::{BufReader, ErrorKind},
-    path::PathBuf,
+    env, fs,
+    io::ErrorKind,
     process::Command,
     str::FromStr,
     time::Instant,
 };
-use ureq::{serde_json, Agent, AgentBuilder};
+use ureq::{tls, Agent};
 use url::Url;
 
 const ETAG_FILE: &str = "/var/lib/pullconf/etag";
@@ -88,61 +85,27 @@ impl Configuration {
             })?
         };
 
-        // Add common CA certificates to the truststore of this request.
-        let mut roots = rustls::RootCertStore {
-            roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
-        };
-
-        // If a custom directory path is provided that contains other (e.g. self-signed)
-        // CA certificates, parse every certificate in each file and add them to
-        // the truststore as well.
-        if let Ok(ca_dir) = env::var("PULLCONF_CA_DIR") {
-            let path = PathBuf::from_str(&ca_dir).map_err(|error| {
-                format!("failed to parse `{}` as filesystem path: {}", ca_dir, error)
-            })?;
-
-            let entries = fs::read_dir(&path)
-                .map_err(|error| {
-                    format!("failed to access directory `{}`: {}", path.display(), error)
-                })?
-                .into_iter()
-                .map(|entry| entry.map_err(|error| error.to_string()))
-                .collect::<Result<Vec<fs::DirEntry>, String>>()?;
-
-            for entry in entries {
-                let cert_path = entry.path();
-
-                let mut reader = match fs::File::open(&cert_path) {
-                    Ok(cert_file) => BufReader::new(cert_file),
-                    Err(error) => {
-                        return Err(format!(
-                            "failed to open file `{}`: {}",
-                            cert_path.display(),
-                            error
-                        ));
-                    }
-                };
-
-                for cert in rustls_pemfile::certs(&mut reader) {
-                    roots.add(cert.unwrap()).unwrap();
-                }
-            }
-        }
-
+        // Initialize the default crypto provider.
         let _ = rustls::crypto::CryptoProvider::install_default(
             rustls::crypto::aws_lc_rs::default_provider(),
         );
 
-        // Build a custom TLS configuration from the truststore that was created earlier.
-        let tls_config = rustls::ClientConfig::builder()
-            .with_root_certificates(roots)
-            .with_no_client_auth();
+        // Build a TLS configuration from trusted roots.
+        // Custom Certificate Authorities should be added to the
+        // platform's trust store in order for them to function
+        // properly.
+        let tls_config = tls::TlsConfig::builder()
+            .root_certs(tls::RootCerts::PlatformVerifier)
+            .build();
 
         // Initialize the agent used to communicate with pullconfd.
-        let agent = AgentBuilder::new()
+        let config = Agent::config_builder()
             .https_only(true)
-            .tls_config(std::sync::Arc::new(tls_config))
+            .tls_config(tls_config)
+            .http_status_as_error(false)
             .build();
+
+        let agent: Agent = config.into();
 
         // Both successful and erroneous responses from pullconfd are JSON. Except when
         // the response comes from an intermediary (e.g. a reverse proxy).
@@ -155,14 +118,14 @@ impl Configuration {
 
         let mut request = agent
             .get(url.as_str())
-            .set("accept", content_type)
-            .set("x-api-key", &api_key);
+            .header("accept", content_type)
+            .header("x-api-key", &api_key);
 
         debug!("checking if a file with an etag of a saved resource list exists",);
 
         if let Some(etag) = get_etag()? {
             debug!("adding etag of saved resource list to request",);
-            request = request.set("if-none-match", &etag);
+            request = request.header("if-none-match", &etag);
         }
 
         let _timer = Instant::now();
@@ -170,7 +133,11 @@ impl Configuration {
         debug!("requesting resource list from `{}`", url);
 
         let resources = match request.call().inspect(|response| {
-            if let Some(content_length) = response.header("content-length") {
+            if let Some(content_length) = response
+                .headers()
+                .get("content-length")
+                .and_then(|value| value.to_str().ok())
+            {
                 debug!("received {} bytes", content_length);
             }
 
@@ -179,27 +146,67 @@ impl Configuration {
                 (_timer.elapsed().as_millis() as f64) / 1000.0
             )
         }) {
-            Ok(response) => {
+            Ok(mut response) => {
                 if response.status() == 304 {
                     debug!("server returned 304, ignoring the request body and reading saved resource list from disk");
 
                     get_saved_resource_list()?.data
+                } else if response.status().is_client_error() || response.status().is_server_error()
+                {
+                    // If the response is erroneous according to the status code, but the
+                    // content type hints at a non-JSON body, log a generic error including
+                    // relevant information for debugging and terminate the program.
+                    if let Some(_content_type) = response
+                        .body()
+                        .mime_type()
+                        .filter(|value| *value != content_type)
+                    {
+                        return Err(format!(
+                            "unexpected API response content type, expected `{}`, got `{}` and status `{}` from `{}`",
+                            content_type,
+                            _content_type,
+                            response.status(),
+                            response.headers().get("server").and_then(|value| value.to_str().ok()).unwrap_or_default()
+                        ));
+                    } else {
+                        debug!(
+                            "content type is `{}`, deserializing error message",
+                            content_type
+                        );
+
+                        // Otherwise parse the well-known API error format from JSON and log
+                        // the error appropiately. Then terminate the program.
+                        let error = response.body_mut().read_json::<Error>().map_err(|error| {
+                            format!("failed to deserialize error response: {}", error)
+                        })?;
+
+                        return Err(format!(
+                            "pullconfd failed to process the request: {}, {}",
+                            error.title, error.detail
+                        ));
+                    }
                 } else {
                     // If the response is successful according to the status code, but the
                     // content type hints at a non-JSON body, log a generic error including
                     // relevant information for debugging and terminate the program.
-                    if response.content_type() != content_type {
+                    if let Some(_content_type) = response
+                        .body()
+                        .mime_type()
+                        .filter(|value| *value != content_type)
+                    {
                         return Err(format!(
-                            "unexpected API response content type, expected `{}`, got `{}` and status `{} {}` from `{}`",
+                            "unexpected API response content type, expected `{}`, got `{}` and status `{}` from `{}`",
 
                             content_type,
-                            response.content_type(),
+                            _content_type,
                             response.status(),
-                            response.status_text(),
-                            response.header("server").unwrap_or_default()
+                            response.headers().get("server").and_then(|value| value.to_str().ok()).unwrap_or_default()
                         ));
                     } else {
-                        let etag = response.header("etag").map(|value| value.to_string());
+                        let etag = response
+                            .headers()
+                            .get("etag")
+                            .and_then(|value| value.to_str().ok().map(|value| value.to_string()));
 
                         debug!(
                             "content type is `{}`, deserializing resource list",
@@ -208,7 +215,7 @@ impl Configuration {
 
                         // Otherwise parse the payload as it is expected to be a JSON-encoded
                         // resource list.
-                        let payload = response.into_string().map_err(|error| {
+                        let payload = response.body_mut().read_to_string().map_err(|error| {
                             format!("failed to parse payload as utf-8 string: {}", error)
                         })?;
 
@@ -226,47 +233,10 @@ impl Configuration {
                     }
                 }
             }
-            Err(error) => match error {
-                ureq::Error::Status(_, response) => {
-                    // If the response is erroneous according to the status code, but the
-                    // content type hints at a non-JSON body, log a generic error including
-                    // relevant information for debugging and terminate the program.
-                    if response.content_type() != content_type {
-                        return Err(format!(
-                            "unexpected API response content type, expected `{}`, got `{}` and status `{} {}` from `{}`",
-                            content_type,
-                            response.content_type(),
-                            response.status(),
-                            response.status_text(),
-                            response.header("server").unwrap_or_default()
-                        ));
-                    } else {
-                        debug!(
-                            "content type is `{}`, deserializing error message",
-                            content_type
-                        );
-
-                        // Otherwise parse the well-known API error format from JSON and log
-                        // the error appropiately. Then terminate the program.
-                        let error = response.into_json::<Error>().map_err(|error| {
-                            format!("failed to deserialize error response: {}", error)
-                        })?;
-
-                        return Err(format!(
-                            "pullconfd failed to process the request: {}, {}",
-                            error.title, error.detail
-                        ));
-                    }
-                }
+            Err(error) => {
                 // Log any unexpected errors as-is and terminate the program.
-                ureq::Error::Transport(error) => {
-                    return Err(format!(
-                        "failed to send request to pullconfd: {}, {}",
-                        error.message().unwrap(),
-                        error.source().unwrap()
-                    ));
-                }
-            },
+                return Err(format!("failed to send request to pullconfd: {}", error));
+            }
         };
 
         let configuration = Self {

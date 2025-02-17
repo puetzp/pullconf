@@ -3,7 +3,7 @@ pub mod error;
 use crate::{handlers::error::Error, types::ApiKey, SharedAppState};
 use common::{Hostname, Links};
 use log::debug;
-use rand::{distributions::Alphanumeric, Rng};
+use rand::distr::{Alphanumeric, SampleString};
 use rouille::{content_encoding, router, Request, Response};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -12,11 +12,7 @@ use std::{fs, io::Read, path::PathBuf, time::Instant};
 pub fn handle_request(request: &Request, state: SharedAppState) -> Response {
     let start = Instant::now();
 
-    let request_id = rand::thread_rng()
-        .sample_iter(&Alphanumeric)
-        .take(6)
-        .map(char::from)
-        .collect::<String>();
+    let request_id = Alphanumeric.sample_string(&mut rand::rng(), 6);
 
     debug!("(request: {}) received {:?}", request_id, request);
 

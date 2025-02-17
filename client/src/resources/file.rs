@@ -1,4 +1,4 @@
-use super::{Resource, ResourceTrait};
+use super::{Error, Resource, ResourceTrait};
 use crate::util::uid_and_gid;
 use anyhow::Context;
 use common::{
@@ -217,42 +217,71 @@ impl File {
 
             debug!("`{}`: downloading file from `{}`", self.repr(), url);
 
-            let response = agent
+            match agent
                 .get(url.as_str())
-                .set("Accept", "text/plain")
-                .set("X-API-KEY", api_key)
-                .set("If-None-Match", &etag)
+                .header("Accept", "text/plain")
+                .header("X-API-KEY", api_key)
+                .header("If-None-Match", &etag)
                 .call()
-                .context("failed to download file contents")?;
+            {
+                Ok(mut response) => {
+                    let status = response.status();
 
-            if response.status() != 304 {
-                debug!(
-                    "`{}`: remote file content has changed, writing new content to file",
-                    self.repr()
-                );
+                    if status == 304 {
+                        debug!(
+                            "`{}`: remote file content matches current file content",
+                            self.repr(),
+                        );
+                    } else if status == 200 {
+                        debug!(
+                            "`{}`: remote file content has changed, writing new content to file",
+                            self.repr()
+                        );
 
-                let mut bytes = vec![];
+                        let bytes = response
+                            .body_mut()
+                            .read_to_vec()
+                            .context("failed to write payload to buffer")?;
 
-                response
-                    .into_reader()
-                    .read_to_end(&mut bytes)
-                    .context("failed to write payload to buffer")?;
+                        let mut handle = fs::OpenOptions::new()
+                            .write(true)
+                            .open(&*self.parameters.path)
+                            .context("failed to open file in write mode")?;
 
-                let mut handle = fs::OpenOptions::new()
-                    .write(true)
-                    .open(&*self.parameters.path)
-                    .context("failed to open file in write mode")?;
+                        handle
+                            .write_all(&bytes)
+                            .context("failed to write payload to file")?;
 
-                handle
-                    .write_all(&bytes)
-                    .context("failed to write payload to file")?;
+                        action = Action::Changed;
+                    } else if status.is_client_error() || status.is_server_error() {
+                        if let Some(_content_type) = response
+                            .body()
+                            .mime_type()
+                            .filter(|value| *value == "application/json")
+                        {
+                            let error = response
+                                .body_mut()
+                                .read_json::<Error>()
+                                .context(format!("failed to deserialize error response"))?;
 
-                action = Action::Changed;
-            } else {
-                debug!(
-                    "`{}`: remote file content matches current file content",
-                    self.repr(),
-                );
+                            anyhow::bail!(
+                                "pullconfd failed to process the request: {}, {}",
+                                error.title,
+                                error.detail
+                            );
+                        } else {
+                            let error = response
+                                .body_mut()
+                                .read_to_string()
+                                .context("failed to deserialize error response")?;
+
+                            anyhow::bail!("server failed to process the request: {}", error);
+                        }
+                    } else {
+                        anyhow::bail!("received unexpected status from server: `{}`", status);
+                    }
+                }
+                Err(error) => anyhow::bail!("failed to download file content: {}", error),
             }
         } else if let Some(content) = &self.parameters.content {
             let content = self.maybe_replace_placeholders(content)?;
@@ -318,27 +347,60 @@ impl File {
             .context("failed to set file owner and group")?;
 
         if let Some(path) = &self.parameters.source {
-            let mut bytes = vec![];
-
             let url = base_url.join(&format!("/assets{}", path.display()))?;
 
             debug!("`{}`: downloading file from `{}`", self.repr(), url);
 
-            agent
+            match agent
                 .get(url.as_str())
-                .set("Accept", "text/plain")
-                .set("X-API-KEY", api_key)
+                .header("Accept", "text/plain")
+                .header("X-API-KEY", api_key)
                 .call()
-                .context("failed to download file contents")?
-                .into_reader()
-                .read_to_end(&mut bytes)
-                .context("failed to write payload to buffer")?;
+            {
+                Ok(mut response) => {
+                    let status = response.status();
 
-            debug!("`{}`: writing content to file", self.repr());
+                    if status == 200 {
+                        debug!("`{}`: writing content to file", self.repr());
 
-            handle
-                .write_all(&bytes)
-                .context("failed to write payload to file")?;
+                        let bytes = response
+                            .body_mut()
+                            .read_to_vec()
+                            .context("failed to write payload to buffer")?;
+
+                        handle
+                            .write_all(&bytes)
+                            .context("failed to write payload to file")?;
+                    } else if status.is_client_error() || status.is_server_error() {
+                        if let Some(_content_type) = response
+                            .body()
+                            .mime_type()
+                            .filter(|value| *value == "application/json")
+                        {
+                            let error = response
+                                .body_mut()
+                                .read_json::<Error>()
+                                .context(format!("failed to deserialize error response"))?;
+
+                            anyhow::bail!(
+                                "pullconfd failed to process the request: {}, {}",
+                                error.title,
+                                error.detail
+                            );
+                        } else {
+                            let error = response
+                                .body_mut()
+                                .read_to_string()
+                                .context("failed to deserialize error response")?;
+
+                            anyhow::bail!("server failed to process the request: {}", error);
+                        }
+                    } else {
+                        anyhow::bail!("received unexpected status from server: `{}`", status);
+                    }
+                }
+                Err(error) => anyhow::bail!("failed to download file content: {}", error),
+            }
         } else if let Some(content) = &self.parameters.content {
             let content = self.maybe_replace_placeholders(content)?;
 
