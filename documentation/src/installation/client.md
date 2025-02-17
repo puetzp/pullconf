@@ -64,6 +64,6 @@ sudo systemctl start pullconf.service
 
 However unless the client is already known to the server `pullconf.service` will likely fail again. That is because **pullconf** tries to authenticate to **pullconfd** with a hostname and its API key. Both are still unknown to **pullconfd** as long as no client configuration file exists on the server side. Proceed to [creating a client configuration file](../configuration/client.md) to let the client successfully fetch its list of resources from the server.
 
-> Note that **pullconf** will only trust a server certificate from **pullconfd** that can be verified through the platform's trusted roots. If the server certificate is signed by a custom, self-signed certificate authority, the CA certificate must be copied to `/usr/local/share/ca-certificates` and then added to the truststore via the command `update-ca-certificates`.
+> Note that **pullconf** will only trust a server certificate from **pullconfd** that can be verified through the platform's trusted roots. If the server certificate is signed by an internal or custom certificate authority, the CA certificate must be copied to `/usr/local/share/ca-certificates` and then added to the truststore via the command `update-ca-certificates`.
 
 
