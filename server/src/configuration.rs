@@ -129,6 +129,19 @@ fn parse(
     groups: &mut HashMap<Hostname, (Group, usize)>,
     unresolved_clients: &mut HashMap<Hostname, client::unresolved::Client>,
 ) -> Result<(), String> {
+    if path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.starts_with('.'))
+    {
+        warn!(
+            "`{}`: ignoring file or directory as it starts with a dot",
+            path.display()
+        );
+
+        return Ok(());
+    }
+
     match fs::read_dir(path) {
         Ok(entries) => {
             if recursion > 10 {

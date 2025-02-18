@@ -6,10 +6,10 @@ Configuration files are parsed by **pullconfd** according to these rules:
 
 - only files in `$PULLCONF_RESOURCE_DIR` are parsed.
 - this directory may contain subdirectories that can be nested up to ten levels.
-- in this directory only files ending with a `.yaml` or `.yml` extension are parsed, other files are ignored. This enables the usage of `git` or other version control software.
+- in this directory files and subdirectories starting with a dot are ignored, only files ending with a `.yaml` or `.yml` extension are parsed. This enables the usage of `git` or other version control software.
 - files may contain one or more StrictYAML documents. Every document is expected to define either a client or a group.
 
-For example one straightforward way to manage configuration files in a small environment is to create one file per client in a subdirectory such as `$PULLCONF_RESOURCE_DIR/clients`. The files in this directory could be named after the clients they define. Thus a client with the hostname `blechkiste.local` would be defined in the file `$PULLCONF_RESOURCE_DIR/clients/blechkiste.local`.
+For example one straightforward way to manage configuration files in a small environment is to create one file per client in a subdirectory such as `$PULLCONF_RESOURCE_DIR/clients`. The files in this directory could be named after the clients they define. Thus a client with the hostname `blechkiste.local` would be defined in the file `$PULLCONF_RESOURCE_DIR/clients/blechkiste.local.yaml`.
 
 The following structure defines a client inside a StrictYAML document:
 
