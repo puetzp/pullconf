@@ -180,10 +180,9 @@ impl Execute {
                 }
 
                 debug!(
-                    "`{}`: executing {:?} with args {:?} and environment variables {:?}",
+                    "`{}`: executing `{:#?}` with environment variables {:?}",
                     self.repr(),
-                    command.get_program(),
-                    command.get_args(),
+                    command,
                     command.get_envs()
                 );
 

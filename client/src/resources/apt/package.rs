@@ -214,12 +214,7 @@ impl Package {
         let mut command = Command::new(DPKG_QUERY);
         command.args(["-W", "-f", "'${VERSION}'", self.parameters.name.as_str()]);
 
-        debug!(
-            "`{}`: executing {:?} with args {:?}",
-            self.repr(),
-            command.get_program(),
-            command.get_args()
-        );
+        debug!("`{}`: executing `{:#?}`", self.repr(), command);
 
         let output = command.output()?;
 

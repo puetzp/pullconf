@@ -203,12 +203,7 @@ impl User {
 
             let status = command.status()?;
 
-            debug!(
-                "`{}`: executing {:?} with args {:?}",
-                self.repr(),
-                command.get_program(),
-                command.get_args()
-            );
+            debug!("`{}`: executing `{:#?}`", self.repr(), command);
 
             if !status.success() {
                 anyhow::bail!(
@@ -314,12 +309,7 @@ impl User {
             usermod.stderr(Stdio::null());
             usermod.stdout(Stdio::null());
 
-            debug!(
-                "`{}`: executing {:?} with args {:?}",
-                self.repr(),
-                usermod.get_program(),
-                usermod.get_args()
-            );
+            debug!("`{}`: executing `{:#?}", self.repr(), usermod);
 
             let status = usermod.status()?;
 
@@ -339,12 +329,7 @@ impl User {
             passwd.stderr(Stdio::null());
             passwd.stdout(Stdio::null());
 
-            debug!(
-                "`{}`: executing {:?} with args {:?}",
-                self.repr(),
-                passwd.get_program(),
-                passwd.get_args()
-            );
+            debug!("`{}`: executing `{:#?}`", self.repr(), passwd);
 
             let status = passwd.status()?;
 
