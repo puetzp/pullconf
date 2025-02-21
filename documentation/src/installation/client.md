@@ -5,7 +5,7 @@ The following steps guide you on how to install and configure the Pullconf clien
 Download the .deb package from GitHub:
 
 ```sh
-wget https://github.com/puetzp/pullconf/releases/download/v0.3.0/pullconf_0.3.0-1_amd64.deb
+wget https://github.com/puetzp/pullconf/releases/download/v0.4.2/pullconf_0.4.2-1_amd64.deb
 ```
 *Or*: Install Rust, download the source code and build the package yourself:
 
@@ -17,7 +17,7 @@ cargo deb -p pullconf
 Install the package:
 
 ```sh
-sudo dpkg -i pullconf_0.3.0_amd64.deb
+sudo dpkg -i pullconf_0.4.2_amd64.deb
 ```
 
 The installation script sets up a systemd service unit (`pullconf.service`), a timer unit (`pullconf.timer`) and a data directory. Check the service unit status:

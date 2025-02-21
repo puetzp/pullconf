@@ -5,7 +5,7 @@ The following steps guide you on how to install and configure the Pullconf serve
 Download the .deb package from GitHub:
 
 ```sh
-wget https://github.com/puetzp/pullconf/releases/download/v0.3.0/pullconfd_0.3.0-1_amd64.deb
+wget https://github.com/puetzp/pullconf/releases/download/v0.4.2/pullconfd_0.4.2-1_amd64.deb
 ```
 
 *Or*: Install Rust, download the source code and build the package yourself:
@@ -18,7 +18,7 @@ cargo deb -p pullconfd
 Install the package:
 
 ```sh
-sudo dpkg -i pullconfd_0.3.0_amd64.deb
+sudo dpkg -i pullconfd_0.4.2_amd64.deb
 ```
 
 The installation script sets up a systemd service unit and a configuration and data directory. Check the unit's status:
