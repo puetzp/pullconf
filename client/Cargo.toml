@@ -28,7 +28,7 @@ extended-description = "Pullconf is a configuration management system for Debian
 section = "admin"
 priority = "optional"
 maintainer-scripts = "deb/"
-systemd-units = { unit-name = "pullconf", unit-scripts = "systemd/"} 
+systemd-units = { unit-name = "pullconf", unit-scripts = "systemd/", enable = false, start = false }
 assets = [
        ["target/release/pullconf", "/usr/bin/pullconf", "755"],
        ["logrotate.d/pullconf", "/etc/logrotate.d/pullconf", "644" ],
