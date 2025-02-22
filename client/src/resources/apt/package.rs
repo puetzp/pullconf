@@ -41,6 +41,10 @@ impl ResourceTrait for Package {
         self.relationships.requires.as_slice()
     }
 
+    fn predecessors(&self) -> &[ResourceMetadata] {
+        self.relationships.after.as_slice()
+    }
+
     fn triggers(&self) -> &[TriggerMetadata] {
         self.relationships.triggers.as_slice()
     }

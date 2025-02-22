@@ -4,9 +4,11 @@ This resource executes a command. The `unless` parameter can be used to apply th
 
 ## Relationship to other resources
 
-An `execute` resource implicitly depends on every resource that references this resource through the `triggers` meta-parameter. This ensures that the `execute` resource runs after those resources.
+An `execute` resource runs after every resource that references this resource through the `triggers` meta-parameter. However it does not *depend* on them implicitly. This default behavior ensures that an `execute` resource runs if at least one of the triggering resources was applied successfully, regardless of the state of the others.
 
 For instance when a [file](file.md) resource specifies an `execute` resource through `triggers` and the primary `name` parameter of the `execute` resource, the resource will be triggered when the [file](file.md) resource is either created, deleted or changed. When other resources trigger the same `execute` resource, the resource is ensured to run only once after each of those resources were applied.
+
+Explicit dependencies can still be formed between an `execute` resource and another resource that triggers it. However this would result in the `execute` resource failing to apply if the triggering resource fails, regardless of if there are other triggering resources that ran successfully.
 
 ## Parameters
 

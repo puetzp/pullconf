@@ -279,17 +279,21 @@ pub trait ResourceTrait {
     fn dependencies(&self) -> &[ResourceMetadata];
 
     /// Return a collection of resource metadata that points at
+    /// resources that should run before this resource.
+    fn predecessors(&self) -> &[ResourceMetadata];
+
+    /// Return a collection of resource metadata that points at
     /// resources that are triggered by the implementing resource.
     fn triggers(&self) -> &[TriggerMetadata];
 
     /// Determine if this resource is ready to be applied by checking if each of
-    /// its dependencies has been applied.
+    /// its predecessors has been applied.
     fn is_ready(&self, applied_resources: &HashMap<Uuid, Resource>) -> bool {
-        self.dependencies().is_empty()
+        self.predecessors().is_empty()
             || self
-                .dependencies()
+                .predecessors()
                 .iter()
-                .all(|dependency| applied_resources.contains_key(&dependency.id))
+                .all(|predecessor| applied_resources.contains_key(&predecessor.id))
     }
 
     /// Find the first dependency that can be found in the collection of

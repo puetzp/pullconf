@@ -14,6 +14,7 @@ pub struct Parameters {
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct Relationships {
     pub requires: Vec<ResourceMetadata>,
+    pub after: Vec<ResourceMetadata>,
     pub triggers: Vec<TriggerMetadata>,
 }
 

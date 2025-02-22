@@ -97,6 +97,10 @@ impl Package {
         self.relationships.requires.push(metadata)
     }
 
+    pub fn push_predecessor(&mut self, metadata: ResourceMetadata) {
+        self.relationships.after.push(metadata)
+    }
+
     pub fn push_trigger(&mut self, metadata: TriggerMetadata) {
         self.relationships.triggers.push(metadata)
     }

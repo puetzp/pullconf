@@ -39,6 +39,10 @@ impl ResourceTrait for Execute {
         self.relationships.requires.as_slice()
     }
 
+    fn predecessors(&self) -> &[ResourceMetadata] {
+        self.relationships.after.as_slice()
+    }
+
     fn triggers(&self) -> &[TriggerMetadata] {
         self.relationships.triggers.as_slice()
     }
@@ -94,9 +98,9 @@ impl Execute {
         // applied when no triggering resource was successfully
         // applied earlier.
         if self.parameters.passive
-            && !self.dependencies().iter().any(|dependency| {
+            && !self.predecessors().iter().any(|predecessor| {
                 applied_resources
-                    .get(&dependency.id)
+                    .get(&predecessor.id)
                     .is_some_and(|resource| {
                         resource.triggers().iter().any(|trigger| {
                             trigger.id() == self.id() && trigger.when().contains(&resource.action())

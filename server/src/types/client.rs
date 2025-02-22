@@ -29,9 +29,10 @@ use uuid::Uuid;
 #[derive(Clone, Debug, Default)]
 pub struct ValidationHelpers {
     /// This list contains every resource ID and the IDs of resources
-    /// that each resource depends on. This is used during validation
-    /// to detect dependency loops.
-    pub dependencies: HashMap<Uuid, HashSet<Uuid>>,
+    /// that each resource depends on. The list is used during validation
+    /// to detect loops that would prevent proper resource exection
+    /// on the client side.
+    pub predecessors: HashMap<Uuid, HashSet<Uuid>>,
     /// This list contains IDs from resources that were sourced/inherited
     /// from a group instead of the client configuration. The name
     /// of the group is stored in order to return accurate errors if
@@ -192,13 +193,13 @@ impl Client {
     /// and the starting dependency would introduce a loop.
     /// If the search turns up empty, the relationship can be safely
     /// established.
-    fn dependency_introduces_loop(&self, node: Uuid, target: Uuid) -> bool {
-        match self.temporary.dependencies.get(&node) {
+    fn relationship_introduces_loop(&self, node: Uuid, target: Uuid) -> bool {
+        match self.temporary.predecessors.get(&node) {
             Some(ids) => {
                 ids.contains(&target)
                     || ids
                         .iter()
-                        .any(|id| self.dependency_introduces_loop(*id, target))
+                        .any(|id| self.relationship_introduces_loop(*id, target))
             }
             None => false,
         }
@@ -409,41 +410,51 @@ impl Client {
 
             // Process implicit dependencies by saving the metadata of
             // other resources that this resource depends on.
+            // This also presupposes the order of execution on the client
+            // side because the dependency is also explicitly declared
+            // to preceed this resource.
             for other in &self.resources {
                 let metadata = resource.metadata().clone();
                 let other_metadata = other.metadata().clone();
 
                 if resource.must_depend_on(other) {
-                    if self.dependency_introduces_loop(other_metadata.id, metadata.id) {
+                    if self.relationship_introduces_loop(other_metadata.id, metadata.id) {
                         return Err(format!(
-                            "`{}`: resource must depend on `{}`, but it would introduce a dependency loop",
+                            "`{}`: resource must depend on `{}`, but the current configuration would introduce a loop",
                             resource.repr(),
                             other.repr()
                         ));
                     } else if self
                         .temporary
-                        .dependencies
+                        .predecessors
                         .entry(metadata.id)
                         .or_default()
                         .insert(other_metadata.id)
                     {
                         resource.push_requirement(other_metadata.clone());
+                        resource.push_predecessor(other_metadata.clone());
                     }
                 }
 
                 // The `execute` resource is special in that it must
-                // implicitly depend on other resources based on their
-                // `trigger` meta-parameter as opposed to some other
-                // resource-specific parameter.
+                // be applied after all the other resources that trigger
+                // it, as based on the `triggers` meta-parameter.
                 // `Resource::must_depend_on` cannot solve this use
-                // case since the other resource might not have been
-                // processed before the `execute` resource and thus
-                // did not form a relationship with it via
-                // `Resource::push_trigger`. To avoid any problems
-                // arising from the order in which resources are
-                // processed, the temporary trigger metadata is
-                // used to form relationships between an `execute`
-                // and other resources.
+                // case since no dependency must be formed, only a hint
+                // to the proper order of execution.
+                // This relationship type accounts for multiple resources
+                // triggering an `execute` resource in which case the
+                // resource must be applied if at least one of the
+                // triggering resources is applied successfully, regardless
+                // of the state of the other resources.
+                // Of course if none of the triggering resources is applied
+                // successfully, the `execute` resource will not run either.
+                //
+                // In addition explicit dependencies apply to `execute` just
+                // like any other resource. So if there also exists an
+                // explicit dependency to any of the triggering resources,
+                // the resource must be applied successfully or `execute`
+                // will short-circuit and fail.
                 if resource.kind() == ResourceType::Execute {
                     if self
                         .temporary
@@ -451,14 +462,20 @@ impl Client {
                         .get(&other_metadata.id)
                         .is_some_and(|list| list.iter().any(|item| *item == resource))
                     {
-                        if self
+                        if self.relationship_introduces_loop(other_metadata.id, metadata.id) {
+                            return Err(format!(
+                                "`{}`: resource must be applied after `{}` as per the `triggers` parameter, but the current configuration would introduce a loop",
+                                resource.repr(),
+                                other.repr()
+                            ));
+                        } else if self
                             .temporary
-                            .dependencies
+                            .predecessors
                             .entry(metadata.id)
                             .or_default()
                             .insert(other_metadata.id)
                         {
-                            resource.push_requirement(other_metadata.clone());
+                            resource.push_predecessor(other_metadata.clone());
                         }
                     }
                 }
@@ -468,6 +485,9 @@ impl Client {
             // other resources that this resource must depend on
             // according to the `requires` meta-parameter found in
             // the configuration.
+            // This also presupposes the order of execution on the client
+            // side because the dependency is also explicitly declared
+            // to preceed this resource.
             for dependency in self
                 .temporary
                 .requires
@@ -488,20 +508,21 @@ impl Client {
                             let metadata = resource.metadata();
                             let other_metadata = other_resource.metadata().clone();
 
-                            if self.dependency_introduces_loop(other_metadata.id, metadata.id) {
+                            if self.relationship_introduces_loop(other_metadata.id, metadata.id) {
                                 return Err(format!(
-                                    "`{}`: resource cannot depend on `{}` as it would introduce a dependency loop",
+                                    "`{}`: resource cannot depend on `{}` as the current configuration would introduce a loop",
                                     resource.repr(),
                                     other_resource.repr()
                                 ));
                             } else if self
                                 .temporary
-                                .dependencies
+                                .predecessors
                                 .entry(metadata.id)
                                 .or_default()
                                 .insert(other_metadata.id)
                             {
                                 resource.push_requirement(other_metadata.clone());
+                                resource.push_predecessor(other_metadata.clone());
                             }
                         } else {
                             return Err(format!(

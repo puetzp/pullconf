@@ -109,6 +109,14 @@ macro_rules! impl_resources {
                 }
             }
 
+            pub fn push_predecessor(&mut self, metadata: ResourceMetadata) {
+                match self {
+                    $(
+                        Self::$resource(resource) => resource.push_predecessor(metadata),
+                    )*
+                }
+            }
+
             pub fn push_trigger(&mut self, metadata: TriggerMetadata) {
                 match self {
                     $(
