@@ -42,7 +42,7 @@ fn main() -> ExitCode {
     // Fetch the client configuration from pullconfd and apply it.
     match configuration::Configuration::get() {
         Ok(configuration) => {
-            let report = configuration.apply();
+            let report = configuration.apply(pid);
 
             let exit = report
                 .resources

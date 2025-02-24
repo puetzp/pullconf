@@ -16,6 +16,7 @@ use url::Url;
 
 #[derive(Debug, serde::Serialize)]
 pub struct Report {
+    pub pid: u32,
     pub timestamp_ms: usize,
     pub duration_ms: usize,
     pub resources: Vec<Resource>,
@@ -264,7 +265,7 @@ impl Configuration {
     /// Since there are always resources that have no dependencies, those are
     /// applied first and then everything else, until every resource has been
     /// applied.
-    pub fn apply(mut self) -> Report {
+    pub fn apply(mut self, pid: u32) -> Report {
         let timestamp_ms = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()
@@ -307,6 +308,7 @@ impl Configuration {
         );
 
         Report {
+            pid,
             timestamp_ms,
             duration_ms,
             resources,
