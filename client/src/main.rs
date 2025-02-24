@@ -42,8 +42,25 @@ fn main() -> ExitCode {
     // Fetch the client configuration from pullconfd and apply it.
     match configuration::Configuration::get() {
         Ok(configuration) => {
-            configuration.apply();
-            ExitCode::SUCCESS
+            let report = configuration.apply();
+
+            let exit = report
+                .resources
+                .iter()
+                .any(|resource| resource.is_failed())
+                .then_some(ExitCode::FAILURE)
+                .unwrap_or_default();
+
+            match serde_json::to_string(&report) {
+                Ok(json) => {
+                    println!("{}", json);
+                    exit
+                }
+                Err(error) => {
+                    log::error!("failed to serialize report to JSON: {}", error);
+                    ExitCode::FAILURE
+                }
+            }
         }
         Err(error) => {
             log::error!("{}", error);

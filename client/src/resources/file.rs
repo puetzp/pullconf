@@ -1,4 +1,4 @@
-use super::{Error, Resource, ResourceTrait};
+use super::{Error, Resource, ResourceResult, ResourceTrait};
 use crate::util::uid_and_gid;
 use anyhow::Context;
 use common::{
@@ -6,7 +6,10 @@ use common::{
     Action, Ensure, ResourceMetadata, TriggerMetadata,
 };
 use log::{debug, error, info};
-use serde::Deserialize;
+use serde::{
+    ser::{SerializeStruct, Serializer},
+    Deserialize, Serialize,
+};
 use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
@@ -14,18 +17,29 @@ use std::{
     io::{self, Read, Write},
     os::unix::fs::{chown, MetadataExt, PermissionsExt},
     process::Command,
+    time::Instant,
 };
 use ureq::Agent;
 use url::Url;
 use uuid::Uuid;
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct File {
     pub id: Uuid,
+    #[serde(serialize_with = "serialize_parameters")]
     pub parameters: Parameters,
     pub relationships: Relationships,
-    #[serde(default)]
-    pub action: Action,
+    #[serde(default, skip_deserializing)]
+    pub result: ResourceResult,
+}
+
+fn serialize_parameters<S>(parameters: &Parameters, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let mut s = serializer.serialize_struct("Parameters", 1)?;
+    s.serialize_field("path", &parameters.path)?;
+    s.end()
 }
 
 impl ResourceTrait for File {
@@ -42,7 +56,11 @@ impl ResourceTrait for File {
     }
 
     fn action(&self) -> Action {
-        self.action
+        self.result.action
+    }
+
+    fn order(&self) -> usize {
+        self.result.order
     }
 
     fn dependencies(&self) -> &[ResourceMetadata] {
@@ -70,10 +88,15 @@ impl File {
         agent: &Agent,
         base_url: &Url,
         api_key: &str,
+        order: usize,
         applied_resources: &HashMap<Uuid, Resource>,
     ) {
+        let timer = Instant::now();
+
+        self.result.order = order;
+
         if let Some(action) = self.maybe_return_early(applied_resources) {
-            self.action = action;
+            self.result.action = action;
             return;
         }
 
@@ -83,14 +106,16 @@ impl File {
             Ok(action) => {
                 info!("`{}`: successfully applied resource", self.repr());
 
-                self.action = action;
+                self.result.action = action;
             }
             Err(error) => {
                 error!("`{}`: failed to apply resource: {:#}", self.repr(), error);
 
-                self.action = Action::Failed;
+                self.result.action = Action::Failed;
             }
         }
+
+        self.result.duration_ms = timer.elapsed().as_millis() as usize;
     }
 
     /// Apply this resource's configuration. This function can be called repeatedly

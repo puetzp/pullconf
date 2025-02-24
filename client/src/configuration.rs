@@ -9,10 +9,17 @@ use std::{
     io::ErrorKind,
     process::Command,
     str::FromStr,
-    time::Instant,
+    time::{Instant, SystemTime},
 };
 use ureq::{tls, Agent};
 use url::Url;
+
+#[derive(Debug, serde::Serialize)]
+pub struct Report {
+    pub timestamp_ms: usize,
+    pub duration_ms: usize,
+    pub resources: Vec<Resource>,
+}
 
 const ETAG_FILE: &str = "/var/lib/pullconf/etag";
 const DATA_FILE: &str = "/var/lib/pullconf/data";
@@ -257,10 +264,17 @@ impl Configuration {
     /// Since there are always resources that have no dependencies, those are
     /// applied first and then everything else, until every resource has been
     /// applied.
-    pub fn apply(mut self) {
-        let _timer = Instant::now();
+    pub fn apply(mut self) -> Report {
+        let timestamp_ms = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as usize;
+
+        let timer = Instant::now();
 
         let mut applied_resources = HashMap::with_capacity(self.resources.len());
+
+        let mut order = 0;
 
         while let Some(mut resource) = self.resources.pop_front() {
             if !resource.is_ready(&applied_resources) {
@@ -269,18 +283,34 @@ impl Configuration {
             }
 
             resource.apply(
+                order,
                 &self.agent,
                 &self.base_url,
                 &self.api_key,
                 &applied_resources,
             );
 
+            order = order + 1;
+
             applied_resources.insert(resource.id(), resource);
         }
 
-        let _elapsed = (_timer.elapsed().as_millis() as f64) / 1000.0;
+        let mut resources: Vec<Resource> = applied_resources.into_values().collect();
 
-        info!("applied resource list in {:.3} seconds", _elapsed);
+        resources.sort_by(|a, b| a.order().cmp(&b.order()));
+
+        let duration_ms = timer.elapsed().as_millis() as usize;
+
+        info!(
+            "applied resource list in {:.3} seconds",
+            duration_ms as f64 / 1000.0
+        );
+
+        Report {
+            timestamp_ms,
+            duration_ms,
+            resources,
+        }
     }
 }
 

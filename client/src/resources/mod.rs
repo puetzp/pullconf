@@ -8,7 +8,7 @@ pub mod symlink;
 pub mod user;
 
 use common::{Action, ResourceMetadata, TriggerMetadata};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use ureq::Agent;
 use url::Url;
@@ -19,6 +19,14 @@ use uuid::Uuid;
 pub struct Error {
     pub title: String,
     pub detail: String,
+}
+
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct ResourceResult {
+    pub order: usize,
+    pub action: Action,
+    pub error: Option<String>,
+    pub duration_ms: usize,
 }
 
 /// The expected payload of a pullconfd API response when the request
@@ -33,7 +41,7 @@ pub struct Resources {
 /// kind of resource.
 /// Each of the included resource types implements the `ResourceTrait`
 /// which pre-defines a lot of processing logic.
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum Resource {
     #[serde(rename = "apt::package")]
@@ -104,50 +112,51 @@ impl Resource {
     /// matching stuff to infer the resource type.
     pub fn apply(
         &mut self,
+        order: usize,
         agent: &Agent,
         base_url: &Url,
         api_key: &str,
         applied_resources: &HashMap<Uuid, Resource>,
     ) {
         match self {
-            Self::AptPackage(ref mut resource) => resource.apply(applied_resources),
-            Self::Directory(ref mut resource) => resource.apply(applied_resources),
-            Self::Execute(ref mut resource) => resource.apply(applied_resources),
+            Self::AptPackage(ref mut resource) => resource.apply(order, applied_resources),
+            Self::Directory(ref mut resource) => resource.apply(order, applied_resources),
+            Self::Execute(ref mut resource) => resource.apply(order, applied_resources),
             Self::File(ref mut resource) => {
-                resource.apply(agent, base_url, api_key, applied_resources)
+                resource.apply(agent, base_url, api_key, order, applied_resources)
             }
-            Self::Group(ref mut resource) => resource.apply(applied_resources),
-            Self::Host(ref mut resource) => resource.apply(applied_resources),
-            Self::Symlink(ref mut resource) => resource.apply(applied_resources),
-            Self::User(ref mut resource) => resource.apply(applied_resources),
+            Self::Group(ref mut resource) => resource.apply(order, applied_resources),
+            Self::Host(ref mut resource) => resource.apply(order, applied_resources),
+            Self::Symlink(ref mut resource) => resource.apply(order, applied_resources),
+            Self::User(ref mut resource) => resource.apply(order, applied_resources),
         }
     }
 
     /// Check whether the resource has been skipped.
     pub fn is_skipped(&self) -> bool {
         match self {
-            Self::AptPackage(resource) => resource.action == Action::Skipped,
-            Self::Directory(resource) => resource.action == Action::Skipped,
-            Self::Execute(resource) => resource.action == Action::Skipped,
-            Self::File(resource) => resource.action == Action::Skipped,
-            Self::Group(resource) => resource.action == Action::Skipped,
-            Self::Host(resource) => resource.action == Action::Skipped,
-            Self::Symlink(resource) => resource.action == Action::Skipped,
-            Self::User(resource) => resource.action == Action::Skipped,
+            Self::AptPackage(resource) => resource.result.action == Action::Skipped,
+            Self::Directory(resource) => resource.result.action == Action::Skipped,
+            Self::Execute(resource) => resource.result.action == Action::Skipped,
+            Self::File(resource) => resource.result.action == Action::Skipped,
+            Self::Group(resource) => resource.result.action == Action::Skipped,
+            Self::Host(resource) => resource.result.action == Action::Skipped,
+            Self::Symlink(resource) => resource.result.action == Action::Skipped,
+            Self::User(resource) => resource.result.action == Action::Skipped,
         }
     }
 
     /// Check whether the resource has failed to apply.
     pub fn is_failed(&self) -> bool {
         match self {
-            Self::AptPackage(resource) => resource.action == Action::Failed,
-            Self::Directory(resource) => resource.action == Action::Failed,
-            Self::Execute(resource) => resource.action == Action::Failed,
-            Self::File(resource) => resource.action == Action::Failed,
-            Self::Group(resource) => resource.action == Action::Failed,
-            Self::Host(resource) => resource.action == Action::Failed,
-            Self::Symlink(resource) => resource.action == Action::Failed,
-            Self::User(resource) => resource.action == Action::Failed,
+            Self::AptPackage(resource) => resource.result.action == Action::Failed,
+            Self::Directory(resource) => resource.result.action == Action::Failed,
+            Self::Execute(resource) => resource.result.action == Action::Failed,
+            Self::File(resource) => resource.result.action == Action::Failed,
+            Self::Group(resource) => resource.result.action == Action::Failed,
+            Self::Host(resource) => resource.result.action == Action::Failed,
+            Self::Symlink(resource) => resource.result.action == Action::Failed,
+            Self::User(resource) => resource.result.action == Action::Failed,
         }
     }
 
@@ -195,6 +204,20 @@ impl Resource {
             Self::User(resource) => resource.action(),
         }
     }
+
+    /// Return the order at which the resource was applied.
+    pub fn order(&self) -> usize {
+        match self {
+            Self::AptPackage(resource) => resource.order(),
+            Self::Directory(resource) => resource.order(),
+            Self::Execute(resource) => resource.order(),
+            Self::File(resource) => resource.order(),
+            Self::Group(resource) => resource.order(),
+            Self::Host(resource) => resource.order(),
+            Self::Symlink(resource) => resource.order(),
+            Self::User(resource) => resource.order(),
+        }
+    }
 }
 
 pub trait ResourceTrait {
@@ -219,6 +242,9 @@ pub trait ResourceTrait {
 
     /// Return the state of the resource.
     fn action(&self) -> Action;
+
+    /// Return the order at which the resource was applied.
+    fn order(&self) -> usize;
 
     /// Check if this resource must in fact be applied, which depends on its
     /// dependencies. If they returned certain values, this resource can be

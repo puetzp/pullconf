@@ -1,21 +1,34 @@
-use super::{Resource, ResourceTrait};
+use super::{Resource, ResourceResult, ResourceTrait};
 use anyhow::Context;
 use common::{
     resources::execute::{Parameters, Relationships},
     Action, Ensure, ResourceMetadata, TriggerMetadata,
 };
 use log::{debug, error, info};
-use serde::Deserialize;
-use std::{collections::HashMap, process::Command};
+use serde::{
+    ser::{SerializeStruct, Serializer},
+    Deserialize, Serialize,
+};
+use std::{collections::HashMap, process::Command, time::Instant};
 use uuid::Uuid;
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Execute {
     pub id: Uuid,
+    #[serde(serialize_with = "serialize_parameters")]
     pub parameters: Parameters,
     pub relationships: Relationships,
-    #[serde(default)]
-    pub action: Action,
+    #[serde(default, skip_deserializing)]
+    pub result: ResourceResult,
+}
+
+fn serialize_parameters<S>(parameters: &Parameters, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let mut s = serializer.serialize_struct("Parameters", 1)?;
+    s.serialize_field("name", &parameters.name)?;
+    s.end()
 }
 
 impl ResourceTrait for Execute {
@@ -32,7 +45,11 @@ impl ResourceTrait for Execute {
     }
 
     fn action(&self) -> Action {
-        self.action
+        self.result.action
+    }
+
+    fn order(&self) -> usize {
+        self.result.order
     }
 
     fn dependencies(&self) -> &[ResourceMetadata] {
@@ -79,9 +96,13 @@ impl ResourceTrait for Execute {
 impl Execute {
     /// A wrapper around the actual apply function. This ensure that some
     /// meaningful log messages are printed and pre-checks are done.
-    pub fn apply(&mut self, applied_resources: &HashMap<Uuid, Resource>) {
+    pub fn apply(&mut self, order: usize, applied_resources: &HashMap<Uuid, Resource>) {
+        let timer = Instant::now();
+
+        self.result.order = order;
+
         if let Some(action) = self.maybe_return_early(applied_resources) {
-            self.action = action;
+            self.result.action = action;
             return;
         }
 
@@ -108,7 +129,7 @@ impl Execute {
                     })
             })
         {
-            self.action = Action::Unchanged;
+            self.result.action = Action::Unchanged;
             return;
         }
 
@@ -127,7 +148,7 @@ impl Execute {
                 Ok(output) => output,
                 Err(error) => {
                     error!("`{}`: failed to apply resource: {:#}", self.repr(), error);
-                    self.action = Action::Failed;
+                    self.result.action = Action::Failed;
                     return;
                 }
             };
@@ -144,7 +165,7 @@ impl Execute {
             );
 
             if output.status.success() {
-                self.action = Action::Unchanged;
+                self.result.action = Action::Unchanged;
                 return;
             }
         }
@@ -155,14 +176,16 @@ impl Execute {
             Ok(action) => {
                 info!("`{}`: successfully applied resource", self.repr(),);
 
-                self.action = action;
+                self.result.action = action;
             }
             Err(error) => {
                 error!("`{}`: failed to apply resource: {:#}", self.repr(), error);
 
-                self.action = Action::Failed;
+                self.result.action = Action::Failed;
             }
         }
+
+        self.result.duration_ms = timer.elapsed().as_millis() as usize;
     }
 
     /// Apply this resource's configuration.

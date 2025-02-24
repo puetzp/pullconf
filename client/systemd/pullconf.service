@@ -6,3 +6,4 @@ Type=oneshot
 ExecStart=/usr/bin/pullconf
 EnvironmentFile=/etc/pullconf/environment
 StandardError=append:/var/log/pullconf/pullconf.log
+StandardOutput=append:/var/log/pullconf/json.log
