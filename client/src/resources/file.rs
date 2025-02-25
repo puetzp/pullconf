@@ -95,8 +95,9 @@ impl File {
 
         self.result.order = order;
 
-        if let Some(action) = self.maybe_return_early(applied_resources) {
+        if let Some((action, message)) = self.maybe_return_early(applied_resources) {
             self.result.action = action;
+            self.result.message = Some(message);
             return;
         }
 

@@ -252,36 +252,36 @@ pub trait ResourceTrait {
     /// There might also be cases were this resource's state interferes
     /// with that of a dependency, in which case this resource fails
     /// (Action::Failed).
-    fn maybe_return_early(&self, applied_resources: &HashMap<Uuid, Resource>) -> Option<Action> {
+    fn maybe_return_early(
+        &mut self,
+        applied_resources: &HashMap<Uuid, Resource>,
+    ) -> Option<(Action, String)> {
         if let Some(dependency) = self.find_failed_dependency(applied_resources) {
-            log::warn!(
-                "`{}`: skipping resource as dependency `{}` has failed to apply",
-                self.repr(),
+            let message = format!(
+                "skipping resource as dependency `{}` has failed to apply",
                 dependency.repr()
             );
-
-            return Some(Action::Skipped);
+            log::warn!("`{}`: {}", self.repr(), message);
+            return Some((Action::Skipped, message));
         }
 
         if let Some(dependency) = self.find_skipped_dependency(applied_resources) {
-            log::warn!(
-                "`{}`: skipping resource as dependency `{}` has been skipped",
-                self.repr(),
+            let message = format!(
+                "skipping resource as dependency `{}` has been skipped",
                 dependency.repr()
             );
-
-            return Some(Action::Skipped);
+            log::warn!("`{}`: {}", self.repr(), message);
+            return Some((Action::Skipped, message));
         }
 
         if self.is_present() {
             if let Some(dependency) = self.find_absent_dependency(applied_resources) {
-                log::error!(
-                    "`{}`: cannot apply resource as dependency `{}` is set to absent",
-                    self.repr(),
+                let message = format!(
+                    "cannot apply resource as dependency `{}` is set to absent",
                     dependency.repr()
                 );
-
-                return Some(Action::Failed);
+                log::error!("`{}`: {}", self.repr(), message);
+                return Some((Action::Failed, message));
             }
         }
 

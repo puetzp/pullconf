@@ -68,25 +68,26 @@ impl ResourceTrait for Execute {
         self.parameters.ensure.is_present()
     }
 
-    fn maybe_return_early(&self, applied_resources: &HashMap<Uuid, Resource>) -> Option<Action> {
+    fn maybe_return_early(
+        &mut self,
+        applied_resources: &HashMap<Uuid, Resource>,
+    ) -> Option<(Action, String)> {
         if let Some(dependency) = self.find_failed_dependency(applied_resources) {
-            log::warn!(
-                "`{}`: skipping resource as dependency `{}` has failed to apply",
-                self.repr(),
+            let message = format!(
+                "skipping resource as dependency `{}` has failed to apply",
                 dependency.repr()
             );
-
-            return Some(Action::Skipped);
+            log::warn!("`{}`: {}", self.repr(), message);
+            return Some((Action::Skipped, message));
         }
 
         if let Some(dependency) = self.find_skipped_dependency(applied_resources) {
-            log::warn!(
-                "`{}`: skipping resource as dependency `{}` has been skipped",
-                self.repr(),
+            let message = format!(
+                "skipping resource as dependency `{}` has been skipped",
                 dependency.repr()
             );
-
-            return Some(Action::Skipped);
+            log::warn!("`{}`: {}", self.repr(), message);
+            return Some((Action::Skipped, message));
         }
 
         None
@@ -101,8 +102,9 @@ impl Execute {
 
         self.result.order = order;
 
-        if let Some(action) = self.maybe_return_early(applied_resources) {
+        if let Some((action, message)) = self.maybe_return_early(applied_resources) {
             self.result.action = action;
+            self.result.message = Some(message);
             return;
         }
 
