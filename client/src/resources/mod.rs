@@ -25,7 +25,7 @@ pub struct Error {
 pub struct ResourceResult {
     pub order: usize,
     pub action: Action,
-    pub error: Option<String>,
+    pub message: Option<String>,
     pub duration_ms: usize,
 }
 
@@ -296,8 +296,8 @@ pub trait ResourceTrait {
     /// resource is applied. When the program cannot be found the
     /// resource should fail early to avoid failing when it is applied
     /// and possibly leaving the resource in a half-applied state.
-    fn check_prerequisites(&self) -> Option<Action> {
-        None
+    fn check_prerequisites(&self) -> Result<(), String> {
+        Ok(())
     }
 
     /// Return a collection of resource metadata that points at

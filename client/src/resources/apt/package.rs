@@ -70,39 +70,30 @@ impl ResourceTrait for Package {
         self.parameters.ensure.is_present()
     }
 
-    fn check_prerequisites(&self) -> Option<Action> {
-        fn find(package: &Package, program: &str) -> Option<Action> {
+    fn check_prerequisites(&self) -> Result<(), String> {
+        fn find(program: &str) -> Result<(), String> {
             match fs::metadata(program) {
                 Ok(metadata) => {
                     if metadata.is_file() {
-                        None
+                        Ok(())
                     } else {
-                        error!(
-                            "`{}`: cannot apply resource as executable `{}` is missing",
-                            package.repr(),
+                        Err(format!(
+                            "cannot apply resource as executable `{}` is missing",
                             program
-                        );
-
-                        Some(Action::Failed)
+                        ))
                     }
                 }
-                Err(error) => {
-                    error!(
-                        "`{}`: cannot apply resource as executable `{}` cannot be accessed: {}",
-                        package.repr(),
-                        program,
-                        error
-                    );
-
-                    Some(Action::Failed)
-                }
+                Err(error) => Err(format!(
+                    "cannot apply resource as executable `{}` cannot be accessed: {}",
+                    program, error
+                )),
             }
         }
 
-        let dpkg_query = find(self, DPKG_QUERY);
-        let apt_get = find(self, APT_GET);
+        let dpkg_query = find(DPKG_QUERY);
+        let apt_get = find(APT_GET);
 
-        dpkg_query.or(apt_get)
+        dpkg_query.and(apt_get)
     }
 }
 
@@ -119,8 +110,10 @@ impl Package {
             return;
         }
 
-        if let Some(action) = self.check_prerequisites() {
-            self.result.action = action;
+        if let Err(error) = self.check_prerequisites() {
+            error!("`{}`: {}", self.repr(), error);
+            self.result.action = Action::Failed;
+            self.result.message = Some(error);
             return;
         }
 

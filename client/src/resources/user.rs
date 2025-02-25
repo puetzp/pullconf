@@ -80,42 +80,33 @@ impl ResourceTrait for User {
         self.parameters.ensure.is_present()
     }
 
-    fn check_prerequisites(&self) -> Option<Action> {
-        fn find(user: &User, program: &str) -> Option<Action> {
+    fn check_prerequisites(&self) -> Result<(), String> {
+        fn find(program: &str) -> Result<(), String> {
             match fs::metadata(program) {
                 Ok(metadata) => {
                     if metadata.is_file() {
-                        None
+                        Ok(())
                     } else {
-                        error!(
-                            "`{}`: cannot apply resource as executable `{}` is missing",
-                            user.repr(),
+                        Err(format!(
+                            "cannot apply resource as executable `{}` is missing",
                             program
-                        );
-
-                        Some(Action::Failed)
+                        ))
                     }
                 }
-                Err(error) => {
-                    error!(
-                        "`{}`: cannot apply resource as executable `{}` cannot be accessed: {}",
-                        user.repr(),
-                        program,
-                        error
-                    );
-
-                    Some(Action::Failed)
-                }
+                Err(error) => Err(format!(
+                    "cannot apply resource as executable `{}` cannot be accessed: {}",
+                    program, error
+                )),
             }
         }
 
-        let useradd = find(self, USERADD);
-        let usermod = find(self, USERMOD);
-        let passwd = find(self, PASSWD);
-        let deluser = find(self, DELUSER);
-        let id = find(self, ID);
+        let useradd = find(USERADD);
+        let usermod = find(USERMOD);
+        let passwd = find(PASSWD);
+        let deluser = find(DELUSER);
+        let id = find(ID);
 
-        useradd.or(usermod).or(passwd).or(deluser).or(id)
+        useradd.and(usermod).and(passwd).and(deluser).and(id)
     }
 }
 
@@ -132,8 +123,10 @@ impl User {
             return;
         }
 
-        if let Some(action) = self.check_prerequisites() {
-            self.result.action = action;
+        if let Err(error) = self.check_prerequisites() {
+            error!("`{}`: {}", self.repr(), error);
+            self.result.action = Action::Failed;
+            self.result.message = Some(error);
             return;
         }
 
