@@ -5,9 +5,9 @@ use common::{
     Ensure, ResourceMetadata, ResourceType, TriggerMetadata,
 };
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use strict_yaml_rust::{strict_yaml::Hash, StrictYaml};
-use uuid::Uuid;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Execute {
@@ -73,11 +73,17 @@ impl TryFrom<(UnresolvedParameters, &HashMap<String, StrictYaml>)> for Execute {
             }
         };
 
+        let kind = ResourceType::Execute;
+
+        let id = {
+            let mut hasher = Sha256::new();
+            hasher.update(kind.to_string());
+            hasher.update(&*parameters.name);
+            format!("{:x}", hasher.finalize())
+        };
+
         Ok(Self {
-            metadata: ResourceMetadata {
-                kind: ResourceType::Execute,
-                id: Uuid::new_v4(),
-            },
+            metadata: ResourceMetadata { kind, id },
             parameters,
             relationships: Relationships::default(),
         })
@@ -93,8 +99,8 @@ impl Execute {
         self.parameters.name.to_string()
     }
 
-    pub fn id(&self) -> Uuid {
-        self.metadata.id
+    pub fn id(&self) -> &str {
+        &self.metadata.id
     }
 
     pub fn metadata(&self) -> &ResourceMetadata {

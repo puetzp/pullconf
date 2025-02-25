@@ -17,7 +17,6 @@ use std::{
     time::Instant,
 };
 use time::Date;
-use uuid::Uuid;
 
 const USERADD: &str = "/usr/sbin/useradd";
 const USERMOD: &str = "/usr/sbin/usermod";
@@ -27,7 +26,7 @@ const ID: &str = "/usr/bin/id";
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct User {
-    pub id: Uuid,
+    pub id: String,
     #[serde(serialize_with = "serialize_parameters")]
     pub parameters: Parameters,
     pub relationships: Relationships,
@@ -52,8 +51,8 @@ impl ResourceTrait for User {
         self.parameters.name.to_string()
     }
 
-    fn id(&self) -> Uuid {
-        self.id
+    fn id(&self) -> &str {
+        &self.id
     }
 
     fn action(&self) -> Action {
@@ -113,7 +112,7 @@ impl ResourceTrait for User {
 impl User {
     /// A wrapper around the actual apply function. This ensure that some
     /// meaningful log messages are printed and pre-checks are done.
-    pub fn apply(&mut self, order: usize, applied_resources: &HashMap<Uuid, Resource>) {
+    pub fn apply(&mut self, order: usize, applied_resources: &HashMap<String, Resource>) {
         let timer = Instant::now();
 
         self.result.order = order;

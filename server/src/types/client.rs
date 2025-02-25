@@ -22,7 +22,6 @@ use std::{
     str::FromStr,
 };
 use strict_yaml_rust::{strict_yaml::Hash as StrictYamlHash, StrictYaml};
-use uuid::Uuid;
 
 /// This struct contains temporary helper collections that are
 /// freed after configuration validation has concluded.
@@ -32,24 +31,24 @@ pub struct ValidationHelpers {
     /// that each resource depends on. The list is used during validation
     /// to detect loops that would prevent proper resource exection
     /// on the client side.
-    pub predecessors: HashMap<Uuid, HashSet<Uuid>>,
+    pub predecessors: HashMap<String, HashSet<String>>,
     /// This list contains IDs from resources that were sourced/inherited
     /// from a group instead of the client configuration. The name
     /// of the group is stored in order to return accurate errors if
     /// another, conflicting resource is found and give the user a hint
     /// which groups must be reconciled.
-    pub origins: HashMap<Uuid, Hostname>,
+    pub origins: HashMap<String, Hostname>,
     /// This collection stores resource dependencies that were
     /// explicitly mentioned in configuration files.
     /// During validation these dependencies are resolved and
     /// the actual resource metadata of a given dependency is added
     /// to the resource relationship data.
-    pub requires: HashMap<Uuid, Vec<Dependency>>,
+    pub requires: HashMap<String, Vec<Dependency>>,
     /// This collection stores explicit triggers per resource.
     /// During validation these triggers are resolved and
     /// the actual resource metadata of a given triggered resource
     /// is added to the resource relationship data.
-    pub triggers: HashMap<Uuid, Vec<Trigger>>,
+    pub triggers: HashMap<String, Vec<Trigger>>,
     /// Some resources manage filesystem nodes of different types.
     /// This collection helps to ensure during validation that a node
     /// at a given path is not managed by multiple resources of the same
@@ -149,8 +148,14 @@ impl TryFrom<(unresolved::Client, &mut HashMap<Hostname, (Group, usize)>)> for C
                 .map_err(|error| format!("`{}`>{}", client.name, error))?;
 
             // Save triggers and dependencies as they appear in the deserialized resource.
-            client.temporary.requires.insert(resource.id(), requires);
-            client.temporary.triggers.insert(resource.id(), triggers);
+            client
+                .temporary
+                .requires
+                .insert(resource.id().to_string(), requires);
+            client
+                .temporary
+                .triggers
+                .insert(resource.id().to_string(), triggers);
 
             client.resources.push_back(resource);
         }
@@ -193,13 +198,13 @@ impl Client {
     /// and the starting dependency would introduce a loop.
     /// If the search turns up empty, the relationship can be safely
     /// established.
-    fn relationship_introduces_loop(&self, node: Uuid, target: Uuid) -> bool {
-        match self.temporary.predecessors.get(&node) {
+    fn relationship_introduces_loop(&self, node: &str, target: &str) -> bool {
+        match self.temporary.predecessors.get(node) {
             Some(ids) => {
-                ids.contains(&target)
+                ids.contains(target)
                     || ids
                         .iter()
-                        .any(|id| self.relationship_introduces_loop(*id, target))
+                        .any(|id| self.relationship_introduces_loop(&id, target))
             }
             None => false,
         }
@@ -339,8 +344,12 @@ impl Client {
                 let resource = Resource::try_from((item.clone(), &self.variables))?;
 
                 // Save triggers and dependencies as they appear in the deserialized resource.
-                self.temporary.requires.insert(resource.id(), requires);
-                self.temporary.triggers.insert(resource.id(), triggers);
+                self.temporary
+                    .requires
+                    .insert(resource.id().to_string(), requires);
+                self.temporary
+                    .triggers
+                    .insert(resource.id().to_string(), triggers);
 
                 // Check if a similar resource is already present ...
                 if let Some(duplicate) = self.resources.iter().find(|other| **other == resource) {
@@ -348,7 +357,7 @@ impl Client {
                     // processing fails. Otherwise the group resource is skipped
                     // because the saved resource originates from the client
                     // and takes precedence.
-                    if let Some(origin) = self.temporary.origins.get(&duplicate.id()) {
+                    if let Some(origin) = self.temporary.origins.get(duplicate.id()) {
                         return Err(format!(
                             "duplicate resource `{}` defined in group `{}`",
                             duplicate.repr(),
@@ -363,7 +372,7 @@ impl Client {
                     // a group.
                     self.temporary
                         .origins
-                        .insert(resource.id(), group_name.clone());
+                        .insert(resource.id().to_string(), group_name.clone());
                     self.resources.push_back(resource);
                 }
             }
@@ -392,7 +401,7 @@ impl Client {
         // of the queue.
         while let Some(mut resource) = self.resources.pop_front() {
             // Break the loop once all resources have been processed.
-            if !validated.insert(resource.id()) {
+            if !validated.insert(resource.id().to_string()) {
                 self.resources.push_back(resource);
                 break;
             }
@@ -418,7 +427,7 @@ impl Client {
                 let other_metadata = other.metadata().clone();
 
                 if resource.must_depend_on(other) {
-                    if self.relationship_introduces_loop(other_metadata.id, metadata.id) {
+                    if self.relationship_introduces_loop(&other_metadata.id, &metadata.id) {
                         return Err(format!(
                             "`{}`: resource must depend on `{}`, but the current configuration would introduce a loop",
                             resource.repr(),
@@ -427,9 +436,9 @@ impl Client {
                     } else if self
                         .temporary
                         .predecessors
-                        .entry(metadata.id)
+                        .entry(metadata.id.clone())
                         .or_default()
-                        .insert(other_metadata.id)
+                        .insert(other_metadata.id.clone())
                     {
                         resource.push_requirement(other_metadata.clone());
                         resource.push_predecessor(other_metadata.clone());
@@ -462,7 +471,7 @@ impl Client {
                         .get(&other_metadata.id)
                         .is_some_and(|list| list.iter().any(|item| *item == resource))
                     {
-                        if self.relationship_introduces_loop(other_metadata.id, metadata.id) {
+                        if self.relationship_introduces_loop(&other_metadata.id, &metadata.id) {
                             return Err(format!(
                                 "`{}`: resource must be applied after `{}` as per the `triggers` parameter, but the current configuration would introduce a loop",
                                 resource.repr(),
@@ -471,9 +480,9 @@ impl Client {
                         } else if self
                             .temporary
                             .predecessors
-                            .entry(metadata.id)
+                            .entry(metadata.id.to_string())
                             .or_default()
-                            .insert(other_metadata.id)
+                            .insert(other_metadata.id.to_string())
                         {
                             resource.push_predecessor(other_metadata.clone());
                         }
@@ -491,7 +500,7 @@ impl Client {
             for dependency in self
                 .temporary
                 .requires
-                .get(&resource.id())
+                .get(resource.id())
                 .map(|c| c.as_slice())
                 .unwrap_or_default()
             {
@@ -508,7 +517,7 @@ impl Client {
                             let metadata = resource.metadata();
                             let other_metadata = other_resource.metadata().clone();
 
-                            if self.relationship_introduces_loop(other_metadata.id, metadata.id) {
+                            if self.relationship_introduces_loop(&other_metadata.id, &metadata.id) {
                                 return Err(format!(
                                     "`{}`: resource cannot depend on `{}` as the current configuration would introduce a loop",
                                     resource.repr(),
@@ -517,9 +526,9 @@ impl Client {
                             } else if self
                                 .temporary
                                 .predecessors
-                                .entry(metadata.id)
+                                .entry(metadata.id.to_string())
                                 .or_default()
-                                .insert(other_metadata.id)
+                                .insert(other_metadata.id.to_string())
                             {
                                 resource.push_requirement(other_metadata.clone());
                                 resource.push_predecessor(other_metadata.clone());
@@ -548,7 +557,7 @@ impl Client {
             for trigger in self
                 .temporary
                 .triggers
-                .get(&resource.id())
+                .get(resource.id())
                 .map(|c| c.as_slice())
                 .unwrap_or_default()
             {

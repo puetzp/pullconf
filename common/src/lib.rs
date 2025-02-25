@@ -7,7 +7,6 @@ pub use path::SafePathBuf;
 
 use serde::{Deserialize, Serialize};
 use std::{fmt, str::FromStr};
-use uuid::Uuid;
 
 macro_rules! impl_resource_types {
     ($( ($variant:ident, $display:literal) ),*) => {
@@ -71,7 +70,7 @@ pub struct Links {
 pub struct ResourceMetadata {
     #[serde(rename = "type")]
     pub kind: ResourceType,
-    pub id: Uuid,
+    pub id: String,
 }
 
 impl PartialOrd for ResourceMetadata {
@@ -97,8 +96,8 @@ impl ResourceMetadata {
         self.kind.to_string()
     }
 
-    pub fn id(&self) -> Uuid {
-        self.id
+    pub fn id(&self) -> &str {
+        &self.id
     }
 }
 
@@ -106,7 +105,7 @@ impl ResourceMetadata {
 pub struct TriggerMetadata {
     #[serde(rename = "type")]
     pub kind: ResourceType,
-    pub id: Uuid,
+    pub id: String,
     pub when: Vec<Action>,
 }
 
@@ -133,8 +132,8 @@ impl TriggerMetadata {
         self.kind.to_string()
     }
 
-    pub fn id(&self) -> Uuid {
-        self.id
+    pub fn id(&self) -> &str {
+        &self.id
     }
 
     pub fn when(&self) -> &[Action] {
@@ -144,7 +143,7 @@ impl TriggerMetadata {
     pub fn from(resource_metadata: &ResourceMetadata, when: &[Action]) -> Self {
         Self {
             kind: resource_metadata.kind,
-            id: resource_metadata.id,
+            id: resource_metadata.id.clone(),
             when: when.to_vec(),
         }
     }

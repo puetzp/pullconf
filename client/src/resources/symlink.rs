@@ -13,11 +13,10 @@ use std::{
     collections::HashMap, default::Default, fs, io, os::unix::fs::symlink as create_symlink,
     time::Instant,
 };
-use uuid::Uuid;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Symlink {
-    pub id: Uuid,
+    pub id: String,
     #[serde(serialize_with = "serialize_parameters")]
     pub parameters: Parameters,
     pub relationships: Relationships,
@@ -43,8 +42,8 @@ impl ResourceTrait for Symlink {
         self.parameters.path.display().to_string()
     }
 
-    fn id(&self) -> Uuid {
-        self.id
+    fn id(&self) -> &str {
+        &self.id
     }
 
     fn action(&self) -> Action {
@@ -75,7 +74,7 @@ impl ResourceTrait for Symlink {
 impl Symlink {
     /// A wrapper around the actual apply function. This ensure that some
     /// meaningful log messages are printed and pre-checks are done.
-    pub fn apply(&mut self, order: usize, applied_resources: &HashMap<Uuid, Resource>) {
+    pub fn apply(&mut self, order: usize, applied_resources: &HashMap<String, Resource>) {
         let timer = Instant::now();
 
         self.result.order = order;

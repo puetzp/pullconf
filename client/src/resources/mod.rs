@@ -12,7 +12,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use ureq::Agent;
 use url::Url;
-use uuid::Uuid;
 
 /// A struct containing the deserialized form of a pullconfd API error.
 #[derive(Debug, Deserialize)]
@@ -60,7 +59,7 @@ impl Resource {
     /// `ResourceTrait`.
     /// This shortcut allows the calling function to skip the usual pattern
     /// matching stuff to infer the resource type.
-    pub fn id(&self) -> Uuid {
+    pub fn id(&self) -> &str {
         match self {
             Self::AptPackage(resource) => resource.id(),
             Self::Directory(resource) => resource.id(),
@@ -94,7 +93,7 @@ impl Resource {
     /// `ResourceTrait`.
     /// This shortcut allows the calling function to skip the usual pattern
     /// matching stuff to infer the resource type.
-    pub fn is_ready(&self, applied_resources: &HashMap<Uuid, Resource>) -> bool {
+    pub fn is_ready(&self, applied_resources: &HashMap<String, Resource>) -> bool {
         match self {
             Self::AptPackage(resource) => resource.is_ready(applied_resources),
             Self::Directory(resource) => resource.is_ready(applied_resources),
@@ -116,7 +115,7 @@ impl Resource {
         agent: &Agent,
         base_url: &Url,
         api_key: &str,
-        applied_resources: &HashMap<Uuid, Resource>,
+        applied_resources: &HashMap<String, Resource>,
     ) {
         match self {
             Self::AptPackage(ref mut resource) => resource.apply(order, applied_resources),
@@ -237,8 +236,8 @@ pub trait ResourceTrait {
         format!("{}[{}]", self.kind(), self.display())
     }
 
-    /// Return the UUID of this resource as assigned by pullconfd.
-    fn id(&self) -> Uuid;
+    /// Return the ID of this resource as assigned by pullconfd.
+    fn id(&self) -> &str;
 
     /// Return the state of the resource.
     fn action(&self) -> Action;
@@ -254,7 +253,7 @@ pub trait ResourceTrait {
     /// (Action::Failed).
     fn maybe_return_early(
         &mut self,
-        applied_resources: &HashMap<Uuid, Resource>,
+        applied_resources: &HashMap<String, Resource>,
     ) -> Option<(Action, String)> {
         if let Some(dependency) = self.find_failed_dependency(applied_resources) {
             let message = format!(
@@ -314,7 +313,7 @@ pub trait ResourceTrait {
 
     /// Determine if this resource is ready to be applied by checking if each of
     /// its predecessors has been applied.
-    fn is_ready(&self, applied_resources: &HashMap<Uuid, Resource>) -> bool {
+    fn is_ready(&self, applied_resources: &HashMap<String, Resource>) -> bool {
         self.predecessors().is_empty()
             || self
                 .predecessors()
@@ -326,7 +325,7 @@ pub trait ResourceTrait {
     /// already applied resources that has failed.
     fn find_failed_dependency<'a>(
         &'a self,
-        applied_resources: &'a HashMap<Uuid, Resource>,
+        applied_resources: &'a HashMap<String, Resource>,
     ) -> Option<&'a Resource> {
         self.dependencies().iter().find_map(|dependency| {
             applied_resources
@@ -339,7 +338,7 @@ pub trait ResourceTrait {
     /// already applied resources that has been skipped.
     fn find_skipped_dependency<'a>(
         &'a self,
-        applied_resources: &'a HashMap<Uuid, Resource>,
+        applied_resources: &'a HashMap<String, Resource>,
     ) -> Option<&'a Resource> {
         self.dependencies().iter().find_map(|dependency| {
             applied_resources
@@ -352,7 +351,7 @@ pub trait ResourceTrait {
     /// already applied resources that is set to absent.
     fn find_absent_dependency<'a>(
         &'a self,
-        applied_resources: &'a HashMap<Uuid, Resource>,
+        applied_resources: &'a HashMap<String, Resource>,
     ) -> Option<&'a Resource> {
         self.dependencies().iter().find_map(|dependency| {
             applied_resources

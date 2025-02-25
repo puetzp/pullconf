@@ -17,11 +17,10 @@ use std::{
     os::unix::fs::{chown, MetadataExt},
     time::Instant,
 };
-use uuid::Uuid;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Directory {
-    pub id: Uuid,
+    pub id: String,
     #[serde(serialize_with = "serialize_parameters")]
     pub parameters: Parameters,
     pub relationships: Relationships,
@@ -47,8 +46,8 @@ impl ResourceTrait for Directory {
         self.parameters.path.display().to_string()
     }
 
-    fn id(&self) -> Uuid {
-        self.id
+    fn id(&self) -> &str {
+        &self.id
     }
 
     fn action(&self) -> Action {
@@ -79,7 +78,7 @@ impl ResourceTrait for Directory {
 impl Directory {
     /// A wrapper around the actual apply function. This ensure that some
     /// meaningful log messages are printed and pre-checks are done.
-    pub fn apply(&mut self, order: usize, applied_resources: &HashMap<Uuid, Resource>) {
+    pub fn apply(&mut self, order: usize, applied_resources: &HashMap<String, Resource>) {
         let timer = Instant::now();
 
         self.result.order = order;

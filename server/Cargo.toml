@@ -19,7 +19,6 @@ sha2 = "0.10"
 signal-hook = "0.3"
 strict-yaml-rust = "0.1"
 time = "0.3"
-uuid = { version = "1.13", features = ["serde", "v4"] }
 
 [dev-dependencies]
 anyhow = "1"

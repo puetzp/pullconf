@@ -5,9 +5,9 @@ use common::{
     Ensure, Hostname, ResourceMetadata, ResourceType, TriggerMetadata,
 };
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use std::{collections::HashMap, net::IpAddr, path::Path};
 use strict_yaml_rust::{strict_yaml::Hash, StrictYaml};
-use uuid::Uuid;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct Host {
@@ -64,11 +64,17 @@ impl TryFrom<(UnresolvedParameters, &HashMap<String, StrictYaml>)> for Host {
             }
         };
 
+        let kind = ResourceType::Host;
+
+        let id = {
+            let mut hasher = Sha256::new();
+            hasher.update(kind.to_string());
+            hasher.update(parameters.ip_address.to_string());
+            format!("{:x}", hasher.finalize())
+        };
+
         Ok(Self {
-            metadata: ResourceMetadata {
-                kind: ResourceType::Host,
-                id: Uuid::new_v4(),
-            },
+            metadata: ResourceMetadata { kind, id },
             parameters,
             relationships: Relationships::default(),
         })
@@ -84,8 +90,8 @@ impl Host {
         self.parameters.ip_address.to_string()
     }
 
-    pub fn id(&self) -> Uuid {
-        self.metadata.id
+    pub fn id(&self) -> &str {
+        &self.metadata.id
     }
 
     pub fn metadata(&self) -> &ResourceMetadata {

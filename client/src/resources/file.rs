@@ -21,11 +21,10 @@ use std::{
 };
 use ureq::Agent;
 use url::Url;
-use uuid::Uuid;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct File {
-    pub id: Uuid,
+    pub id: String,
     #[serde(serialize_with = "serialize_parameters")]
     pub parameters: Parameters,
     pub relationships: Relationships,
@@ -51,8 +50,8 @@ impl ResourceTrait for File {
         self.parameters.path.display().to_string()
     }
 
-    fn id(&self) -> Uuid {
-        self.id
+    fn id(&self) -> &str {
+        &self.id
     }
 
     fn action(&self) -> Action {
@@ -89,7 +88,7 @@ impl File {
         base_url: &Url,
         api_key: &str,
         order: usize,
-        applied_resources: &HashMap<Uuid, Resource>,
+        applied_resources: &HashMap<String, Resource>,
     ) {
         let timer = Instant::now();
 

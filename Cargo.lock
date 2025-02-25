@@ -1184,7 +1184,6 @@ dependencies = [
  "time",
  "ureq",
  "url",
- "uuid",
 ]
 
 [[package]]
@@ -1203,7 +1202,6 @@ dependencies = [
  "signal-hook",
  "strict-yaml-rust",
  "time",
- "uuid",
 ]
 
 [[package]]

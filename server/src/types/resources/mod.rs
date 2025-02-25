@@ -32,7 +32,6 @@ use std::{
     str::FromStr,
 };
 use strict_yaml_rust::{strict_yaml::Hash, StrictYaml};
-use uuid::Uuid;
 
 macro_rules! impl_resources {
     ($( $resource:ident ),*) => {
@@ -53,7 +52,7 @@ macro_rules! impl_resources {
         )*
 
         impl Resource {
-            pub fn id(&self) -> Uuid {
+            pub fn id(&self) -> &str {
                 match self {
                     $(
                         Self::$resource(resource) => resource.id(),

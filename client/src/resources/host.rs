@@ -16,11 +16,10 @@ use std::{
     io::{self, Read},
     time::{Instant, SystemTime},
 };
-use uuid::Uuid;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Host {
-    pub id: Uuid,
+    pub id: String,
     #[serde(serialize_with = "serialize_parameters")]
     pub parameters: Parameters,
     pub relationships: Relationships,
@@ -45,8 +44,8 @@ impl ResourceTrait for Host {
         self.parameters.ip_address.to_string()
     }
 
-    fn id(&self) -> Uuid {
-        self.id
+    fn id(&self) -> &str {
+        &self.id
     }
 
     fn action(&self) -> Action {
@@ -77,7 +76,7 @@ impl ResourceTrait for Host {
 impl Host {
     /// A wrapper around the actual apply function. This ensure that some
     /// meaningful log messages are printed and pre-checks are done.
-    pub fn apply(&mut self, order: usize, applied_resources: &HashMap<Uuid, Resource>) {
+    pub fn apply(&mut self, order: usize, applied_resources: &HashMap<String, Resource>) {
         let timer = Instant::now();
 
         self.result.order = order;

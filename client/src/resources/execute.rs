@@ -10,11 +10,10 @@ use serde::{
     Deserialize, Serialize,
 };
 use std::{collections::HashMap, process::Command, time::Instant};
-use uuid::Uuid;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Execute {
-    pub id: Uuid,
+    pub id: String,
     #[serde(serialize_with = "serialize_parameters")]
     pub parameters: Parameters,
     pub relationships: Relationships,
@@ -40,8 +39,8 @@ impl ResourceTrait for Execute {
         self.parameters.name.to_string()
     }
 
-    fn id(&self) -> Uuid {
-        self.id
+    fn id(&self) -> &str {
+        &self.id
     }
 
     fn action(&self) -> Action {
@@ -70,7 +69,7 @@ impl ResourceTrait for Execute {
 
     fn maybe_return_early(
         &mut self,
-        applied_resources: &HashMap<Uuid, Resource>,
+        applied_resources: &HashMap<String, Resource>,
     ) -> Option<(Action, String)> {
         if let Some(dependency) = self.find_failed_dependency(applied_resources) {
             let message = format!(
@@ -97,7 +96,7 @@ impl ResourceTrait for Execute {
 impl Execute {
     /// A wrapper around the actual apply function. This ensure that some
     /// meaningful log messages are printed and pre-checks are done.
-    pub fn apply(&mut self, order: usize, applied_resources: &HashMap<Uuid, Resource>) {
+    pub fn apply(&mut self, order: usize, applied_resources: &HashMap<String, Resource>) {
         let timer = Instant::now();
 
         self.result.order = order;

@@ -9,14 +9,13 @@ use serde::{
     Deserialize, Serialize,
 };
 use std::{collections::HashMap, fs, process::Command, str::FromStr, time::Instant};
-use uuid::Uuid;
 
 const DPKG_QUERY: &str = "/usr/bin/dpkg-query";
 const APT_GET: &str = "/usr/bin/apt-get";
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Package {
-    pub id: Uuid,
+    pub id: String,
     #[serde(serialize_with = "serialize_parameters")]
     pub parameters: Parameters,
     pub relationships: Relationships,
@@ -42,8 +41,8 @@ impl ResourceTrait for Package {
         self.parameters.name.to_string()
     }
 
-    fn id(&self) -> Uuid {
-        self.id
+    fn id(&self) -> &str {
+        &self.id
     }
 
     fn action(&self) -> Action {
@@ -100,7 +99,7 @@ impl ResourceTrait for Package {
 impl Package {
     /// A wrapper around the actual apply function. This ensure that some
     /// meaningful log messages are printed and pre-checks are done.
-    pub fn apply(&mut self, order: usize, applied_resources: &HashMap<Uuid, Resource>) {
+    pub fn apply(&mut self, order: usize, applied_resources: &HashMap<String, Resource>) {
         let timer = Instant::now();
 
         self.result.order = order;

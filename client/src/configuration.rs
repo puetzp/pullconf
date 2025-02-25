@@ -293,7 +293,7 @@ impl Configuration {
 
             order = order + 1;
 
-            applied_resources.insert(resource.id(), resource);
+            applied_resources.insert(resource.id().to_string(), resource);
         }
 
         let mut resources: Vec<Resource> = applied_resources.into_values().collect();
