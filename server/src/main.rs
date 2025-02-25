@@ -4,7 +4,7 @@ mod handlers;
 mod types;
 
 use crate::configuration::Configuration;
-use log::{debug, error, info, warn};
+use log::{debug, error, info};
 use rouille::Server;
 use signal_hook::{consts::signal::*, iterator::Signals};
 use std::{
@@ -12,7 +12,7 @@ use std::{
     io::Write,
     path::PathBuf,
     process::ExitCode,
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex, RwLock},
     thread,
     time::Duration,
 };
@@ -174,6 +174,9 @@ fn main() -> ExitCode {
     // Also listen for SIGHUP which prompts a configuration reload.
     let _state = state.clone();
 
+    let exit = Arc::new(Mutex::new(ExitCode::SUCCESS));
+    let _exit = Arc::clone(&exit);
+
     thread::spawn(move || {
         let mut signals = Signals::new([SIGTERM, SIGINT, SIGHUP]).unwrap();
 
@@ -208,7 +211,30 @@ fn main() -> ExitCode {
                             }
                             Err(error) => {
                                 error!("{}", error);
-                                warn!("keeping the current configuration as reload failed",);
+                                error!(
+                                    "shutting down after failed attempt to reload configuration"
+                                );
+
+                                if let Err(error) = sender.send(()) {
+                                    error!(
+                                        "failed to forward shutdown signal `{}` for graceful shutdown: {}",
+                                        signal, error
+                                    );
+                                }
+
+                                let mut lock = _exit.try_lock();
+
+                                match lock {
+                                    Ok(ref mut mutex) => **mutex = ExitCode::FAILURE,
+                                    Err(error) => {
+                                        error!(
+                                            "failed to acquire lock to mutate exit code: {}",
+                                            error
+                                        );
+                                    }
+                                }
+
+                                break 'outer;
                             }
                         }
                     }
@@ -229,5 +255,7 @@ fn main() -> ExitCode {
 
     info!("shutting down gracefully");
 
-    ExitCode::SUCCESS
+    Arc::into_inner(exit)
+        .and_then(|mutex| mutex.into_inner().ok())
+        .unwrap_or(ExitCode::FAILURE)
 }
