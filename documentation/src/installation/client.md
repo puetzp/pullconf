@@ -46,7 +46,7 @@ sudo systemctl edit pullconf.timer
 sudo systemctl disable pullconf.timer
 ```
 
-If this is your first installation the service unit (`pullconf.service`) will likely be in the "failed" state after being triggered for the first time by the scheduler, because some mandatory configuration parameters need to be set up. Refer to the log at `/var/log/pullconf/pullconf.log` to see what might be missing to successfully run the program.
+If this is your first installation the service unit (`pullconf.service`) will likely be in the `failed` state after being triggered for the first time by the scheduler, because some mandatory configuration parameters need to be set up. Refer to the log at `/var/log/pullconf/pullconf.log` to see what might be missing to successfully run the program.
 
 As with the server component **pullconf** is configured via environment variables. As you can see in the systemd unit file the unit reads environment variables from `/etc/pullconf/environment` (the required format is documented [here](https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html#EnvironmentFile=). Refer to the following table for all available parameters.
 

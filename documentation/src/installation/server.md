@@ -27,7 +27,7 @@ The installation script sets up a systemd service unit and a configuration and d
 sudo systemctl status pullconfd.service
 ```
 
-If this is your first installation the unit will likely be in the "failed" state, because some mandatory configuration parameters may need to be set up, such as a path to a valid TLS certificate and corresponding private key. Refer to the log at `/var/log/pullconfd/pullconfd.log` to see what else might be missing to start the unit.
+If this is your first installation the unit will likely be in the `failed` state, because some mandatory configuration parameters may need to be set up, such as a path to a valid TLS certificate and corresponding private key. Refer to the log at `/var/log/pullconfd/pullconfd.log` to see what else might be missing to start the unit.
 
 **pullconfd** is configured via environment variables. As you can see in the systemd unit file the unit reads environment variables from `/etc/pullconfd/environment` (the required format is documented [here](https://www.freedesktop.org/software/systemd/man/latest/systemd.exec.html#EnvironmentFile=). Refer to the following table for all available parameters.
 
@@ -46,13 +46,13 @@ After adding or changing environment variables you need to restart the unit:
 sudo systemctl restart pullconfd.service
 ```
 
-Systemd will then re-apply the settings from the environment file. Whenever environment variables are changed the unit must be restarted. However when files in <code>$PULLCONF_RESOURCE_DIR</code> change a reload will suffice to re-read StrictYAML files from this directory:
+Systemd will then re-apply the settings from the environment file. Whenever environment variables are changed the unit must be restarted. However when only files in <code>$PULLCONF_RESOURCE_DIR</code> change, a reload will suffice to parse the StrictYAML files from this directory:
 
 ```sh
 sudo systemctl reload pullconfd.service
 ```
 
-Note that if the changed configuration cannot be successfully validated, the server will continue to operate with the old configuration.
+> Note that if the changed configuration cannot be successfully validated, the server will shut down gracefully instead of continuing to serve the old, valid configuration. It will also return with a non-zero exit code which prompts systemd to move the unit to a `failed` state. This behavior is intentional as it allows monitoring systems to detect issues by simply checking if the server is running.
 
 
 

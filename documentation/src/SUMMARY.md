@@ -23,3 +23,6 @@
 	- [host](configuration/resources/host.md)
 	- [symlink](configuration/resources/symlink.md)
 	- [user](configuration/resources/user.md)
+
+- [Logging](logging.md)
+- [Monitoring](monitoring.md)

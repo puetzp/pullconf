@@ -245,6 +245,8 @@ impl File {
 
             debug!("`{}`: downloading file from `{}`", self.repr(), url);
 
+            let error_prefix = "failed to download file";
+
             match agent
                 .get(url.as_str())
                 .header("Accept", "text/plain")
@@ -266,19 +268,23 @@ impl File {
                             self.repr()
                         );
 
-                        let bytes = response
-                            .body_mut()
-                            .read_to_vec()
-                            .context("failed to write payload to buffer")?;
+                        let bytes = response.body_mut().read_to_vec().context(format!(
+                            "{}: failed to write payload to buffer",
+                            error_prefix
+                        ))?;
 
                         let mut handle = fs::OpenOptions::new()
                             .write(true)
                             .open(&*self.parameters.path)
-                            .context("failed to open file in write mode")?;
+                            .context(format!(
+                                "{}: failed to open file in write mode",
+                                error_prefix
+                            ))?;
 
-                        handle
-                            .write_all(&bytes)
-                            .context("failed to write payload to file")?;
+                        handle.write_all(&bytes).context(format!(
+                            "{}: failed to write payload to file",
+                            error_prefix
+                        ))?;
 
                         action = Action::Changed;
                     } else if status.is_client_error() || status.is_server_error() {
@@ -287,29 +293,50 @@ impl File {
                             .mime_type()
                             .filter(|value| *value == "application/json")
                         {
-                            let error = response
-                                .body_mut()
-                                .read_json::<Error>()
-                                .context(format!("failed to deserialize error response"))?;
+                            let error = response.body_mut().read_json::<Error>().context(
+                                format!("{}: failed to deserialize error response", error_prefix),
+                            )?;
 
                             anyhow::bail!(
-                                "pullconfd failed to process the request: {}, {}",
+                                "{}: server failed to process the request: {}, {}",
+                                error_prefix,
                                 error.title,
                                 error.detail
                             );
                         } else {
-                            let error = response
-                                .body_mut()
-                                .read_to_string()
-                                .context("failed to deserialize error response")?;
+                            let error = response.body_mut().read_to_string().context(format!(
+                                "{}: failed to deserialize error response",
+                                error_prefix
+                            ))?;
 
-                            anyhow::bail!("server failed to process the request: {}", error);
+                            if error.is_empty() {
+                                anyhow::bail!(
+                                    "{}: server failed to process the request: {}",
+                                    error_prefix,
+                                    status
+                                );
+                            } else {
+                                anyhow::bail!(
+                                    "{}: server failed to process the request: {}: {}",
+                                    error_prefix,
+                                    status,
+                                    error
+                                );
+                            }
                         }
                     } else {
-                        anyhow::bail!("received unexpected status from server: `{}`", status);
+                        anyhow::bail!(
+                            "{}: received unexpected status from server: `{}`",
+                            error_prefix,
+                            status
+                        );
                     }
                 }
-                Err(error) => anyhow::bail!("failed to download file content: {}", error),
+                Err(error) => anyhow::bail!(
+                    "{}: failed to download file content: {}",
+                    error_prefix,
+                    error
+                ),
             }
         } else if let Some(content) = &self.parameters.content {
             let content = self.maybe_replace_placeholders(content)?;
@@ -379,6 +406,8 @@ impl File {
 
             debug!("`{}`: downloading file from `{}`", self.repr(), url);
 
+            let error_prefix = "failed to download file";
+
             match agent
                 .get(url.as_str())
                 .header("Accept", "text/plain")
@@ -391,43 +420,61 @@ impl File {
                     if status == 200 {
                         debug!("`{}`: writing content to file", self.repr());
 
-                        let bytes = response
-                            .body_mut()
-                            .read_to_vec()
-                            .context("failed to write payload to buffer")?;
+                        let bytes = response.body_mut().read_to_vec().context(format!(
+                            "{}: failed to write payload to buffer",
+                            error_prefix
+                        ))?;
 
-                        handle
-                            .write_all(&bytes)
-                            .context("failed to write payload to file")?;
+                        handle.write_all(&bytes).context(format!(
+                            "{}: failed to write payload to file",
+                            error_prefix
+                        ))?;
                     } else if status.is_client_error() || status.is_server_error() {
                         if let Some(_content_type) = response
                             .body()
                             .mime_type()
                             .filter(|value| *value == "application/json")
                         {
-                            let error = response
-                                .body_mut()
-                                .read_json::<Error>()
-                                .context(format!("failed to deserialize error response"))?;
+                            let error = response.body_mut().read_json::<Error>().context(
+                                format!("{}: failed to deserialize error response", error_prefix),
+                            )?;
 
                             anyhow::bail!(
-                                "pullconfd failed to process the request: {}, {}",
+                                "{}: server failed to process the request: {}, {}",
+                                error_prefix,
                                 error.title,
                                 error.detail
                             );
                         } else {
-                            let error = response
-                                .body_mut()
-                                .read_to_string()
-                                .context("failed to deserialize error response")?;
+                            let error = response.body_mut().read_to_string().context(format!(
+                                "{}: failed to deserialize error response",
+                                error_prefix
+                            ))?;
 
-                            anyhow::bail!("server failed to process the request: {}", error);
+                            if error.is_empty() {
+                                anyhow::bail!(
+                                    "{}: server failed to process the request: {}",
+                                    error_prefix,
+                                    status
+                                );
+                            } else {
+                                anyhow::bail!(
+                                    "{}: server failed to process the request: {}: {}",
+                                    error_prefix,
+                                    status,
+                                    error
+                                );
+                            }
                         }
                     } else {
-                        anyhow::bail!("received unexpected status from server: `{}`", status);
+                        anyhow::bail!(
+                            "{}: received unexpected status from server: `{}`",
+                            error_prefix,
+                            status
+                        );
                     }
                 }
-                Err(error) => anyhow::bail!("failed to download file content: {}", error),
+                Err(error) => anyhow::bail!("{}: {}", error_prefix, error),
             }
         } else if let Some(content) = &self.parameters.content {
             let content = self.maybe_replace_placeholders(content)?;

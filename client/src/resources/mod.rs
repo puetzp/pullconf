@@ -23,6 +23,7 @@ pub struct Error {
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct ResourceResult {
     pub order: usize,
+    #[serde(rename = "state")]
     pub action: Action,
     pub message: Option<String>,
     pub duration: usize,
