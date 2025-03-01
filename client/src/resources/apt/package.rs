@@ -122,17 +122,16 @@ impl Package {
         match self._apply() {
             Ok(action) => {
                 info!("`{}`: successfully applied resource", self.repr(),);
-
                 self.result.action = action;
             }
             Err(error) => {
                 error!("`{}`: failed to apply resource: {:#}", self.repr(), error);
-
                 self.result.action = Action::Failed;
+                self.result.message = Some(format!("{:#}", error));
             }
         }
 
-        self.result.duration_ms = timer.elapsed().as_millis() as usize;
+        self.result.duration = timer.elapsed().as_millis() as usize;
     }
 
     /// Apply this resource's configuration.

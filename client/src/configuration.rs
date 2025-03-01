@@ -17,8 +17,8 @@ use url::Url;
 #[derive(Debug, serde::Serialize)]
 pub struct Report {
     pub pid: u32,
-    pub timestamp_ms: usize,
-    pub duration_ms: usize,
+    pub timestamp: usize,
+    pub duration: usize,
     pub resources: Vec<Resource>,
 }
 
@@ -266,7 +266,7 @@ impl Configuration {
     /// applied first and then everything else, until every resource has been
     /// applied.
     pub fn apply(mut self, pid: u32) -> Report {
-        let timestamp_ms = SystemTime::now()
+        let timestamp = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()
             .as_millis() as usize;
@@ -300,17 +300,17 @@ impl Configuration {
 
         resources.sort_by(|a, b| a.order().cmp(&b.order()));
 
-        let duration_ms = timer.elapsed().as_millis() as usize;
+        let duration = timer.elapsed().as_millis() as usize;
 
         info!(
             "applied resource list in {:.3} seconds",
-            duration_ms as f64 / 1000.0
+            duration as f64 / 1000.0
         );
 
         Report {
             pid,
-            timestamp_ms,
-            duration_ms,
+            timestamp,
+            duration,
             resources,
         }
     }

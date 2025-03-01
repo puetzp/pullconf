@@ -15,20 +15,22 @@ pub fn uid_and_gid(
 ) -> Result<(u32, u32), anyhow::Error> {
     debug!("querying system for user and group data");
 
-    let user = match User::from_name(owner)
-        .with_context(|| format!("failed to search for user '{}'", owner))?
-    {
+    let error = format!("failed to find user '{}'", owner);
+
+    let user = match User::from_name(owner).context(error.clone())? {
         Some(user) => user,
-        None => anyhow::bail!("failed to find user '{}'", owner),
+        None => anyhow::bail!(error),
     };
 
     let gid = match group {
-        Some(name) => match Group::from_name(name)
-            .with_context(|| format!("failed to search for group '{}'", name))?
-        {
-            Some(group) => u32::from(group.gid),
-            None => anyhow::bail!("failed to find group '{}'", name),
-        },
+        Some(name) => {
+            let error = format!("failed to find group '{}'", name);
+
+            match Group::from_name(name).context(error.clone())? {
+                Some(group) => u32::from(group.gid),
+                None => anyhow::bail!(error),
+            }
+        }
         None => u32::from(user.gid),
     };
 

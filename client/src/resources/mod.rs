@@ -25,7 +25,7 @@ pub struct ResourceResult {
     pub order: usize,
     pub action: Action,
     pub message: Option<String>,
-    pub duration_ms: usize,
+    pub duration: usize,
 }
 
 /// The expected payload of a pullconfd API response when the request
