@@ -4,7 +4,7 @@
 
 The server logs from **pullconfd** are pretty straightforward. By default systemd redirects `stdout` and `stderr` to `/var/log/pullconfd/pullconfd.log`.
 
-The `deb` package also comes with a default logrotate configuration that causes logs to be rotated weekly.
+The `deb` package comes with a default logrotate configuration that causes logs to be rotated weekly.
 
 The server is not very chatty as the most interesting part on the server side are errors. Most errors will come from being unable to parse invalid StrictYAML configuration. The server will fail on the first error that it encounters while validating the configuration or environment variables. So even when there are multiple issues with the configuration, the log will only show the first.
 
@@ -16,6 +16,8 @@ The client logs from **pullconf** are more comprehensive, since the really inter
 
 - `stderr` is redirected to `/var/log/pullconf/pullconf.log`.
 - `stdout` is redirected to `/var/log/pullconf/resources.json.log`
+
+The `deb` package comes with a default logrotate configuration that causes both logs to be rotated daily.
 
 The first log file is supposed to print useful information and errors in a human-readable format, just as the server log from **pullconfd**.
 
