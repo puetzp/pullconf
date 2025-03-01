@@ -132,6 +132,7 @@ tail -n1 /var/log/pullconf/resources.json.log | jq
 }
 ```
 
+- `pid` is the process ID of the **pullconf** process that produced this log line.
 - `timestamp` is a UNIX timestamp, the number of milliseconds that elapsed since the UNIX epoch.
 - `duration` is the total number of milliseconds that it took to apply all resources.
 - each item in `resources` contains information about the state of the resource after it has been applied:
