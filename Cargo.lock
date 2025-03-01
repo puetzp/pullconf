@@ -1169,7 +1169,7 @@ dependencies = [
 
 [[package]]
 name = "pullconf"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "common",
@@ -1188,7 +1188,7 @@ dependencies = [
 
 [[package]]
 name = "pullconfd"
-version = "0.4.2"
+version = "0.5.0"
 dependencies = [
  "anyhow",
  "common",
