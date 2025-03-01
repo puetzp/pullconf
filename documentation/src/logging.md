@@ -149,3 +149,16 @@ tail -n1 /var/log/pullconf/resources.json.log| jq '.timestamp |=  (tonumber / 10
 ```
 
 This converts `timestamp` to an iso8601 string.
+
+Also note that `pid` can be used to correlate JSON log output with the output from `/var/log/pullconf/pullconf.log`, since both types of logs print the PID. 
+
+This is the output from `/var/log/pullconf/pullconf.log` that corresponds to the JSON log example above:
+
+```
+[2025-03-01T16:03:50.129Z 32199 INFO] starting pullconf v0.4.2
+[2025-03-01T16:03:50.179Z 32199 INFO] `file[/tmp/testfile]`: successfully applied resource
+[2025-03-01T16:03:50.180Z 32199 ERROR] `file[/tmp/another-testfile]`: failed to apply resource: failed to download file: server failed to process the request: 404 Not Found
+[2025-03-01T16:03:50.180Z 32199 INFO] applied resource list in 0.000 seconds
+```
+
+The second field in the bracketed metadata is the PID from the given **pullconf** process that emitted this log output.
